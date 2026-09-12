@@ -644,9 +644,9 @@ describe('parent transaction edit semantics with splits', () => {
     ]);
 
     const balances = computeBucketBalancesSnapshot({ buckets, incomeAllocations, transactions, categoryLookupById });
-    assert.equal(balances.find((b) => b.bucket_id === 'cat-other').balance, '100.00');
-    assert.equal(balances.find((b) => b.bucket_id === 'cat-food').balance, '200.00');
-    assert.equal(balances.find((b) => b.bucket_id === 'cat-house').balance, '200.00');
+    assert.equal(balances.find((b) => b.slug === 'other').balance, '100.00');
+    assert.equal(balances.find((b) => b.slug === 'food').balance, '200.00');
+    assert.equal(balances.find((b) => b.slug === 'household').balance, '200.00');
   });
 
   it('deleting a parent transaction removes its splits', async () => {

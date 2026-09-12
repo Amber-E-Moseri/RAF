@@ -47,5 +47,5 @@ CREATE POLICY transaction_splits_workspace_policy ON raf.transaction_splits
   )
   WITH CHECK (
     workspace_id = raf.current_workspace_id()
-    AND raf.has_workspace_role(workspace_id, ARRAY['owner', 'admin', 'member'])
+    AND raf.has_workspace_role(workspace_id, ARRAY['owner', 'admin', 'member']::raf.workspace_role[])
   );
