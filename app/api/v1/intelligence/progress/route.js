@@ -1,5 +1,5 @@
 import { IntelligenceHttpError, getProgressMetrics } from '../../../../../lib/intelligence/intelligenceService.js';
-import { getDb, getHouseholdId, json, respondWithHandledError } from '../../../_shared/http.js';
+import { getDb, getHouseholdId, json, respondWithHandledError } from '../../_shared/http.js';
 
 export async function GET(request, context = {}) {
   try {
