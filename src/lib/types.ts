@@ -107,6 +107,24 @@ export interface TransactionListResponse {
   nextCursor: string | null;
 }
 
+export interface TransactionSplit {
+  id: string;
+  transactionId: string;
+  amount: string;
+  categoryId: string | null;
+  description: string;
+}
+
+export interface TransactionSplitDraft {
+  amount: string;
+  categoryId?: string | null;
+  description?: string;
+}
+
+export interface TransactionSplitsResponse {
+  splits: TransactionSplit[];
+}
+
 export interface ImportedTransaction {
   id: string;
   household_id: string;

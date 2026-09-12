@@ -35,6 +35,7 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
 import { MoneyInput } from "../components/ui/MoneyInput";
 import { Table } from "../components/ui/Table";
+import { SplitTransactionEditor } from "../components/transactions/SplitTransactionEditor";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { DEFAULT_PAGE_SIZE } from "../lib/constants";
 import { formatIsoDate } from "../lib/format";
@@ -2435,8 +2436,9 @@ export function Transactions() {
               />
               <MoneyInput
                 label="Amount"
+                name="editAmount"
                 value={editingTransaction.amount}
-                onChange={(event) => setEditingTransaction((current) => current ? { ...current, amount: event.target.value } : current)}
+                onChange={(nextValue) => setEditingTransaction((current) => current ? { ...current, amount: nextValue } : current)}
               />
               <Input
                 label="Description"
@@ -2511,6 +2513,30 @@ export function Transactions() {
                 </select>
               </label>
             </div>
+
+            <SplitTransactionEditor
+              transaction={{
+                id: editingTransaction.id,
+                transactionDate: editingTransaction.transactionDate,
+                description: editingTransaction.description,
+                merchant: editingTransaction.merchant || null,
+                amount: normalizeMoneyInput(editingTransaction.amount) ?? editingTransaction.amount,
+                direction: editingTransaction.direction,
+                categoryId: editingTransaction.categoryId || null,
+                linkedDebtId: editingTransaction.linkedDebtId || null,
+                linkedGoalId: editingTransaction.linkedGoalId || null,
+              }}
+              categories={data?.categories ?? []}
+              parentCategoryLabel={editingTransaction.categoryId ? categoryLookup.get(editingTransaction.categoryId) ?? editingTransaction.categoryId : ""}
+              onSaved={async () => {
+                setSubmitSuccess("Transaction split saved.");
+                await reload();
+              }}
+              onCleared={async () => {
+                setSubmitSuccess("Transaction split cleared.");
+                await reload();
+              }}
+            />
 
             <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
               <Button type="button" variant="secondary" onClick={() => setEditingTransaction(null)}>
