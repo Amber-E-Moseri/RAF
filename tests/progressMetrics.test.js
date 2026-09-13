@@ -29,7 +29,7 @@ describe('progress metrics', () => {
     assert.equal(result.monthsAvailable, 2);
 
     const incomeMetric = result.metrics.find((m) => m.key === 'avg_monthly_income');
-    assert.equal(incomeMetric.provenance, Provenance.SNAPSHOT);
+    assert.equal(incomeMetric.provenance, Provenance.LEDGER_RECONSTRUCTED);
     assert.equal(incomeMetric.safe, true);
 
     const surplusMetric = result.metrics.find((m) => m.key === 'avg_monthly_surplus');

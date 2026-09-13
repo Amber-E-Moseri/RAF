@@ -93,4 +93,16 @@ describe('financial decisions', () => {
     const decisions = extractFinancialDecisions([]);
     assert.deepEqual(decisions, []);
   });
+
+  it('28b. malformed metadata is ignored without crashing decisions', () => {
+    const decisions = extractFinancialDecisions([
+      makeActivity('bad-string', 'plan_changed', 'not-json-object'),
+      makeActivity('bad-array', 'goal_target_changed', []),
+    ]);
+
+    assert.equal(decisions.length, 2);
+    assert.equal(decisions[0].reason, null);
+    assert.equal(decisions[0].before, null);
+    assert.equal(decisions[1].after, null);
+  });
 });

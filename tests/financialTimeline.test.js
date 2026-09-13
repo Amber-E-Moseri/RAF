@@ -101,4 +101,16 @@ describe('financial timeline', () => {
   it('36. TimelineEventType does not include GOAL_COMPLETED', () => {
     assert.ok(!('GOAL_COMPLETED' in TimelineEventType));
   });
+
+  it('36b. malformed plan-change metadata is ignored without fabricating context', () => {
+    const event = buildPlanChangedEvent({
+      id: 'act-bad',
+      created_at: '2026-09-01T00:00:00Z',
+      metadata: 'bad metadata',
+    });
+
+    assert.equal(event.description, null);
+    assert.equal(event.linkedEntity, null);
+    assert.deepEqual(event.metrics, { before: null, after: null });
+  });
 });

@@ -113,4 +113,15 @@ describe('plan history', () => {
     assert.equal(diff[0].before, null);
     assert.equal(diff[0].deltaPercent, null); // no before value
   });
+
+  it('22b. malformed activity metadata is ignored when attaching plan reasons', () => {
+    const cats = [
+      makeCategory('snap-1', 'savings', 0.20, { effectiveFrom: '2026-01-01' }),
+    ];
+    const history = buildPlanHistory(cats, [
+      { id: 'bad', action: 'plan_changed', metadata: 'not-an-object' },
+    ]);
+
+    assert.equal(history[0].reason, null);
+  });
 });

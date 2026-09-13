@@ -6,6 +6,7 @@ import {
   extractVelocityAlerts,
   isCategoryVelocityApplicable,
 } from '../lib/intelligence/spendingVelocity.js';
+import { GET as getSpendingVelocityRoute } from '../app/api/v1/intelligence/spending-velocity/route.js';
 
 const MONTH = '2026-09-01';
 
@@ -164,5 +165,16 @@ describe('spending velocity', () => {
     assert.ok(signalSet.has('ahead'));
     assert.ok(signalSet.has('over_pace'));
     assert.ok(!signalSet.has('on_pace'));
+  });
+
+  it('10b. route rejects impossible ISO dates before persistence is touched', async () => {
+    const response = await getSpendingVelocityRoute(
+      new Request('http://localhost/api/v1/intelligence/spending-velocity?isoMonth=2026-02-31'),
+      {},
+    );
+
+    assert.equal(response.status, 400);
+    const body = await response.json();
+    assert.equal(body.error, 'isoMonth must be a valid ISO date (YYYY-MM-DD)');
   });
 });

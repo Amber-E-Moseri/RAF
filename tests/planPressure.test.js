@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { computePlanPressure } from '../lib/intelligence/planPressure.js';
+import { buildClosedMonthsForPressure, computePlanPressure } from '../lib/intelligence/planPressure.js';
 
 function makeMonth(reviewMonth, slugActuals, slugPlanned) {
   return {
@@ -107,5 +107,63 @@ describe('plan pressure', () => {
   it('16. empty closedMonths returns empty array', () => {
     const signals = computePlanPressure({ closedMonths: [], lookback: 4, minMonthsOver: 3, pressureRatio: 1.10 });
     assert.deepEqual(signals, []);
+  });
+
+  it('16b. closed-month pressure uses split attribution and ignores the parent category', () => {
+    const closedMonths = buildClosedMonthsForPressure({
+      monthlyReviews: [{ review_month: '2026-08-01', status: 'applied' }],
+      allCategories: [
+        { id: 'cat-parent', slug: 'household', allocation_percent: 0.50, effective_from: '2026-01-01' },
+        { id: 'cat-food', slug: 'food', allocation_percent: 0.30, effective_from: '2026-01-01' },
+        { id: 'cat-fuel', slug: 'fuel', allocation_percent: 0.20, effective_from: '2026-01-01' },
+      ],
+      allAllocations: [
+        { received_date: '2026-08-03', allocation_category_id: 'cat-parent', allocated_amount: '500.00' },
+        { received_date: '2026-08-03', allocation_category_id: 'cat-food', allocated_amount: '300.00' },
+        { received_date: '2026-08-03', allocation_category_id: 'cat-fuel', allocated_amount: '200.00' },
+      ],
+      allTransactions: [
+        { id: 'tx-split', transaction_date: '2026-08-10', direction: 'debit', amount: '90.00', category_id: 'cat-parent' },
+      ],
+      splitsByTxId: new Map([
+        ['tx-split', [
+          { transaction_id: 'tx-split', amount: '40.00', category_id: 'cat-food' },
+          { transaction_id: 'tx-split', amount: '50.00', category_id: 'cat-fuel' },
+        ]],
+      ]),
+    });
+
+    assert.equal(closedMonths[0].categoryActuals.get('household') ?? 0, 0);
+    assert.equal(closedMonths[0].categoryActuals.get('food'), 4000);
+    assert.equal(closedMonths[0].categoryActuals.get('fuel'), 5000);
+    assert.equal(closedMonths[0].categoryPlanned.get('food'), 30000);
+  });
+
+  it('16c. pressure resolves planned and actual categories from historical snapshots', () => {
+    const closedMonths = buildClosedMonthsForPressure({
+      monthlyReviews: [
+        { reviewMonth: '2026-07-01', status: 'applied' },
+        { reviewMonth: '2026-09-01', status: 'applied' },
+      ],
+      allCategories: [
+        { id: 'cat-1', slug: 'dining', allocation_percent: 0.20, effective_from: '2026-01-01', superseded_at: '2026-08-01' },
+        { id: 'cat-1', slug: 'restaurants', allocation_percent: 0.20, effective_from: '2026-08-01', superseded_at: null },
+      ],
+      allAllocations: [
+        { received_date: '2026-07-05', allocation_category_id: 'cat-1', allocated_amount: '200.00' },
+        { received_date: '2026-09-05', allocation_category_id: 'cat-1', allocated_amount: '200.00' },
+      ],
+      allTransactions: [
+        { id: 'tx-july', transaction_date: '2026-07-10', direction: 'debit', amount: '40.00', category_id: 'cat-1' },
+        { id: 'tx-sept', transaction_date: '2026-09-10', direction: 'debit', amount: '50.00', category_id: 'cat-1' },
+      ],
+    });
+
+    const july = closedMonths.find((m) => m.reviewMonth === '2026-07-01');
+    const sept = closedMonths.find((m) => m.reviewMonth === '2026-09-01');
+    assert.equal(july.categoryActuals.get('dining'), 4000);
+    assert.equal(july.categoryPlanned.get('dining'), 20000);
+    assert.equal(sept.categoryActuals.get('restaurants'), 5000);
+    assert.equal(sept.categoryPlanned.get('restaurants'), 20000);
   });
 });
