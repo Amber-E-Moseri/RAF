@@ -36,6 +36,7 @@ import { Input } from "../components/ui/Input";
 import { MoneyInput } from "../components/ui/MoneyInput";
 import { Table } from "../components/ui/Table";
 import { SplitTransactionEditor } from "../components/transactions/SplitTransactionEditor";
+import { IncomeModal } from "../components/income/IncomeModal";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { DEFAULT_PAGE_SIZE } from "../lib/constants";
 import { formatIsoDate } from "../lib/format";
@@ -303,6 +304,7 @@ export function Transactions() {
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCreateTransactionForm, setShowCreateTransactionForm] = useState(false);
+  const [showIncomeModal, setShowIncomeModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<TransactionEditState | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [isDeletingTransaction, setIsDeletingTransaction] = useState<string | null>(null);
@@ -1252,6 +1254,7 @@ export function Transactions() {
       description={`${activeMonthLabel} transactions, imports, and review flow.`}
       actions={
         <div className="flex gap-2">
+          <Button type="button" variant="secondary" onClick={() => setShowIncomeModal(true)}>Add Income</Button>
           {data?.transactions.items.length ? (
             <Button
               type="button"
@@ -2549,6 +2552,7 @@ export function Transactions() {
           </div>
         </div>
       ) : null}
+      <IncomeModal isOpen={showIncomeModal} onClose={() => setShowIncomeModal(false)} />
     </PageShell>
   );
 }

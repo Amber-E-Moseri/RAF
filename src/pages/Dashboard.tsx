@@ -9,6 +9,7 @@ import { getTransactions } from "../api/transactionsApi";
 import { AllocationBarChart } from "../components/dashboard/AllocationBarChart";
 import { FinancialAttentionAggregator, deriveAttentionItems } from "../components/dashboard/FinancialAttentionAggregator";
 import { SummaryMetricCard } from "../components/dashboard/SummaryMetricCard";
+import { IncomeModal } from "../components/income/IncomeModal";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingState } from "../components/feedback/LoadingState";
 import { MonthReminderBanner } from "../components/feedback/MonthReminderBanner";
@@ -187,6 +188,7 @@ export function Dashboard() {
   const [setupDone, setSetupDone] = useState(readSetupDone);
   const [howRafWorksOpen, setHowRafWorksOpen] = useState(false);
   const [netSurplusExplanationOpen, setNetSurplusExplanationOpen] = useState(false);
+  const [showIncomeModal, setShowIncomeModal] = useState(false);
 
   const { data, error, isLoading, reload } = useAsyncData<DashboardViewModel>(async () => {
     const [aggregate, incomeResponse, transactionsResponse] = await Promise.all([
@@ -313,7 +315,16 @@ export function Dashboard() {
   }
 
   return (
-    <PageShell eyebrow="Overview" title="Dashboard" description={`${activeMonthLabel} financial snapshot.`}>
+    <PageShell
+      eyebrow="Overview"
+      title="Dashboard"
+      description={`${activeMonthLabel} financial snapshot.`}
+      actions={(
+        <button type="button" className="shrink-0 rounded-full bg-[var(--primary-color)] px-4 py-2 text-[13px] font-semibold text-[var(--primary-contrast)] shadow-sm transition hover:opacity-90" onClick={() => setShowIncomeModal(true)}>
+          + Add Income
+        </button>
+      )}
+    >
       {nextStepState?.kind === "historical" ? (
         <div
           className="rounded-2xl border px-4 py-3 text-sm"
@@ -401,9 +412,9 @@ export function Dashboard() {
               Log this month's income to begin.
             </span>
           </div>
-          <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/income/new">
-            Add income -&gt;
-          </Link>
+          <button type="button" className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" onClick={() => setShowIncomeModal(true)}>
+            Add income →
+          </button>
         </div>
       ) : null}
       {nextStepState?.kind === "closed-current-month" ? (
@@ -652,6 +663,7 @@ export function Dashboard() {
         </div>
       ) : null}
 
+      <IncomeModal isOpen={showIncomeModal} onClose={() => setShowIncomeModal(false)} onSuccess={() => void reload()} />
     </PageShell>
   );
 }
