@@ -9,7 +9,6 @@ import { PlanProvider } from "./context/PlanContext";
 import { AcceptInvitation } from "./pages/AcceptInvitation";
 import { AddIncome } from "./pages/AddIncome";
 import { Dashboard } from "./pages/Dashboard";
-import { Debts } from "./pages/Debts";
 import { Insights } from "./pages/Insights";
 import { Login } from "./pages/Login";
 import { MonthlyReview } from "./pages/MonthlyReview";
@@ -52,7 +51,7 @@ export default function App() {
                   <Route path="appearance" element={<Navigate to="/settings?tab=appearance" replace />} />
                   <Route path="income/new" element={<AddIncome />} />
                   <Route path="transactions" element={<Transactions />} />
-                  <Route path="debts" element={<Debts />} />
+                  <Route path="debts" element={<Navigate to="/plan?tab=debts" replace />} />
                   <Route path="goals" element={<Navigate to="/plan?tab=goals" replace />} />
                   <Route path="cash-flow-forecast" element={<CashFlowForecast />} />
                   <Route path="monthly-review" element={<MonthlyReview />} />

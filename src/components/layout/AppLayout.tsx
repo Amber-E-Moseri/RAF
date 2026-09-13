@@ -21,7 +21,6 @@ const desktopNavigation = [
     items: [
       { to: "/income/new", label: "Add Income", icon: "plus" },
       { to: "/transactions", label: "Transactions", icon: "list" },
-      { to: "/debts", label: "Debts", icon: "wallet" },
     ],
   },
   {
@@ -44,9 +43,9 @@ const desktopNavigation = [
 
 const mobileTabs = [
   { to: "/dashboard", label: "Home", icon: "home" },
-  { to: "/transactions", label: "Txns", icon: "list" },
-  { to: "/remi", label: "Remi", icon: "remi" },
-  { to: "/monthly-review", label: "Review", icon: "calendar" },
+  { to: "/transactions", label: "Transactions", icon: "list" },
+  { to: "/plan", label: "Plan", icon: "pie" },
+  { to: "/outlook", label: "Outlook", icon: "chart" },
   { to: "/settings", label: "More", icon: "user" },
 ];
 

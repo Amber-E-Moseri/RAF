@@ -2,15 +2,17 @@ import { useSearchParams } from "react-router-dom";
 
 import { PageShell } from "../components/layout/PageShell";
 import { AllocationPreferences } from "./AllocationPreferences";
+import { Debts } from "./Debts";
 import { Goals } from "./Goals";
 
-type PlanTab = "allocations" | "goals";
+type PlanTab = "allocations" | "goals" | "debts";
 
-const VALID_PLAN_TABS: PlanTab[] = ["allocations", "goals"];
+const VALID_PLAN_TABS: PlanTab[] = ["allocations", "goals", "debts"];
 
 const planTabs: Array<{ id: PlanTab; label: string }> = [
   { id: "allocations", label: "Allocations" },
   { id: "goals", label: "Goals" },
+  { id: "debts", label: "Debts" },
 ];
 
 export function Plan() {
@@ -47,6 +49,7 @@ export function Plan() {
 
       {activeTab === "allocations" ? <AllocationPreferences embedded /> : null}
       {activeTab === "goals" ? <Goals embedded /> : null}
+      {activeTab === "debts" ? <Debts embedded /> : null}
     </PageShell>
   );
 }

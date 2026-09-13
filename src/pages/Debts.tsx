@@ -107,7 +107,7 @@ function actualVsPlannedPaymentMessage(plannedPayment: string, actualPayment: st
   return "Actual payment this month matched plan";
 }
 
-export function Debts() {
+export function Debts({ embedded = false }: { embedded?: boolean } = {}) {
   // Debt balances stay current-only for now; month switching does not backdate debt snapshots yet.
   const { data, error, isLoading, reload } = useAsyncData(() => getDebts(), []);
   const [form, setForm] = useState({
@@ -333,6 +333,7 @@ export function Debts() {
       eyebrow="Liabilities"
       title="Debts"
       description="Track payoff progress and keep debt reduction visible in your monthly plan."
+      embedded={embedded}
       actions={data?.items.length ? (
         <Button type="button" onClick={() => setShowCreateDebtForm((current) => !current)}>
           {showCreateDebtForm ? "Hide Add Debt" : "Add Debt"}
