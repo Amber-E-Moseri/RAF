@@ -9,19 +9,17 @@ import { PlanProvider } from "./context/PlanContext";
 import { AcceptInvitation } from "./pages/AcceptInvitation";
 import { AllocationPreferences } from "./pages/AllocationPreferences";
 import { AddIncome } from "./pages/AddIncome";
-import { AppearanceSettings } from "./pages/AppearanceSettings";
 import { Dashboard } from "./pages/Dashboard";
 import { Debts } from "./pages/Debts";
 import { Goals } from "./pages/Goals";
 import { Insights } from "./pages/Insights";
 import { Login } from "./pages/Login";
-import { Members } from "./pages/Members";
 import { MonthlyReview } from "./pages/MonthlyReview";
 import { NotFound } from "./pages/NotFound";
 import { PlanWizard } from "./pages/PlanWizard";
-import { Profile } from "./pages/Profile";
 import { Remi } from "./pages/Remi";
 import { Scenarios } from "./pages/Scenarios";
+import { Settings } from "./pages/Settings";
 import { CashFlowForecast } from "./pages/CashFlowForecast";
 import { Transactions } from "./pages/Transactions";
 
@@ -47,10 +45,11 @@ export default function App() {
                   <Route path="dashboard" element={<Dashboard />} />
                   <Route path="plan-wizard" element={<PlanWizard />} />
                   <Route path="allocation-preferences" element={<AllocationPreferences />} />
-                  <Route path="profile" element={<Profile />} />
-                  <Route path="settings" element={<AppearanceSettings />} />
-                  <Route path="appearance-settings" element={<Navigate to="/settings" replace />} />
-                  <Route path="appearance" element={<Navigate to="/settings" replace />} />
+                  <Route path="settings" element={<Settings />} />
+                  <Route path="profile" element={<Navigate to="/settings?tab=profile" replace />} />
+                  <Route path="members" element={<Navigate to="/settings?tab=household" replace />} />
+                  <Route path="appearance-settings" element={<Navigate to="/settings?tab=appearance" replace />} />
+                  <Route path="appearance" element={<Navigate to="/settings?tab=appearance" replace />} />
                   <Route path="income/new" element={<AddIncome />} />
                   <Route path="transactions" element={<Transactions />} />
                   <Route path="debts" element={<Debts />} />
@@ -60,7 +59,6 @@ export default function App() {
                   <Route path="insights" element={<Insights />} />
                   <Route path="remi" element={<Remi />} />
                   <Route path="scenarios" element={<Scenarios />} />
-                  <Route path="members" element={<Members />} />
                   <Route path="*" element={<NotFound />} />
                 </Route>
               </Routes>

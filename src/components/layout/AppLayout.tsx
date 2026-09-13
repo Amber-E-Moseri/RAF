@@ -36,12 +36,6 @@ const desktopNavigation = [
     ],
   },
   {
-    label: "Household",
-    items: [
-      { to: "/members", label: "Stewards", icon: "people" },
-    ],
-  },
-  {
     label: "AI Advisor",
     items: [
       { to: "/remi", label: "Remi", icon: "remi" },
@@ -343,7 +337,7 @@ export function AppLayout() {
             </nav>
 
             <div className="mt-auto space-y-3 border-t border-[var(--border-subtle)] pt-4">
-              <NavLink to="/profile" className={({ isActive }) => navClassName(isActive)}>
+              <NavLink to="/settings?tab=profile" className={({ isActive }) => navClassName(isActive)}>
                 <span className="inline-flex h-4 w-4 items-center justify-center">
                   <NavIcon type="user" />
                 </span>
