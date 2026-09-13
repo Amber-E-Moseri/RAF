@@ -3,14 +3,16 @@ import { useSearchParams } from "react-router-dom";
 import { PageShell } from "../components/layout/PageShell";
 import { CashFlowForecast } from "./CashFlowForecast";
 import { Insights } from "./Insights";
+import { Scenarios } from "./Scenarios";
 
-type OutlookTab = "forecast" | "reports";
+type OutlookTab = "forecast" | "reports" | "scenarios";
 
-const VALID_OUTLOOK_TABS: OutlookTab[] = ["forecast", "reports"];
+const VALID_OUTLOOK_TABS: OutlookTab[] = ["forecast", "reports", "scenarios"];
 
 const outlookTabs: Array<{ id: OutlookTab; label: string }> = [
   { id: "forecast", label: "Forecast" },
   { id: "reports", label: "Reports" },
+  { id: "scenarios", label: "Scenarios" },
 ];
 
 export function Outlook() {
@@ -47,6 +49,7 @@ export function Outlook() {
 
       {activeTab === "forecast" ? <CashFlowForecast embedded /> : null}
       {activeTab === "reports" ? <Insights embedded /> : null}
+      {activeTab === "scenarios" ? <Scenarios embedded /> : null}
     </PageShell>
   );
 }

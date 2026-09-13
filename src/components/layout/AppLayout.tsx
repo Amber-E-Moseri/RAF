@@ -28,14 +28,7 @@ const desktopNavigation = [
       { to: "/plan", label: "Plan", icon: "pie" },
       { to: "/outlook", label: "Outlook", icon: "chart" },
       { to: "/monthly-review", label: "Monthly Review", icon: "calendar" },
-      { to: "/scenarios", label: "Scenarios", icon: "scenarios" },
       { to: "/settings", label: "Settings", icon: "user" },
-    ],
-  },
-  {
-    label: "AI Advisor",
-    items: [
-      { to: "/remi", label: "Remi", icon: "remi" },
     ],
   },
 ];
@@ -375,6 +368,21 @@ export function AppLayout() {
           </NavLink>
         ))}
       </nav>
+
+      <NavLink
+        to="/remi"
+        aria-label="Open Remi AI advisor"
+        className={({ isActive }) =>
+          [
+            "fixed bottom-[calc(80px+env(safe-area-inset-bottom))] right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-opacity md:bottom-6 md:right-6",
+            isActive ? "opacity-100 bg-[var(--primary-color)]" : "opacity-90 bg-[var(--primary-color)] hover:opacity-100",
+          ].join(" ")
+        }
+      >
+        <span className="inline-flex h-5 w-5 items-center justify-center text-white">
+          <NavIcon type="remi" />
+        </span>
+      </NavLink>
     </div>
   );
 }

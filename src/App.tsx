@@ -16,7 +16,6 @@ import { NotFound } from "./pages/NotFound";
 import { Plan } from "./pages/Plan";
 import { PlanWizard } from "./pages/PlanWizard";
 import { Remi } from "./pages/Remi";
-import { Scenarios } from "./pages/Scenarios";
 import { Settings } from "./pages/Settings";
 import { Transactions } from "./pages/Transactions";
 
@@ -57,7 +56,7 @@ export default function App() {
                   <Route path="monthly-review" element={<MonthlyReview />} />
                   <Route path="insights" element={<Navigate to="/outlook?tab=reports" replace />} />
                   <Route path="remi" element={<Remi />} />
-                  <Route path="scenarios" element={<Scenarios />} />
+                  <Route path="scenarios" element={<Navigate to="/outlook?tab=scenarios" replace />} />
                   <Route path="*" element={<NotFound />} />
                 </Route>
               </Routes>

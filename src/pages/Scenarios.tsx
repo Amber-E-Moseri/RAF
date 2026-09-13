@@ -154,7 +154,7 @@ function CashFlowBar({ months }: { months: ScenarioPreviewResponse["current"]["c
   );
 }
 
-export function Scenarios() {
+export function Scenarios({ embedded = false }: { embedded?: boolean } = {}) {
   const { data: debts } = useAsyncData<HouseholdDebt[]>(() => getJson("/debts"), []);
   const { data: goals } = useAsyncData<{ goals: HouseholdGoal[] }>(() => getJson("/goals"), []);
   const { data: allocations } = useAsyncData<{ categories: HouseholdAllocation[] }>(
@@ -268,7 +268,7 @@ export function Scenarios() {
   const selectedType = SCENARIO_TYPES.find((t) => t.type === scenarioType);
 
   return (
-    <PageShell title="Scenarios" description="Test financial what-ifs without changing your plan">
+    <PageShell title="Scenarios" description="Test financial what-ifs without changing your plan" embedded={embedded}>
       <div className="space-y-6">
         {/* Scenario picker */}
         <div>
