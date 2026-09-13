@@ -245,7 +245,7 @@ export function Dashboard() {
 
   if (isLoading || monthWorkflow.isLoading) {
     return (
-      <PageShell eyebrow="Overview" title="Dashboard" description={`${activeMonthLabel} financial snapshot.`}>
+      <PageShell eyebrow="Home" title="Your money, with a clear next move." description="RAF keeps the important decisions visible without turning your finances into a wall of charts.">
         <LoadingState label="Loading the current financial snapshot..." />
       </PageShell>
     );
@@ -253,7 +253,7 @@ export function Dashboard() {
 
   if (error || !data || monthWorkflow.error || !monthWorkflow.data) {
     return (
-      <PageShell eyebrow="Overview" title="Dashboard" description={`${activeMonthLabel} financial snapshot.`}>
+      <PageShell eyebrow="Home" title="Your money, with a clear next move." description="RAF keeps the important decisions visible without turning your finances into a wall of charts.">
         <ErrorState
           title="Failed to load dashboard"
           message={error ?? monthWorkflow.error ?? "We could not load the current dashboard data. Please try again."}
@@ -316,13 +316,14 @@ export function Dashboard() {
 
   return (
     <PageShell
-      eyebrow="Overview"
-      title="Dashboard"
-      description={`${activeMonthLabel} financial snapshot.`}
+      eyebrow="Home"
+      title="Your money, with a clear next move."
+      description="RAF keeps the important decisions visible without turning your finances into a wall of charts."
       actions={(
-        <button type="button" className="shrink-0 rounded-full bg-[var(--primary-color)] px-4 py-2 text-[13px] font-semibold text-[var(--primary-contrast)] shadow-sm transition hover:opacity-90" onClick={() => setShowIncomeModal(true)}>
-          + Add Income
-        </button>
+        <div className="flex gap-2">
+          <Link to="/monthly-review" className="shrink-0 rounded-xl border border-[var(--border-subtle)] bg-white px-4 py-2 text-[12px] font-semibold text-[var(--text-secondary)] shadow-sm transition hover:-translate-y-px">Monthly review</Link>
+          <button type="button" className="shrink-0 rounded-xl bg-[var(--primary-color)] px-4 py-2 text-[12px] font-semibold text-[var(--primary-contrast)] shadow-sm transition hover:opacity-90" onClick={() => setShowIncomeModal(true)}>Allocate income</button>
+        </div>
       )}
     >
       {nextStepState?.kind === "historical" ? (

@@ -216,10 +216,94 @@ select {
     display: flex;
     height: calc(100vh - 32px);
     flex-direction: column;
-    border: 1px solid var(--border-subtle);
+    border: 1px solid rgba(255, 255, 255, 0.04);
     border-radius: 16px;
-    background: var(--surface-card);
+    background: #111827;
     padding: 16px;
+    overflow: hidden;
+  }
+
+  .sidebar-shell .nav-group-title {
+    color: #64748b;
+    padding-left: 10px;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 900;
+  }
+
+  .sidebar-shell .nav-link {
+    color: #a6b0bf;
+    font-size: 12.5px;
+    font-weight: 650;
+    border-color: transparent;
+  }
+
+  .sidebar-shell .nav-link:hover {
+    background: #172033;
+    color: #edf2f7;
+    border-color: transparent;
+  }
+
+  .sidebar-shell .nav-link-active {
+    background: #1e293b;
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.045);
+  }
+
+  .sidebar-shell .nav-link-active::before {
+    background: #0e9f73;
+  }
+
+  .sidebar-shell .period-trigger {
+    background: #1e293b;
+    border-color: rgba(255, 255, 255, 0.07);
+    color: #e2e8f0;
+    font-size: 12px;
+  }
+
+  .sidebar-shell .period-menu {
+    background: #1e293b;
+    border-color: rgba(255, 255, 255, 0.07);
+  }
+
+  .sidebar-shell .period-menu-button {
+    color: #94a3b8;
+  }
+
+  .sidebar-shell .period-menu-current {
+    color: #cbd5e1;
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .sidebar-shell .period-option {
+    color: #a6b0bf;
+  }
+
+  .sidebar-shell .period-option:hover,
+  .sidebar-shell .period-option-active {
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+  }
+
+  .sidebar-footer-btn {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 9px;
+    border-radius: 10px;
+    border: 0;
+    background: transparent;
+    padding: 9px 10px;
+    font-size: 11px;
+    color: #9da8b7;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .sidebar-footer-btn:hover {
+    background: #172033;
+    color: #fff;
   }
 
   .brand-mark {

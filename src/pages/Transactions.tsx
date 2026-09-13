@@ -1249,38 +1249,18 @@ export function Transactions() {
 
   return (
     <PageShell
-      eyebrow="Ledger"
-      title="Transactions"
-      description={`${activeMonthLabel} transactions, imports, and review flow.`}
+      eyebrow="Transactions"
+      title="Review and organize activity."
+      description="Bank activity stays canonical. Categories, notes and splits explain what the money was for without duplicating the underlying transaction."
       actions={
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button type="button" variant="secondary" onClick={() => setShowIncomeModal(true)}>Add Income</Button>
-          {data?.transactions.items.length ? (
-            <Button
-              type="button"
-              onClick={() => setShowCreateTransactionForm((current) => !current)}
-            >
-              {showCreateTransactionForm ? "Hide Add Transaction" : "Add Transaction"}
-            </Button>
-          ) : null}
+          <Button type="button" variant="secondary" onClick={() => { /* import handled below */ document.getElementById("import-statement-section")?.scrollIntoView({ behavior: "smooth" }); }}>Import statement</Button>
           <Button
             type="button"
-            variant="secondary"
-            disabled={cursorHistory.length <= 1 || isLoading}
-            onClick={() => setCursorHistory((history) => history.slice(0, -1))}
+            onClick={() => setShowCreateTransactionForm((current) => !current)}
           >
-            Previous
-          </Button>
-          <Button
-            type="button"
-            disabled={isLoading || !data?.transactions.nextCursor}
-            onClick={() => {
-              if (data?.transactions.nextCursor) {
-                setCursorHistory((history) => [...history, data.transactions.nextCursor]);
-              }
-            }}
-          >
-            Next
+            Add transaction
           </Button>
         </div>
       }
@@ -1483,6 +1463,7 @@ export function Transactions() {
       </section>
       ) : null}
 
+      <div id="import-statement-section" />
       <Card
         title="Import Bank Statement"
         subtitle="Upload a PDF bank statement to create imported rows for review. Nothing becomes a completed RAF transaction until you approve it."

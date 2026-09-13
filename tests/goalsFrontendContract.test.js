@@ -11,7 +11,8 @@ test("goals are wired into planning navigation and the frontend route", async ()
   ]);
 
   assert.match(appSource, /path="goals"/);
-  assert.match(layoutSource, /to: "\/goals", label: "Goals"/);
+  assert.match(appSource, /path="goals".*Navigate.*\/plan\?tab=goals/);
+  assert.match(layoutSource, /to: "\/plan\?tab=goals", label: "Goals"/);
   assert.match(goalsPageSource, /title="Goals"/);
   assert.match(goalsPageSource, /Paid so far/);
   assert.match(goalsPageSource, /getDashboardReport/);
