@@ -22,15 +22,14 @@ const desktopNavigation = [
       { to: "/income/new", label: "Add Income", icon: "plus" },
       { to: "/transactions", label: "Transactions", icon: "list" },
       { to: "/debts", label: "Debts", icon: "wallet" },
-      { to: "/goals", label: "Goals", icon: "target" },
     ],
   },
   {
     label: "Planning",
     items: [
+      { to: "/plan", label: "Plan", icon: "pie" },
       { to: "/cash-flow-forecast", label: "Cash-Flow Forecast", icon: "chart" },
       { to: "/monthly-review", label: "Monthly Review", icon: "calendar" },
-      { to: "/allocation-preferences", label: "Categories", icon: "pie" },
       { to: "/scenarios", label: "Scenarios", icon: "scenarios" },
       { to: "/settings", label: "Settings", icon: "user" },
     ],

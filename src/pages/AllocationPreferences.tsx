@@ -154,7 +154,7 @@ const DEFAULT_NEW_CATEGORY_FORM: NewCategoryFormState = {
   isActive: true,
 };
 
-export function AllocationPreferences() {
+export function AllocationPreferences({ embedded = false }: { embedded?: boolean } = {}) {
   const [categories, setCategories] = useState<DraftCategory[]>([]);
   const [percentInputDrafts, setPercentInputDrafts] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -349,6 +349,7 @@ export function AllocationPreferences() {
       eyebrow="Planning"
       title="Allocation Preferences"
       description="Adjust category percentages and keep the active total balanced."
+      embedded={embedded}
       actions={(
         <Button type="button" variant="ghost" onClick={() => setIsAdvancedMode((current) => !current)}>
           {isAdvancedMode ? "Hide Advanced" : "Show Advanced"}

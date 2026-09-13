@@ -132,7 +132,7 @@ function goalProgressFill() {
   return "color-mix(in srgb, var(--primary-color) 72%, var(--text-strong))";
 }
 
-export function Goals() {
+export function Goals({ embedded = false }: { embedded?: boolean } = {}) {
   const { activeMonthLabel, activeRange } = usePeriod();
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
   const [form, setForm] = useState<GoalFormState>(EMPTY_GOAL_FORM);
@@ -446,6 +446,7 @@ export function Goals() {
       eyebrow="Planning"
       title="Goals"
       description={`Track savings goals for ${activeMonthLabel}.`}
+      embedded={embedded}
     >
       {goalsData.isLoading ? <LoadingState label="Loading goals..." /> : null}
       {!goalsData.isLoading && goalsData.error ? (

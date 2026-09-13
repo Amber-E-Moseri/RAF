@@ -6,12 +6,13 @@ interface PageShellProps {
   description: string;
   actions?: ReactNode;
   children: ReactNode;
+  embedded?: boolean;
 }
 
-export function PageShell({ eyebrow, title, description, actions, children }: PageShellProps) {
+export function PageShell({ eyebrow, title, description, actions, children, embedded = false }: PageShellProps) {
   return (
     <div className="space-y-8">
-      <header className="ui-card hidden p-5 sm:p-6 md:block">
+      {!embedded ? <header className="ui-card hidden p-5 sm:p-6 md:block">
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
@@ -24,7 +25,7 @@ export function PageShell({ eyebrow, title, description, actions, children }: Pa
             <p className="mt-3 max-w-[64ch] text-[15px] leading-7 text-[var(--text-secondary)]">{description}</p>
           </div>
         </div>
-      </header>
+      </header> : null}
       {children}
     </div>
   );
