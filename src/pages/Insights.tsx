@@ -43,7 +43,7 @@ function insightBarColor(index: number) {
   return colors[index % colors.length];
 }
 
-export function Insights() {
+export function Insights({ embedded = false }: { embedded?: boolean } = {}) {
   const { data, error, isLoading, reload } = useAsyncData<InsightsViewModel>(async () => {
     const household = await getHouseholdSettings();
     const yearStart = `${household.activeMonth.slice(0, 4)}-01-01`;
@@ -65,7 +65,7 @@ export function Insights() {
 
   if (isLoading) {
     return (
-      <PageShell eyebrow="Insights" title="Insights" description="Year-to-date score trends and allocation analytics.">
+      <PageShell eyebrow="Insights" title="Insights" description="Year-to-date score trends and allocation analytics." embedded={embedded}>
         <LoadingState label="Loading insights..." />
       </PageShell>
     );
@@ -73,7 +73,7 @@ export function Insights() {
 
   if (error || !data) {
     return (
-      <PageShell eyebrow="Insights" title="Insights" description="Year-to-date score trends and allocation analytics.">
+      <PageShell eyebrow="Insights" title="Insights" description="Year-to-date score trends and allocation analytics." embedded={embedded}>
         <ErrorState title="Failed to load insights" message={error ?? "Insights could not be loaded."} onRetry={() => void reload()} />
       </PageShell>
     );
@@ -110,6 +110,7 @@ export function Insights() {
       eyebrow="Insights"
       title="Insights"
       description={`Year-to-date financial health and allocation analysis through ${data.activeMonthLabel}.`}
+      embedded={embedded}
     >
       {latestHealth ? (
         <FinancialHealthIndicator

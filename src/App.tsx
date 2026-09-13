@@ -9,7 +9,7 @@ import { PlanProvider } from "./context/PlanContext";
 import { AcceptInvitation } from "./pages/AcceptInvitation";
 import { AddIncome } from "./pages/AddIncome";
 import { Dashboard } from "./pages/Dashboard";
-import { Insights } from "./pages/Insights";
+import { Outlook } from "./pages/Outlook";
 import { Login } from "./pages/Login";
 import { MonthlyReview } from "./pages/MonthlyReview";
 import { NotFound } from "./pages/NotFound";
@@ -18,7 +18,6 @@ import { PlanWizard } from "./pages/PlanWizard";
 import { Remi } from "./pages/Remi";
 import { Scenarios } from "./pages/Scenarios";
 import { Settings } from "./pages/Settings";
-import { CashFlowForecast } from "./pages/CashFlowForecast";
 import { Transactions } from "./pages/Transactions";
 
 export default function App() {
@@ -53,9 +52,10 @@ export default function App() {
                   <Route path="transactions" element={<Transactions />} />
                   <Route path="debts" element={<Navigate to="/plan?tab=debts" replace />} />
                   <Route path="goals" element={<Navigate to="/plan?tab=goals" replace />} />
-                  <Route path="cash-flow-forecast" element={<CashFlowForecast />} />
+                  <Route path="outlook" element={<Outlook />} />
+                  <Route path="cash-flow-forecast" element={<Navigate to="/outlook?tab=forecast" replace />} />
                   <Route path="monthly-review" element={<MonthlyReview />} />
-                  <Route path="insights" element={<Insights />} />
+                  <Route path="insights" element={<Navigate to="/outlook?tab=reports" replace />} />
                   <Route path="remi" element={<Remi />} />
                   <Route path="scenarios" element={<Scenarios />} />
                   <Route path="*" element={<NotFound />} />

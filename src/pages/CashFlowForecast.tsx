@@ -627,7 +627,7 @@ function UpcomingExpensesSection({ onForecastInvalidated }: { onForecastInvalida
 
 // â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-export function CashFlowForecast() {
+export function CashFlowForecast({ embedded = false }: { embedded?: boolean } = {}) {
   const format = useMoneyFormat();
   const [selectedDays, setSelectedDays] = useState<ForecastDays>(30);
 
@@ -661,6 +661,7 @@ export function CashFlowForecast() {
       title="Cash-Flow Forecast"
       description="A read-only projection of your household's cash position over the next 30, 60, or 90 days. Income, fixed bills, and spending are estimated — not guaranteed."
       actions={tabActions}
+      embedded={embedded}
     >
       {isLoading && <LoadingState label="Building forecast…" />}
       {error && !isLoading && <ErrorState message={error} onRetry={reload} />}

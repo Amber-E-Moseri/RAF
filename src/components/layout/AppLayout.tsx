@@ -13,7 +13,6 @@ const desktopNavigation = [
     label: "Overview",
     items: [
       { to: "/dashboard", label: "Dashboard", icon: "home" },
-      { to: "/insights", label: "Insights", icon: "chart" },
     ],
   },
   {
@@ -27,7 +26,7 @@ const desktopNavigation = [
     label: "Planning",
     items: [
       { to: "/plan", label: "Plan", icon: "pie" },
-      { to: "/cash-flow-forecast", label: "Cash-Flow Forecast", icon: "chart" },
+      { to: "/outlook", label: "Outlook", icon: "chart" },
       { to: "/monthly-review", label: "Monthly Review", icon: "calendar" },
       { to: "/scenarios", label: "Scenarios", icon: "scenarios" },
       { to: "/settings", label: "Settings", icon: "user" },
