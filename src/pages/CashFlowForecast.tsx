@@ -659,7 +659,7 @@ export function CashFlowForecast() {
     <PageShell
       eyebrow="Planning"
       title="Cash-Flow Forecast"
-      description="A read-only projection of your household's cash position over the next 30, 60, or 90 days. Income, fixed bills, and spending are estimated — not guaranteed."
+      description="See the next 30 days with context."
       actions={tabActions}
     >
       {isLoading && <LoadingState label="Building forecast…" />}

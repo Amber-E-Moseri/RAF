@@ -348,7 +348,7 @@ export function AllocationPreferences() {
     <PageShell
       eyebrow="Planning"
       title="Allocation Preferences"
-      description="Adjust category percentages and keep the active total balanced."
+      description="Allocation without noise."
       actions={(
         <Button type="button" variant="ghost" onClick={() => setIsAdvancedMode((current) => !current)}>
           {isAdvancedMode ? "Hide Advanced" : "Show Advanced"}

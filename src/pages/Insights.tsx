@@ -65,7 +65,7 @@ export function Insights() {
 
   if (isLoading) {
     return (
-      <PageShell eyebrow="Insights" title="Insights" description="Year-to-date score trends and allocation analytics.">
+      <PageShell eyebrow="Insights" title="Insights" description="Year-to-date trends and analytics.">
         <LoadingState label="Loading insights..." />
       </PageShell>
     );
@@ -73,7 +73,7 @@ export function Insights() {
 
   if (error || !data) {
     return (
-      <PageShell eyebrow="Insights" title="Insights" description="Year-to-date score trends and allocation analytics.">
+      <PageShell eyebrow="Insights" title="Insights" description="Year-to-date trends and analytics.">
         <ErrorState title="Failed to load insights" message={error ?? "Insights could not be loaded."} onRetry={() => void reload()} />
       </PageShell>
     );
@@ -109,7 +109,7 @@ export function Insights() {
     <PageShell
       eyebrow="Insights"
       title="Insights"
-      description={`Year-to-date financial health and allocation analysis through ${data.activeMonthLabel}.`}
+      description="Year-to-date trends and analytics."
     >
       {latestHealth ? (
         <FinancialHealthIndicator

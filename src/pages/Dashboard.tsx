@@ -288,7 +288,7 @@ export function Dashboard() {
 
   if (isLoading || monthWorkflow.isLoading) {
     return (
-      <PageShell eyebrow="Overview" title="Dashboard" description={`${activeMonthLabel} financial snapshot.`}>
+      <PageShell eyebrow="Overview" title="Dashboard" description="Your money, with a clear next move.">
         <LoadingState label="Loading the current financial snapshot..." />
       </PageShell>
     );
@@ -296,7 +296,7 @@ export function Dashboard() {
 
   if (error || !data || monthWorkflow.error || !monthWorkflow.data) {
     return (
-      <PageShell eyebrow="Overview" title="Dashboard" description={`${activeMonthLabel} financial snapshot.`}>
+      <PageShell eyebrow="Overview" title="Dashboard" description="Your money, with a clear next move.">
         <ErrorState
           title="Failed to load dashboard"
           message={error ?? monthWorkflow.error ?? "We could not load the current dashboard data. Please try again."}
@@ -475,7 +475,7 @@ export function Dashboard() {
   }
 
   return (
-    <PageShell eyebrow="Overview" title="Dashboard" description={`${activeMonthLabel} financial snapshot.`}>
+    <PageShell eyebrow="Overview" title="Dashboard" description="Your money, with a clear next move.">
       {nextStepState?.kind === "historical" ? (
         <div
           className="rounded-2xl border px-4 py-3 text-sm"

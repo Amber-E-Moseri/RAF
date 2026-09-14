@@ -95,7 +95,7 @@ export function AddIncome() {
     <PageShell
       eyebrow="Income"
       title="Add Income"
-      description="Start the month by recording income. RAF applies your active category percentages, then sends any rounding cent to Buffer when it is active."
+      description="Record income and see how RAF splits it."
       actions={<Link className="text-sm font-semibold text-raf-moss" to="/dashboard">Back to Dashboard</Link>}
     >
       <section className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">

@@ -341,7 +341,7 @@ export function AppearanceSettings() {
     <PageShell
       eyebrow="Settings"
       title="Settings"
-      description="Manage appearance, savings floor alerts, and import rules for this device."
+      description="Make RAF feel like yours."
     >
       <section className="grid gap-7 xl:grid-cols-[minmax(180px,20%),minmax(0,45%),minmax(320px,35%)]">
         <aside className="xl:sticky xl:top-6 xl:self-start">

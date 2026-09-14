@@ -481,7 +481,7 @@ export function Remi() {
   }
 
   return (
-    <PageShell eyebrow="AI Advisor" title="Remi">
+    <PageShell eyebrow="AI Advisor" title="Your RAF guide.">
       {/* Dot animation */}
       <style>{`
         @keyframes remi-dot {

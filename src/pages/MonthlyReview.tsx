@@ -419,7 +419,7 @@ export function MonthlyReview() {
     <PageShell
       eyebrow="Closeout"
       title="Monthly Review"
-      description={`Close ${activeMonthLabel} with a deliberate review step.`}
+      description="Understand what changed."
     >
       <div className="rounded-2xl border px-4 py-3 text-sm text-[var(--text-muted)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
         At month end, review the surplus or deficit, confirm where any surplus should go, and save the month.

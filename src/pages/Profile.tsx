@@ -156,7 +156,7 @@ export function Profile() {
     <PageShell
       eyebrow="Profile"
       title="Profile"
-      description="Account and planning summary placeholders for future profile features."
+      description="Account summary."
     >
       {isLoading ? <LoadingState label="Loading profile overview..." /> : null}
       {!isLoading && error ? (

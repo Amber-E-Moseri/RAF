@@ -268,7 +268,7 @@ export function Scenarios() {
   const selectedType = SCENARIO_TYPES.find((t) => t.type === scenarioType);
 
   return (
-    <PageShell title="Scenarios" description="Test financial what-ifs without changing your plan">
+    <PageShell title="Scenarios" description="Test what-ifs without changing your plan.">
       <div className="space-y-6">
         {/* Scenario picker */}
         <div>

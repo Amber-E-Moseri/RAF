@@ -1249,7 +1249,7 @@ export function Transactions() {
     <PageShell
       eyebrow="Ledger"
       title="Transactions"
-      description={`${activeMonthLabel} transactions, imports, and review flow.`}
+      description="Review and organize activity."
       actions={
         <div className="flex gap-2">
           {data?.transactions.items.length ? (

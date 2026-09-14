@@ -445,7 +445,7 @@ export function Goals() {
     <PageShell
       eyebrow="Planning"
       title="Goals"
-      description={`Track savings goals for ${activeMonthLabel}.`}
+      description="Track progress and target dates."
     >
       {goalsData.isLoading ? <LoadingState label="Loading goals..." /> : null}
       {!goalsData.isLoading && goalsData.error ? (
