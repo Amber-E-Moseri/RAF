@@ -20,13 +20,16 @@ function createDbDouble({
   debtPayments = [],
   debtAdjustments = [],
   financialAccounts = [],
+  transactions = [],
   household = { id: 'household_1', activeMonth: '2026-03-01' },
+  failUpdateDebt = false,
 } = {}) {
   const state = {
     debts: debts.map((debt) => ({ ...debt })),
     debtPayments: debtPayments.map((payment) => ({ ...payment })),
     debtAdjustments: debtAdjustments.map((adjustment) => ({ ...adjustment })),
     financialAccounts: financialAccounts.map((account) => ({ ...account })),
+    transactions: transactions.map((transaction) => ({ ...transaction })),
     household: { ...household },
     insertedDebt: null,
     updatedDebt: null,
@@ -78,6 +81,9 @@ function createDbDouble({
       ) ?? null;
     },
     async updateDebt({ debtId, patch }) {
+      if (failUpdateDebt) {
+        throw new Error('forced update failure');
+      }
       const index = state.debts.findIndex((debt) => debt.id === debtId);
       state.debts[index] = {
         ...state.debts[index],
@@ -101,7 +107,29 @@ function createDbDouble({
   return {
     state,
     async transaction(callback) {
-      return callback(tx);
+      const snapshot = {
+        debts: state.debts.map((debt) => ({ ...debt })),
+        debtPayments: state.debtPayments.map((payment) => ({ ...payment })),
+        debtAdjustments: state.debtAdjustments.map((adjustment) => ({ ...adjustment })),
+        financialAccounts: state.financialAccounts.map((account) => ({ ...account })),
+        transactions: state.transactions.map((transaction) => ({ ...transaction })),
+        insertedDebt: state.insertedDebt,
+        updatedDebt: state.updatedDebt,
+        deletedDebtId: state.deletedDebtId,
+      };
+      try {
+        return await callback(tx);
+      } catch (error) {
+        state.debts = snapshot.debts;
+        state.debtPayments = snapshot.debtPayments;
+        state.debtAdjustments = snapshot.debtAdjustments;
+        state.financialAccounts = snapshot.financialAccounts;
+        state.transactions = snapshot.transactions;
+        state.insertedDebt = snapshot.insertedDebt;
+        state.updatedDebt = snapshot.updatedDebt;
+        state.deletedDebtId = snapshot.deletedDebtId;
+        throw error;
+      }
     },
   };
 }
@@ -399,7 +427,30 @@ test('account balance changes do not silently mutate debt fields but do change l
   assert.equal(db.state.debts[0].currentBalance, undefined);
 });
 
-test('unlinkDebtFromFinancialAccount restores manual derived balance without guessing from account balance', async () => {
+test('unlinkDebtFromFinancialAccount rejects missing confirmed manual balance', async () => {
+  const db = createDbDouble({
+    debts: [{
+      id: 'debt_1',
+      householdId: 'household_1',
+      name: 'Visa',
+      startingBalance: '5000.00',
+      apr: 19.99,
+      minimumPayment: '100.00',
+      monthlyPayment: '250.00',
+      financialAccountId: 'acct_1',
+      isActive: true,
+    }],
+  });
+
+  await assert.rejects(
+    () => unlinkDebtFromFinancialAccount({ db, householdId: 'household_1', debtId: 'debt_1' }),
+    /confirmedManualBalance is required/,
+  );
+  assert.equal(db.state.debts[0].financialAccountId, 'acct_1');
+  assert.equal(db.state.debtAdjustments.length, 0);
+});
+
+test('unlinkDebtFromFinancialAccount creates an explicit reconciliation boundary before clearing the link', async () => {
   const db = createDbDouble({
     debts: [{
       id: 'debt_1',
@@ -422,14 +473,159 @@ test('unlinkDebtFromFinancialAccount restores manual derived balance without gue
       currentBalance: '-3000.00',
       status: 'active',
     }],
+    transactions: [{ id: 'tx_existing', amount: '500.00', linkedDebtId: 'debt_1' }],
   });
 
-  const result = await unlinkDebtFromFinancialAccount({ db, householdId: 'household_1', debtId: 'debt_1' });
+  const result = await unlinkDebtFromFinancialAccount({
+    db,
+    householdId: 'household_1',
+    debtId: 'debt_1',
+    confirmedManualBalance: '3000.00',
+  });
 
+  assert.equal(result.id, 'debt_1');
   assert.equal(result.financialAccountId, null);
-  assert.equal(result.currentBalance, '4500.00');
+  assert.equal(result.currentBalance, '3000.00');
   assert.equal(db.state.debts[0].financialAccountId, null);
   assert.equal(db.state.financialAccounts[0].currentBalance, '-3000.00');
+  assert.equal(db.state.debtPayments.length, 1);
+  assert.equal(db.state.transactions.length, 1);
+  assert.deepEqual(db.state.debtAdjustments.map((adjustment) => ({
+    amount: adjustment.amount,
+    adjustmentType: adjustment.adjustmentType,
+    effectiveDate: adjustment.effectiveDate,
+    note: adjustment.note,
+  })), [{
+    amount: '-1500.00',
+    adjustmentType: 'reconciliation',
+    effectiveDate: '2026-03-31',
+    note: 'Manual balance confirmed while unlinking financial account authority',
+  }]);
+});
+
+test('unlinkDebtFromFinancialAccount uses the user-confirmed balance, not the account balance', async () => {
+  const db = createDbDouble({
+    debts: [{
+      id: 'debt_1',
+      householdId: 'household_1',
+      name: 'Visa',
+      startingBalance: '5000.00',
+      apr: 19.99,
+      minimumPayment: '100.00',
+      monthlyPayment: '250.00',
+      financialAccountId: 'acct_1',
+      isActive: true,
+    }],
+    debtPayments: [{ debtId: 'debt_1', householdId: 'household_1', paymentDate: '2026-03-12', amount: '500.00' }],
+    debtAdjustments: [{ debtId: 'debt_1', householdId: 'household_1', amount: '100.00', adjustmentType: 'correction', effectiveDate: '2026-03-14', note: 'Prior explicit correction' }],
+    financialAccounts: [{
+      id: 'acct_1',
+      householdId: 'household_1',
+      workspaceId: 'household_1',
+      name: 'Visa account',
+      accountType: 'credit_card',
+      currentBalance: '-3000.00',
+      status: 'active',
+    }],
+  });
+
+  const result = await unlinkDebtFromFinancialAccount({
+    db,
+    householdId: 'household_1',
+    debtId: 'debt_1',
+    confirmedManualBalance: '2750.00',
+  });
+
+  assert.equal(result.currentBalance, '2750.00');
+  assert.equal(db.state.debtAdjustments.length, 2);
+  assert.equal(db.state.debtAdjustments[0].note, 'Prior explicit correction');
+  assert.equal(db.state.debtAdjustments[1].amount, '-1850.00');
+  assert.equal(db.state.financialAccounts[0].currentBalance, '-3000.00');
+});
+
+test('unlinkDebtFromFinancialAccount is atomic when clearing the link fails after reconciliation', async () => {
+  const db = createDbDouble({
+    failUpdateDebt: true,
+    debts: [{
+      id: 'debt_1',
+      householdId: 'household_1',
+      name: 'Visa',
+      startingBalance: '5000.00',
+      apr: 19.99,
+      minimumPayment: '100.00',
+      monthlyPayment: '250.00',
+      financialAccountId: 'acct_1',
+      isActive: true,
+    }],
+    debtPayments: [{ debtId: 'debt_1', householdId: 'household_1', paymentDate: '2026-03-12', amount: '500.00' }],
+  });
+
+  await assert.rejects(
+    () => unlinkDebtFromFinancialAccount({
+      db,
+      householdId: 'household_1',
+      debtId: 'debt_1',
+      confirmedManualBalance: '3000.00',
+    }),
+    /forced update failure/,
+  );
+
+  assert.equal(db.state.debts[0].financialAccountId, 'acct_1');
+  assert.equal(db.state.debtAdjustments.length, 0);
+});
+
+test('debt PATCH rejects unsafe unlink without a confirmed manual balance', async () => {
+  const db = createDbDouble({
+    debts: [{
+      id: 'debt_1',
+      householdId: 'household_1',
+      name: 'Visa',
+      startingBalance: '5000.00',
+      apr: 19.99,
+      minimumPayment: '100.00',
+      monthlyPayment: '250.00',
+      financialAccountId: 'acct_1',
+      isActive: true,
+    }],
+  });
+
+  const response = await PATCH(
+    new Request('http://localhost/api/v1/debts/debt_1', {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        'x-household-id': 'household_1',
+      },
+      body: JSON.stringify({ financialAccountId: null }),
+    }),
+    { db, params: { id: 'debt_1' } },
+  );
+
+  assert.equal(response.status, 422);
+  assert.match((await response.json()).error, /confirmedManualBalance is required/);
+  assert.equal(db.state.debts[0].financialAccountId, 'acct_1');
+});
+
+test('linked debt with missing account fails loud instead of falling back to manual ledger', async () => {
+  const db = createDbDouble({
+    debts: [{
+      id: 'debt_1',
+      householdId: 'household_1',
+      name: 'Visa',
+      startingBalance: '5000.00',
+      apr: 19.99,
+      minimumPayment: '100.00',
+      monthlyPayment: '250.00',
+      financial_account_id: 'acct_missing',
+      isActive: true,
+    }],
+    debtPayments: [{ debtId: 'debt_1', householdId: 'household_1', paymentDate: '2026-03-12', amount: '500.00' }],
+  });
+
+  await assert.rejects(
+    () => listDebts({ db, householdId: 'household_1' }),
+    /linked debt requires a financial account/,
+  );
 });
 
 test('second active debt cannot link to the same active liability account', async () => {
