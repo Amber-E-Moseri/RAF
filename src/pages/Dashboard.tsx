@@ -571,7 +571,7 @@ export function Dashboard() {
       {nextStepState?.kind === "closed-current-month" ? (
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
           <div className="flex items-center gap-3">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>âœ“</span>
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>✓</span>
             <span className="text-[var(--text-muted)]">
               <span className="font-semibold text-[var(--text-strong)]">{activeMonthName} is closed. Your month is complete.</span>{" "}
               RAF will guide the next cycle when new activity begins.
@@ -582,28 +582,28 @@ export function Dashboard() {
       {nextStepState?.kind === "income-no-transactions" ? (
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
           <div className="flex items-center gap-3">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>â†’</span>
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>→</span>
             <span className="text-[var(--text-muted)]">
               <span className="font-semibold text-[var(--text-strong)]">Income logged.</span>{" "}
               Next: record transactions to track where it goes.
             </span>
           </div>
           <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/transactions">
-            Track spending â†’
+            Track spending →
           </Link>
         </div>
       ) : null}
       {nextStepState?.kind === "income-transactions-open" ? (
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
           <div className="flex items-center gap-3">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>âœ“</span>
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>✓</span>
             <span className="text-[var(--text-muted)]">
               <span className="font-semibold text-[var(--text-strong)]">Looking good.</span>{" "}
               When you are done spending, close {activeMonthLabel} in Monthly Review.
             </span>
           </div>
           <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/monthly-review">
-            Monthly Review â†’
+            Monthly Review →
           </Link>
         </div>
       ) : null}

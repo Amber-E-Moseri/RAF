@@ -311,7 +311,7 @@ export function Profile() {
                             {milestone.label}
                           </span>
                           <span className={milestone.completed ? "text-emerald-600" : "text-[var(--text-muted)]"}>
-                            {milestone.completed ? "âœ“" : "â—‹"}
+                            {milestone.completed ? "✓" : "○"}
                           </span>
                         </div>
                       ))}

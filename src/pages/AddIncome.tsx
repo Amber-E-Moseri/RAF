@@ -223,7 +223,7 @@ export function AddIncome() {
                     <div className="text-sm font-semibold text-[var(--text-strong)]">Record transactions</div>
                     <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">Log spending so your allocations stay accurate.</div>
                   </div>
-                  <span className="shrink-0 text-[var(--primary-color)]">â†’</span>
+                  <span className="shrink-0 text-[var(--primary-color)]">→</span>
                 </Link>
                 <Link
                   to="/monthly-review"
@@ -233,7 +233,7 @@ export function AddIncome() {
                     <div className="text-sm font-semibold text-[var(--text-strong)]">Monthly Review</div>
                     <div className="mt-0.5 text-[12px] text-[var(--text-muted)]">Close the month and distribute surplus when ready.</div>
                   </div>
-                  <span className="shrink-0 text-[var(--primary-color)]">â†’</span>
+                  <span className="shrink-0 text-[var(--primary-color)]">→</span>
                 </Link>
               </div>
             </Card>

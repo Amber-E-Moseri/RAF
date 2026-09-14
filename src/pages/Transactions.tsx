@@ -2372,7 +2372,7 @@ export function Transactions() {
                               disabled={isDeletingTransaction === transaction.id}
                               onClick={() => void handleDeleteTransaction(transaction as Transaction)}
                             >
-                              {isDeletingTransaction === transaction.id ? "…" : "ðŸ—‘"}
+                              {isDeletingTransaction === transaction.id ? "…" : "🗑"}
                             </button>
                           </div>
                         )}

@@ -840,7 +840,7 @@ export function Goals() {
                       {milestone.label}
                     </div>
                     <div className={`text-sm font-semibold ${milestone.completed ? "text-[var(--badge-success-text)]" : "text-[var(--text-muted)]"}`}>
-                      {milestone.completed ? "âœ“" : "â—‹"}
+                      {milestone.completed ? "✓" : "○"}
                     </div>
                   </div>
                 ))}
