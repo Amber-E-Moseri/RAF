@@ -24,6 +24,9 @@ export default {
       fontFamily: {
         sans: ["var(--font-sans)"],
       },
+      screens: {
+        desk: "940px",
+      },
     },
   },
   plugins: [],

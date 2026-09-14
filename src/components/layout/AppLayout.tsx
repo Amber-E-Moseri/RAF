@@ -124,7 +124,7 @@ export function AppLayout() {
 
   return (
     <div className="theme-shell min-h-screen">
-      <header className="mobile-top md:hidden">
+      <header className="mobile-top desk:hidden">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <div className="brandmark">R</div>
@@ -139,13 +139,13 @@ export function AppLayout() {
       </header>
 
       <div className="app-grid">
-        <aside className="hidden md:block">
+        <aside className="hidden desk:block">
           <div className="sidebar-shell">
             <div className="mb-5 flex items-center gap-3">
               <div className="brandmark">R</div>
               <div>
-                <p className="text-[14px] font-[800] tracking-[-0.01em] text-[#f1f5f9]">{APP_NAME}</p>
-                <p className="text-[9px] font-[700] uppercase tracking-[0.18em] text-[#64748b]">Finance OS</p>
+                <p className="text-[16px] font-[900] text-white">{APP_NAME}</p>
+                <p className="text-[10.5px] text-[#7c8799]" style={{ marginTop: 1 }}>Revenue Allocation Formula</p>
               </div>
             </div>
             <div className="mb-5">
@@ -179,7 +179,7 @@ export function AppLayout() {
         </aside>
 
         <div className="flex min-w-0 flex-col">
-          <div className="topbar hidden md:flex">
+          <div className="topbar hidden desk:flex">
             <div className="flex items-center gap-2">
               <button type="button" className="iconbtn" onClick={prevMonth} aria-label="Previous month">&#8249;</button>
               <button type="button" className="month-pill">{activeMonthLabel}</button>
@@ -187,13 +187,13 @@ export function AppLayout() {
             </div>
             <div className="avatar-circle">{userInitials}</div>
           </div>
-          <main className="min-w-0 flex-1 px-5 py-6 pb-[calc(80px+env(safe-area-inset-bottom))] md:px-7 md:pb-7">
+          <main className="min-w-0 flex-1 px-4 py-[22px] pb-[calc(92px+env(safe-area-inset-bottom))] desk:px-8 desk:py-[30px] desk:pb-16">
             <Outlet />
           </main>
         </div>
       </div>
 
-      <nav className="mobile-bottom-nav md:hidden">
+      <nav className="mobile-bottom-nav desk:hidden">
         {mobileTabs.map((item) => (
           <NavLink key={item.to} to={item.to} className={({ isActive }) => mobileTabClassName(isActive)}>
             <span className="inline-flex h-4 w-4 items-center justify-center"><NavIcon type={item.icon} /></span>
