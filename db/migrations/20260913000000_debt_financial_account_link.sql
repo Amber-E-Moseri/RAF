@@ -8,7 +8,7 @@ ALTER TABLE raf.debts
 ADD CONSTRAINT debts_financial_account_fk
 FOREIGN KEY (financial_account_id, workspace_id)
 REFERENCES raf.financial_accounts(id, workspace_id)
-ON DELETE SET NULL (financial_account_id);
+ON DELETE NO ACTION;
 
 CREATE INDEX IF NOT EXISTS idx_debts_workspace_financial_account
 ON raf.debts (workspace_id, financial_account_id)
