@@ -17,6 +17,12 @@ const ownerBootstrapMigrationPath = path.join(repoRoot, 'db', 'migrations', '202
 const ownerBootstrapSql = fs.readFileSync(ownerBootstrapMigrationPath, 'utf8');
 const debtAccountLinkMigrationPath = path.join(repoRoot, 'db', 'migrations', '20260913000000_debt_financial_account_link.sql');
 const debtAccountLinkSql = fs.readFileSync(debtAccountLinkMigrationPath, 'utf8');
+const debtAccountNoActionMigrationPath = path.join(repoRoot, 'db', 'migrations', '20260914000000_fix_debt_financial_account_fk_no_action.sql');
+const debtAccountNoActionSql = fs.readFileSync(debtAccountNoActionMigrationPath, 'utf8');
+const debtAccountNoActionExecutableSql = debtAccountNoActionSql
+  .split(/\r?\n/)
+  .filter((line) => !line.trim().startsWith('--'))
+  .join('\n');
 
 const tenantTables = [
   'households',
@@ -135,15 +141,15 @@ test('debt financial account link migration is additive, workspace-safe, and act
   assert.match(debtAccountLinkSql, /CREATE UNIQUE INDEX IF NOT EXISTS idx_debts_one_active_debt_per_financial_account[\s\S]*WHERE financial_account_id IS NOT NULL AND is_active = true/);
 });
 
-test('debt financial account link migration does not use ON DELETE SET NULL — authority bypass prevention', () => {
-  // The FK must NOT have SET NULL semantics. SET NULL would allow a direct account
-  // deletion to silently null financial_account_id without going through the safe
-  // confirmed-balance unlink boundary. NO ACTION (the default, deferred within
-  // statement) is the correct behavior: workspace CASCADE deletion works (both
-  // accounts and debts are deleted together by the time the check runs) while
-  // direct account deletion while debts are linked produces a FK violation.
-  assert.doesNotMatch(debtAccountLinkSql, /ON DELETE SET NULL/i);
-  assert.match(debtAccountLinkSql, /ON DELETE NO ACTION/i);
+test('debt financial account no-action migration corrects applied SET NULL authority bypass', () => {
+  // The original link migration had already been applied to a shared database
+  // with SET NULL semantics. Keep that historical migration stable and use an
+  // additive corrective migration for the authority boundary.
+  assert.match(debtAccountLinkSql, /ON DELETE SET NULL \(financial_account_id\)/i);
+  assert.match(debtAccountNoActionExecutableSql, /DROP CONSTRAINT IF EXISTS debts_financial_account_fk/i);
+  assert.match(debtAccountNoActionExecutableSql, /FOREIGN KEY \(financial_account_id, workspace_id\)[\s\S]*REFERENCES raf\.financial_accounts\(id, workspace_id\)/);
+  assert.doesNotMatch(debtAccountNoActionExecutableSql, /ON DELETE SET NULL/i);
+  assert.match(debtAccountNoActionExecutableSql, /ON DELETE NO ACTION/i);
 });
 
 test('workspace RLS helper functions use provider-neutral transaction-local context', () => {
