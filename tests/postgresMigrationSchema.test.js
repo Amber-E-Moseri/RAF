@@ -15,6 +15,14 @@ const tokenBlacklistMigrationPath = path.join(repoRoot, 'db', 'migrations', '202
 const tokenBlacklistSql = fs.readFileSync(tokenBlacklistMigrationPath, 'utf8');
 const ownerBootstrapMigrationPath = path.join(repoRoot, 'db', 'migrations', '20260910000006_owner_scoped_signup_bootstrap.sql');
 const ownerBootstrapSql = fs.readFileSync(ownerBootstrapMigrationPath, 'utf8');
+const debtAccountLinkMigrationPath = path.join(repoRoot, 'db', 'migrations', '20260913000000_debt_financial_account_link.sql');
+const debtAccountLinkSql = fs.readFileSync(debtAccountLinkMigrationPath, 'utf8');
+const debtAccountNoActionMigrationPath = path.join(repoRoot, 'db', 'migrations', '20260914000000_fix_debt_financial_account_fk_no_action.sql');
+const debtAccountNoActionSql = fs.readFileSync(debtAccountNoActionMigrationPath, 'utf8');
+const debtAccountNoActionExecutableSql = debtAccountNoActionSql
+  .split(/\r?\n/)
+  .filter((line) => !line.trim().startsWith('--'))
+  .join('\n');
 
 const tenantTables = [
   'households',
@@ -125,6 +133,23 @@ test('financial accounts migration enforces same-workspace account references', 
       `${constraintName} must require account_id and workspace_id to match`,
     );
   }
+});
+
+test('debt financial account link migration is additive, workspace-safe, and active-unique', () => {
+  assert.match(debtAccountLinkSql, /ALTER TABLE raf\.debts[\s\S]*ADD COLUMN IF NOT EXISTS financial_account_id uuid/);
+  assert.match(debtAccountLinkSql, /FOREIGN KEY \(financial_account_id, workspace_id\)[\s\S]*REFERENCES raf\.financial_accounts\(id, workspace_id\)/);
+  assert.match(debtAccountLinkSql, /CREATE UNIQUE INDEX IF NOT EXISTS idx_debts_one_active_debt_per_financial_account[\s\S]*WHERE financial_account_id IS NOT NULL AND is_active = true/);
+});
+
+test('debt financial account no-action migration corrects applied SET NULL authority bypass', () => {
+  // The original link migration had already been applied to a shared database
+  // with SET NULL semantics. Keep that historical migration stable and use an
+  // additive corrective migration for the authority boundary.
+  assert.match(debtAccountLinkSql, /ON DELETE SET NULL \(financial_account_id\)/i);
+  assert.match(debtAccountNoActionExecutableSql, /DROP CONSTRAINT IF EXISTS debts_financial_account_fk/i);
+  assert.match(debtAccountNoActionExecutableSql, /FOREIGN KEY \(financial_account_id, workspace_id\)[\s\S]*REFERENCES raf\.financial_accounts\(id, workspace_id\)/);
+  assert.doesNotMatch(debtAccountNoActionExecutableSql, /ON DELETE SET NULL/i);
+  assert.match(debtAccountNoActionExecutableSql, /ON DELETE NO ACTION/i);
 });
 
 test('workspace RLS helper functions use provider-neutral transaction-local context', () => {
