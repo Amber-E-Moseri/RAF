@@ -8,6 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
 const postgresDbSource = fs.readFileSync(path.join(repoRoot, 'lib', 'server', 'postgresDb.js'), 'utf8');
+const debtsRepositorySource = fs.readFileSync(path.join(repoRoot, 'lib', 'repositories', 'postgres', 'debtsRepository.js'), 'utf8');
 
 test('Postgres compatibility adapter serializes hydration/diff transactions with an advisory lock', () => {
   assert.match(
@@ -38,4 +39,11 @@ test('Postgres adapter exposes direct SQL methods before falling back to legacy 
   assert.match(postgresDbSource, /async insertBlacklistedToken\(\{ jti, expiresAt \}\)/);
   assert.match(postgresDbSource, /from \$\{POSTGRES_SCHEMA\}\.token_blacklist/);
   assert.match(postgresDbSource, /if \(!memoryDb\)/);
+});
+
+test('Postgres adapter persists optional financial account ids on debts', () => {
+  assert.match(postgresDbSource, /table: 'debts'[\s\S]*financial_account_id/);
+  assert.match(postgresDbSource, /financial_account_id: r\.financialAccountId \?\? null/);
+  assert.match(debtsRepositorySource, /INSERT INTO \$\{schema\}\.debts[\s\S]*financial_account_id/);
+  assert.match(debtsRepositorySource, /SET financial_account_id = \$3/);
 });

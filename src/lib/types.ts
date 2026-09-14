@@ -232,6 +232,13 @@ export interface Debt {
   name: string;
   startingBalance: string;
   currentBalance: string;
+  financialAccountId?: string | null;
+  balanceAuthority?: {
+    source: "manual_derived" | "financial_account";
+    balance: string | null;
+    asOf: string | null;
+    financialAccountId: string | null;
+  } | null;
   apr: number;
   minimumPayment: string;
   monthlyPayment: string;
@@ -366,6 +373,7 @@ export interface DebtCreateRequest {
   autoPostInterest?: boolean;
   autoPostLateFee?: boolean;
   sortOrder?: number;
+  financialAccountId?: string | null;
 }
 
 export interface DebtListResponse {

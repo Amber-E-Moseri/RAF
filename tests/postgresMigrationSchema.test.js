@@ -15,6 +15,8 @@ const tokenBlacklistMigrationPath = path.join(repoRoot, 'db', 'migrations', '202
 const tokenBlacklistSql = fs.readFileSync(tokenBlacklistMigrationPath, 'utf8');
 const ownerBootstrapMigrationPath = path.join(repoRoot, 'db', 'migrations', '20260910000006_owner_scoped_signup_bootstrap.sql');
 const ownerBootstrapSql = fs.readFileSync(ownerBootstrapMigrationPath, 'utf8');
+const debtAccountLinkMigrationPath = path.join(repoRoot, 'db', 'migrations', '20260913000000_debt_financial_account_link.sql');
+const debtAccountLinkSql = fs.readFileSync(debtAccountLinkMigrationPath, 'utf8');
 
 const tenantTables = [
   'households',
@@ -125,6 +127,13 @@ test('financial accounts migration enforces same-workspace account references', 
       `${constraintName} must require account_id and workspace_id to match`,
     );
   }
+});
+
+test('debt financial account link migration is additive, workspace-safe, and active-unique', () => {
+  assert.match(debtAccountLinkSql, /ALTER TABLE raf\.debts[\s\S]*ADD COLUMN IF NOT EXISTS financial_account_id uuid/);
+  assert.match(debtAccountLinkSql, /FOREIGN KEY \(financial_account_id, workspace_id\)[\s\S]*REFERENCES raf\.financial_accounts\(id, workspace_id\)/);
+  assert.match(debtAccountLinkSql, /ON DELETE SET NULL \(financial_account_id\)/);
+  assert.match(debtAccountLinkSql, /CREATE UNIQUE INDEX IF NOT EXISTS idx_debts_one_active_debt_per_financial_account[\s\S]*WHERE financial_account_id IS NOT NULL AND is_active = true/);
 });
 
 test('workspace RLS helper functions use provider-neutral transaction-local context', () => {

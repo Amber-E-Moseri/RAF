@@ -8,16 +8,25 @@ import {
   createDebtAdjustment,
   createDebt,
   deleteDebt,
+  linkDebtToFinancialAccount,
   listDebtAdjustments,
   listDebts,
+  unlinkDebtFromFinancialAccount,
   updateDebt,
 } from '../lib/debts/debts.js';
 
-function createDbDouble({ debts = [], debtPayments = [], debtAdjustments = [], household = { id: 'household_1', activeMonth: '2026-03-01' } } = {}) {
+function createDbDouble({
+  debts = [],
+  debtPayments = [],
+  debtAdjustments = [],
+  financialAccounts = [],
+  household = { id: 'household_1', activeMonth: '2026-03-01' },
+} = {}) {
   const state = {
     debts: debts.map((debt) => ({ ...debt })),
     debtPayments: debtPayments.map((payment) => ({ ...payment })),
     debtAdjustments: debtAdjustments.map((adjustment) => ({ ...adjustment })),
+    financialAccounts: financialAccounts.map((account) => ({ ...account })),
     household: { ...household },
     insertedDebt: null,
     updatedDebt: null,
@@ -61,6 +70,12 @@ function createDbDouble({ debts = [], debtPayments = [], debtAdjustments = [], h
     },
     async getDebtById({ debtId }) {
       return state.debts.find((debt) => debt.id === debtId) ?? null;
+    },
+    async getFinancialAccountById({ householdId, accountId }) {
+      return state.financialAccounts.find((account) =>
+        account.id === accountId
+        && (account.householdId === householdId || account.workspaceId === householdId)
+      ) ?? null;
     },
     async updateDebt({ debtId, patch }) {
       const index = state.debts.findIndex((debt) => debt.id === debtId);
@@ -193,9 +208,364 @@ test('createDebt creates a debt and returns money values as decimal strings', as
   assert.equal(result.status, 'current');
   assert.equal(result.paymentStatus, 'missed_payment');
   assert.equal(result.paymentsThisMonth, '0.00');
+  assert.equal(result.financialAccountId, null);
+  assert.deepEqual(result.balanceAuthority, {
+    source: 'manual_derived',
+    balance: null,
+    asOf: null,
+    financialAccountId: null,
+  });
   assert.ok(typeof result.monthsRemaining === 'number' && result.monthsRemaining > 0);
   assert.ok(typeof result.totalInterestRemaining === 'string' && Number(result.totalInterestRemaining) > 0);
   assert.match(result.estimatedPayoffDate, /^\d{4}-\d{2}-\d{2}$/);
+});
+
+test('createDebt can create a manual debt without an account link', async () => {
+  const db = createDbDouble();
+
+  const result = await createDebt({
+    db,
+    householdId: 'household_1',
+    input: {
+      name: 'Family loan',
+      startingBalance: '1200.00',
+      apr: '0',
+      minimumPayment: '0.00',
+      monthlyPayment: '100.00',
+    },
+  });
+
+  assert.equal(result.id, 'debt_1');
+  assert.equal(result.financialAccountId, null);
+  assert.equal(result.currentBalance, '1200.00');
+  assert.equal(db.state.insertedDebt.financialAccountId, null);
+});
+
+test('linkDebtToFinancialAccount links a manual debt without changing its id or payment history', async () => {
+  const db = createDbDouble({
+    debts: [{
+      id: 'debt_1',
+      householdId: 'household_1',
+      name: 'Visa',
+      startingBalance: '5000.00',
+      apr: 19.99,
+      minimumPayment: '100.00',
+      monthlyPayment: '250.00',
+      isActive: true,
+    }],
+    debtPayments: [{ debtId: 'debt_1', householdId: 'household_1', paymentDate: '2026-03-12', amount: '400.00' }],
+    financialAccounts: [{
+      id: 'acct_1',
+      householdId: 'household_1',
+      workspaceId: 'household_1',
+      name: 'Visa account',
+      accountType: 'credit_card',
+      currentBalance: '-4300.00',
+      balanceAsOf: '2026-03-31T00:00:00.000Z',
+      status: 'active',
+    }],
+  });
+
+  const result = await linkDebtToFinancialAccount({
+    db,
+    householdId: 'household_1',
+    debtId: 'debt_1',
+    financialAccountId: 'acct_1',
+  });
+
+  assert.equal(result.id, 'debt_1');
+  assert.equal(result.financialAccountId, 'acct_1');
+  assert.equal(result.currentBalance, '4300.00');
+  assert.equal(result.paymentsThisMonth, '400.00');
+  assert.equal(db.state.debtPayments.length, 1);
+  assert.equal(db.state.updatedDebt.financialAccountId, 'acct_1');
+  assert.deepEqual(result.balanceAuthority, {
+    source: 'financial_account',
+    balance: '4300.00',
+    asOf: '2026-03-31T00:00:00.000Z',
+    financialAccountId: 'acct_1',
+  });
+});
+
+test('linkDebtToFinancialAccount rejects cross-workspace and incompatible accounts', async () => {
+  const db = createDbDouble({
+    debts: [{
+      id: 'debt_1',
+      householdId: 'household_1',
+      name: 'Visa',
+      startingBalance: '5000.00',
+      apr: 19.99,
+      minimumPayment: '100.00',
+      monthlyPayment: '250.00',
+      isActive: true,
+    }],
+    financialAccounts: [
+      {
+        id: 'acct_other',
+        householdId: 'household_2',
+        workspaceId: 'household_2',
+        name: 'Other card',
+        accountType: 'credit_card',
+        currentBalance: '-5000.00',
+        status: 'active',
+      },
+      {
+        id: 'acct_checking',
+        householdId: 'household_1',
+        workspaceId: 'household_1',
+        name: 'Checking',
+        accountType: 'checking',
+        currentBalance: '5000.00',
+        status: 'active',
+      },
+    ],
+  });
+
+  await assert.rejects(
+    () => linkDebtToFinancialAccount({ db, householdId: 'household_1', debtId: 'debt_1', financialAccountId: 'acct_other' }),
+    /financial account not found/,
+  );
+  await assert.rejects(
+    () => linkDebtToFinancialAccount({ db, householdId: 'household_1', debtId: 'debt_1', financialAccountId: 'acct_checking' }),
+    /financial account must be a liability account/,
+  );
+  assert.equal(db.state.debts[0].financialAccountId, undefined);
+});
+
+test('linked debt reads account-backed balance without mutating account or stored debt balance', async () => {
+  const db = createDbDouble({
+    debts: [{
+      id: 'debt_1',
+      householdId: 'household_1',
+      name: 'Visa',
+      startingBalance: '5000.00',
+      apr: 19.99,
+      minimumPayment: '100.00',
+      monthlyPayment: '250.00',
+      financialAccountId: 'acct_1',
+      isActive: true,
+    }],
+    debtPayments: [{ debtId: 'debt_1', householdId: 'household_1', paymentDate: '2026-03-12', amount: '1000.00' }],
+    financialAccounts: [{
+      id: 'acct_1',
+      householdId: 'household_1',
+      workspaceId: 'household_1',
+      name: 'Visa account',
+      accountType: 'credit_card',
+      currentBalance: '-3200.00',
+      balanceAsOf: '2026-03-31T00:00:00.000Z',
+      status: 'active',
+    }],
+  });
+
+  const result = await listDebts({ db, householdId: 'household_1' });
+
+  assert.equal(result.items[0].currentBalance, '3200.00');
+  assert.equal(result.items[0].balanceAuthority.source, 'financial_account');
+  assert.equal(db.state.debts[0].startingBalance, '5000.00');
+  assert.equal(db.state.financialAccounts[0].currentBalance, '-3200.00');
+});
+
+test('account balance changes do not silently mutate debt fields but do change linked read authority', async () => {
+  const db = createDbDouble({
+    debts: [{
+      id: 'debt_1',
+      householdId: 'household_1',
+      name: 'Line of Credit',
+      startingBalance: '8000.00',
+      apr: 10,
+      minimumPayment: '100.00',
+      monthlyPayment: '300.00',
+      financialAccountId: 'acct_1',
+      isActive: true,
+    }],
+    financialAccounts: [{
+      id: 'acct_1',
+      householdId: 'household_1',
+      workspaceId: 'household_1',
+      name: 'LOC account',
+      accountType: 'line_of_credit',
+      currentBalance: '-6500.00',
+      balanceAsOf: '2026-03-31T00:00:00.000Z',
+      status: 'active',
+    }],
+  });
+
+  db.state.financialAccounts[0].currentBalance = '-6000.00';
+  const result = await listDebts({ db, householdId: 'household_1' });
+
+  assert.equal(result.items[0].currentBalance, '6000.00');
+  assert.equal(db.state.debts[0].startingBalance, '8000.00');
+  assert.equal(db.state.debts[0].currentBalance, undefined);
+});
+
+test('unlinkDebtFromFinancialAccount restores manual derived balance without guessing from account balance', async () => {
+  const db = createDbDouble({
+    debts: [{
+      id: 'debt_1',
+      householdId: 'household_1',
+      name: 'Visa',
+      startingBalance: '5000.00',
+      apr: 19.99,
+      minimumPayment: '100.00',
+      monthlyPayment: '250.00',
+      financialAccountId: 'acct_1',
+      isActive: true,
+    }],
+    debtPayments: [{ debtId: 'debt_1', householdId: 'household_1', paymentDate: '2026-03-12', amount: '500.00' }],
+    financialAccounts: [{
+      id: 'acct_1',
+      householdId: 'household_1',
+      workspaceId: 'household_1',
+      name: 'Visa account',
+      accountType: 'credit_card',
+      currentBalance: '-3000.00',
+      status: 'active',
+    }],
+  });
+
+  const result = await unlinkDebtFromFinancialAccount({ db, householdId: 'household_1', debtId: 'debt_1' });
+
+  assert.equal(result.financialAccountId, null);
+  assert.equal(result.currentBalance, '4500.00');
+  assert.equal(db.state.debts[0].financialAccountId, null);
+  assert.equal(db.state.financialAccounts[0].currentBalance, '-3000.00');
+});
+
+test('second active debt cannot link to the same active liability account', async () => {
+  const db = createDbDouble({
+    debts: [
+      {
+        id: 'debt_1',
+        householdId: 'household_1',
+        name: 'Visa',
+        startingBalance: '5000.00',
+        apr: 19.99,
+        minimumPayment: '100.00',
+        monthlyPayment: '250.00',
+        financialAccountId: 'acct_1',
+        isActive: true,
+      },
+      {
+        id: 'debt_2',
+        householdId: 'household_1',
+        name: 'Duplicate Visa',
+        startingBalance: '2000.00',
+        apr: 19.99,
+        minimumPayment: '100.00',
+        monthlyPayment: '250.00',
+        isActive: true,
+      },
+    ],
+    financialAccounts: [{
+      id: 'acct_1',
+      householdId: 'household_1',
+      workspaceId: 'household_1',
+      name: 'Visa account',
+      accountType: 'credit_card',
+      currentBalance: '-4300.00',
+      status: 'active',
+    }],
+  });
+
+  await assert.rejects(
+    () => linkDebtToFinancialAccount({ db, householdId: 'household_1', debtId: 'debt_2', financialAccountId: 'acct_1' }),
+    /already linked to an active debt/,
+  );
+});
+
+test('inactive historical debt does not block a new active debt for the same account', async () => {
+  const db = createDbDouble({
+    debts: [
+      {
+        id: 'debt_old',
+        householdId: 'household_1',
+        name: 'Old Visa',
+        startingBalance: '5000.00',
+        apr: 19.99,
+        minimumPayment: '100.00',
+        monthlyPayment: '250.00',
+        financialAccountId: 'acct_1',
+        isActive: false,
+      },
+      {
+        id: 'debt_new',
+        householdId: 'household_1',
+        name: 'New Visa',
+        startingBalance: '3000.00',
+        apr: 19.99,
+        minimumPayment: '100.00',
+        monthlyPayment: '250.00',
+        isActive: true,
+      },
+    ],
+    financialAccounts: [{
+      id: 'acct_1',
+      householdId: 'household_1',
+      workspaceId: 'household_1',
+      name: 'Visa account',
+      accountType: 'credit_card',
+      currentBalance: '-3000.00',
+      status: 'active',
+    }],
+  });
+
+  const result = await linkDebtToFinancialAccount({
+    db,
+    householdId: 'household_1',
+    debtId: 'debt_new',
+    financialAccountId: 'acct_1',
+  });
+
+  assert.equal(result.financialAccountId, 'acct_1');
+  assert.equal(result.id, 'debt_new');
+});
+
+test('payoff formula is unchanged when account authority supplies the same balance input', async () => {
+  const manualDb = createDbDouble({
+    debts: [{
+      id: 'debt_1',
+      householdId: 'household_1',
+      name: 'Visa',
+      startingBalance: '5000.00',
+      apr: 19.99,
+      minimumPayment: '100.00',
+      monthlyPayment: '250.00',
+      isActive: true,
+    }],
+    debtPayments: [{ debtId: 'debt_1', householdId: 'household_1', paymentDate: '2026-03-12', amount: '500.00' }],
+  });
+  const accountBackedDb = createDbDouble({
+    debts: [{
+      id: 'debt_1',
+      householdId: 'household_1',
+      name: 'Visa',
+      startingBalance: '5000.00',
+      apr: 19.99,
+      minimumPayment: '100.00',
+      monthlyPayment: '250.00',
+      financialAccountId: 'acct_1',
+      isActive: true,
+    }],
+    debtPayments: [{ debtId: 'debt_1', householdId: 'household_1', paymentDate: '2026-03-12', amount: '500.00' }],
+    financialAccounts: [{
+      id: 'acct_1',
+      householdId: 'household_1',
+      workspaceId: 'household_1',
+      name: 'Visa account',
+      accountType: 'credit_card',
+      currentBalance: '-4500.00',
+      status: 'active',
+    }],
+  });
+
+  const manual = await listDebts({ db: manualDb, householdId: 'household_1' });
+  const accountBacked = await listDebts({ db: accountBackedDb, householdId: 'household_1' });
+
+  assert.equal(accountBacked.items[0].currentBalance, manual.items[0].currentBalance);
+  assert.equal(accountBacked.items[0].estimatedPayoffDate, manual.items[0].estimatedPayoffDate);
+  assert.equal(accountBacked.items[0].monthsRemaining, manual.items[0].monthsRemaining);
+  assert.equal(accountBacked.items[0].totalInterestRemaining, manual.items[0].totalInterestRemaining);
 });
 
 test('updateDebt patches editable fields and keeps currentBalance derived from payments', async () => {
