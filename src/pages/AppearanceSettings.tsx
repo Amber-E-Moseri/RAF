@@ -341,31 +341,74 @@ export function AppearanceSettings() {
     <PageShell
       eyebrow="Settings"
       title="Settings"
-      description="Make RAF feel like yours."
+      description="Manage appearance, savings floor alerts, and import rules for this device."
     >
-      <section className="grid gap-7 xl:grid-cols-[minmax(180px,20%),minmax(0,45%),minmax(320px,35%)]">
-        <aside className="xl:sticky xl:top-6 xl:self-start">
-          <Card title="Settings Navigation" subtitle="Choose what you want to adjust.">
-            <div className="space-y-2">
-              {settingsTabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  className={`w-full rounded-[1.25rem] border px-4 py-3 text-left transition duration-200 ${selectedCardClasses(activeTab === tab.id)}`}
-                  onClick={() => setActiveTab(tab.id)}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-[var(--text-strong)]">{tab.label}</div>
-                      <div className="mt-1 text-[12px] italic leading-5 text-[var(--text-muted)]">{tab.description}</div>
-                    </div>
-                    {activeTab === tab.id ? <Badge tone="success">Active</Badge> : null}
-                  </div>
-                </button>
-              ))}
+      <section className="grid gap-6 xl:grid-cols-2">
+        <Card>
+          <div className="card-title text-sm font-semibold text-[var(--text-strong)]">Appearance &amp; privacy</div>
+          <div className="mt-4 divide-y divide-[var(--border-color)]">
+            <div className="flex items-center justify-between gap-4 py-3">
+              <div>
+                <div className="text-sm font-medium text-[var(--text-strong)]">Privacy mode</div>
+                <div className="mt-0.5 text-xs text-[var(--text-muted)]">Mask financial amounts on screen</div>
+              </div>
+              <button
+                type="button"
+                onClick={togglePrivacyMode}
+                className={`relative h-6 w-[42px] shrink-0 rounded-full transition ${preferences.privacyMode ? "bg-[var(--primary-color)]" : "bg-[#d6dbe0]"}`}
+              >
+                <span className={`absolute top-[3px] h-[18px] w-[18px] rounded-full bg-white shadow-sm transition ${preferences.privacyMode ? "left-[21px]" : "left-[3px]"}`} />
+              </button>
             </div>
-          </Card>
-        </aside>
+            <div className="flex items-center justify-between gap-4 py-3">
+              <div>
+                <div className="text-sm font-medium text-[var(--text-strong)]">Compact density</div>
+                <div className="mt-0.5 text-xs text-[var(--text-muted)]">Tighter spacing across pages</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void saveAppearance({ interface_scale: draft.interface_scale === "compact" ? "default" : "compact" })}
+                className={`relative h-6 w-[42px] shrink-0 rounded-full transition ${draft.interface_scale === "compact" ? "bg-[var(--primary-color)]" : "bg-[#d6dbe0]"}`}
+              >
+                <span className={`absolute top-[3px] h-[18px] w-[18px] rounded-full bg-white shadow-sm transition ${draft.interface_scale === "compact" ? "left-[21px]" : "left-[3px]"}`} />
+              </button>
+            </div>
+          </div>
+        </Card>
+        <Card>
+          <div className="card-title text-sm font-semibold text-[var(--text-strong)]">Notifications</div>
+          <div className="mt-4 divide-y divide-[var(--border-color)]">
+            <div className="flex items-center justify-between gap-4 py-3">
+              <div>
+                <div className="text-sm font-medium text-[var(--text-strong)]">Financial attention reminders</div>
+                <div className="mt-0.5 text-xs text-[var(--text-muted)]">Get alerted about items that need review</div>
+              </div>
+              <span className="text-xs text-[var(--text-muted)]">Coming soon</span>
+            </div>
+            <div className="flex items-center justify-between gap-4 py-3">
+              <div>
+                <div className="text-sm font-medium text-[var(--text-strong)]">Monthly close reminder</div>
+                <div className="mt-0.5 text-xs text-[var(--text-muted)]">Reminder to close each month</div>
+              </div>
+              <span className="text-xs text-[var(--text-muted)]">Coming soon</span>
+            </div>
+          </div>
+        </Card>
+      </section>
+
+      <section className="space-y-6">
+        <div className="flex gap-2 border-b border-[var(--border-color)]">
+          {settingsTabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`border-b-2 px-3 py-2.5 text-[10.5px] font-bold uppercase tracking-[0.1em] transition ${activeTab === tab.id ? "border-[var(--primary-color)] text-[var(--primary-color)]" : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-strong)]"}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
         <div className="space-y-6">
           {activeTab === "preferences" ? (
@@ -832,106 +875,6 @@ export function AppearanceSettings() {
             </>
           )}
         </div>
-
-        <aside className="xl:sticky xl:top-6 xl:self-start">
-          {activeTab === "preferences" ? (
-            <Card title="Live Preview">
-              <div
-                className="space-y-4 rounded-[1.75rem] border border-[var(--border-color)] bg-[var(--surface-elevated)] p-5"
-                data-theme={draft.theme_color}
-                data-font={draft.font_family}
-                data-mode={draft.appearance_mode}
-                data-scale={draft.interface_scale}
-              >
-                <div className="space-y-3 border-b border-[var(--border-color)] pb-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge tone="neutral">{`Theme: ${activeTheme.label}`}</Badge>
-                    <Badge tone="neutral">{`Font: ${activeFont.label}`}</Badge>
-                    <Badge tone="neutral">{`Size: ${activeScale.label}`}</Badge>
-                    <Badge tone="neutral">{`Mode: ${activeMode.label}`}</Badge>
-                  </div>
-                  <div>
-                    <div className="text-[18px] font-semibold text-[var(--text-strong)]">Live Preview</div>
-                    <p className="mt-1 text-[13px] italic leading-5 text-[var(--text-muted)]">
-                      This preview mirrors the kinds of cards, balances, and transaction rows you see across RAF.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--surface-color)] p-4 shadow-panel">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-[12px] font-medium text-[var(--text-muted)]">Accent action</div>
-                        <div className="mt-1 text-sm font-semibold text-[var(--text-strong)]">Record deposit</div>
-                      </div>
-                      <button
-                        type="button"
-                        className="inline-flex rounded-full bg-[var(--primary-color)] px-3.5 py-2 text-sm font-semibold text-[var(--primary-contrast)] shadow-sm"
-                      >
-                        Record deposit
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--surface-color)] p-4 shadow-panel">
-                    <div className="text-[12px] font-medium text-[var(--text-muted)]">Financial data surface</div>
-                    <div className="mt-3 flex items-end justify-between gap-4">
-                      <div>
-                        <div className="text-sm text-[var(--text-muted)]">Buffer balance</div>
-                        <div className="mt-1.5 text-[1.75rem] font-semibold tracking-tight text-[var(--text-strong)]">$2,930.28</div>
-                      </div>
-                      <Badge tone="success">Healthy</Badge>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--surface-color)] p-4 shadow-panel">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <div className="text-[12px] font-medium text-[var(--text-muted)]">Transaction example</div>
-                        <div className="mt-2.5 space-y-0.5">
-                          <div className="text-xs text-[var(--text-muted)]">Mar 7</div>
-                          <div className="text-sm font-semibold text-[var(--text-strong)]">Gas Station</div>
-                          <div className="text-xs text-[var(--text-muted)]">Personal Spending</div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-base font-semibold text-[var(--text-strong)]">-$45.00</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          ) : null}
-
-          {activeTab === "import_rules" ? (
-            <Card title="Rule Management">
-              <div className="space-y-4 rounded-[1.75rem] border border-[var(--border-color)] bg-[var(--surface-elevated)] p-6">
-                <div>
-                  <div className="text-[18px] font-semibold text-[var(--text-strong)]">Import rule controls</div>
-                  <p className="mt-2 text-[13px] italic leading-6 text-[var(--text-muted)]">
-                    Suggestions remain review-only. Reusable rules can be enabled, disabled, edited, or converted back to suggestions at any time.
-                  </p>
-                </div>
-                <div className="space-y-3">
-                  <div className="rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--surface-color)] p-4">
-                    <div className="text-sm font-semibold text-[var(--text-strong)]">Suggestion</div>
-                    <div className="mt-1 text-[13px] italic text-[var(--text-muted)]">Prefills the next similar import but never auto-applies it.</div>
-                  </div>
-                  <div className="rounded-[1.5rem] border border-[var(--border-color)] bg-[var(--surface-color)] p-4">
-                    <div className="text-sm font-semibold text-[var(--text-strong)]">Reusable rule</div>
-                    <div className="mt-1 text-[13px] italic text-[var(--text-muted)]">Keeps the same review intent saved for later, with auto-apply always visible and reversible.</div>
-                  </div>
-                  <div className="rounded-[1.5rem] border border-dashed border-[var(--border-color)] bg-[var(--surface-color)] p-4">
-                    <div className="text-sm font-semibold text-[var(--text-strong)]">Safety reminder</div>
-                    <div className="mt-1 text-[13px] italic text-[var(--text-muted)]">Rules shape future review drafts, but they do not remove the audit trail for imported transactions.</div>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          ) : null}
-        </aside>
       </section>
     </PageShell>
   );

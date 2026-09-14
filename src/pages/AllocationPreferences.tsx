@@ -348,55 +348,56 @@ export function AllocationPreferences() {
     <PageShell
       eyebrow="Planning"
       title="Allocation Preferences"
-      description="Allocation without noise."
+      description="Adjust category percentages and keep the active total balanced."
       actions={(
         <Button type="button" variant="ghost" onClick={() => setIsAdvancedMode((current) => !current)}>
           {isAdvancedMode ? "Hide Advanced" : "Show Advanced"}
         </Button>
       )}
     >
-      <section className="grid gap-4">
+      <section className="grid gap-6">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <Card>
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Total allocated</p>
+            <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]">{activeTotalPercent.toFixed(1)}%</p>
+          </Card>
+          <Card>
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Unallocated</p>
+            <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]">{Math.max(0, 100 - activeTotalPercent).toFixed(1)}%</p>
+          </Card>
+          <Card>
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Active categories</p>
+            <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]">{activeCategoryCount}</p>
+          </Card>
+        </section>
+
         <Card
-          title="Category Summary"
+          title="Current allocation"
           subtitle="Keep active categories at exactly 100% before saving."
-          actions={(
-            <Badge tone={totalTone}>
-              {activeCategoryCount} active
-            </Badge>
-          )}
+          actions={<Badge tone={totalTone}>{activeCategoryCount} active</Badge>}
         >
-          <div className="space-y-4">
-            <div>
-              <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-                <div>
-                  <p className="text-[11px] font-medium text-[var(--text-muted)]">Total allocated</p>
-                  <p className="mt-1 text-3xl font-bold tracking-tight text-[var(--text-strong)]">{activeTotalPercent.toFixed(2)}%</p>
-                </div>
-                <div className="max-w-sm text-right text-sm text-[var(--text-muted)]">
-                  {inlineValidationMessage}
-                </div>
-              </div>
-              <div className="mt-4 h-3 overflow-hidden rounded-full bg-[var(--surface-elevated)]">
-                <div
-                  className="h-full rounded-full bg-[var(--primary-color)] transition-[width] duration-200"
-                  style={{ width: allocationBarWidth(activeTotalPercent) }}
-                />
-              </div>
+          <div className="mb-4">
+            <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
+              <span>{activeTotalPercent.toFixed(2)}% allocated</span>
+              <span>{isValidTotal ? "Balanced" : inlineValidationMessage}</span>
+            </div>
+            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[var(--surface-elevated)]">
+              <div
+                className="h-full rounded-full bg-[var(--primary-color)] transition-[width] duration-200"
+                style={{ width: allocationBarWidth(activeTotalPercent) }}
+              />
             </div>
             {!isValidTotal ? (
-              <p className="text-sm text-amber-700">
+              <p className="mt-2 text-xs text-amber-700">
                 Active allocation percentages must equal {formatPercentWithDigits("1", 2)} before save is allowed.
               </p>
             ) : null}
             {hasFieldErrors ? (
-              <p className="text-sm text-rose-700">
+              <p className="mt-2 text-xs text-rose-700">
                 One or more categories still need attention before preferences can be saved.
               </p>
             ) : null}
           </div>
-        </Card>
-
-        <Card title="Categories" subtitle="Focus on names, percentages, and whether each category is active.">
           {isLoading ? <LoadingState label="Loading categories..." /> : null}
           {!isLoading && loadError ? <ErrorState title="Failed to load allocation preferences" message={loadError} onRetry={() => void loadCategories()} /> : null}
           {!isLoading && !loadError && !categories.length ? (
@@ -406,25 +407,27 @@ export function AllocationPreferences() {
             />
           ) : null}
           {!isLoading && !loadError && categories.length ? (
-            <div className="space-y-4">
-              {categories.map((category) => {
-                const errors = validation.get(category.id) ?? {};
-                const percentInput = percentInputDrafts[category.id] ?? toPercentInput(category.allocationPercent);
+            <>
+              <div className="hidden border-b border-[var(--border-color)] pb-2 md:grid md:grid-cols-[1fr,100px,60px,auto] md:items-center md:gap-4">
+                <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Category</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Share</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Active</span>
+                <span />
+              </div>
 
-                return (
-                  <div
-                    key={category.id}
-                    className={`rounded-3xl border p-4 transition ${category.isActive ? "" : "opacity-70"}`.trim()}
-                    style={{ borderColor: "var(--border-color)", background: "var(--surface-elevated)" }}
-                  >
-                    <div className="grid gap-3 xl:grid-cols-[minmax(0,1.8fr),132px,180px,180px] xl:items-center">
-                      <div className="min-w-0">
-                        <label className="block">
-                          <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                            Category name
-                          </span>
+              <div className="divide-y divide-[var(--border-color)]">
+                {categories.map((category, index) => {
+                  const errors = validation.get(category.id) ?? {};
+                  const percentInput = percentInputDrafts[category.id] ?? toPercentInput(category.allocationPercent);
+                  const dotHue = (index * 137.5) % 360;
+
+                  return (
+                    <div key={category.id}>
+                      <div className={`grid gap-3 py-3 md:grid-cols-[1fr,100px,60px,auto] md:items-center ${!category.isActive ? "opacity-50" : ""}`}>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: `hsl(${dotHue}, 55%, 55%)` }} />
                           <input
-                            className="ui-field"
+                            className="ui-field !border-0 !bg-transparent !px-0 !py-1 text-sm font-medium text-[var(--text-strong)]"
                             value={category.label}
                             onChange={(event) => updateCategory(category.id, (current) => {
                               const nextLabel = event.target.value;
@@ -435,17 +438,12 @@ export function AllocationPreferences() {
                               };
                             })}
                           />
-                        </label>
-                        {errors.label ? <p className="mt-2 text-xs text-rose-600">{errors.label}</p> : null}
-                      </div>
+                          {errors.label ? <span className="shrink-0 text-xs text-rose-600" title={errors.label}>!</span> : null}
+                        </div>
 
-                      <label className="block">
-                        <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                          Percentage
-                        </span>
                         <div className="relative">
                           <input
-                            className="ui-field pr-10"
+                            className="ui-field w-full pr-7 text-sm"
                             type="number"
                             step="0.01"
                             min="0"
@@ -473,71 +471,34 @@ export function AllocationPreferences() {
                               clearPercentDraft(category.id);
                             }}
                           />
-                          <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm text-[var(--text-muted)]">%</span>
+                          <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-[var(--text-muted)]">%</span>
+                          {errors.allocationPercent ? <p className="mt-1 text-[10px] text-rose-600">{errors.allocationPercent}</p> : null}
                         </div>
-                        {errors.allocationPercent ? <p className="mt-2 text-xs text-rose-600">{errors.allocationPercent}</p> : null}
-                      </label>
 
-                      <div className="flex flex-col gap-2">
-                        <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                          Active
-                        </span>
-                        <div className="flex items-center justify-between rounded-2xl border px-4 py-3 text-sm text-[var(--text-strong)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
-                          <label className="flex items-center gap-3">
-                            <span className="min-w-[26px] text-xs font-medium uppercase tracking-[0.12em] text-[var(--text-muted)]">
-                              {category.isActive ? "On" : "Off"}
-                            </span>
-                            <input
-                              type="checkbox"
-                              className="peer sr-only"
-                              checked={category.isActive}
-                              onChange={(event) => updateCategory(category.id, (current) => ({
-                                ...current,
-                                isActive: event.target.checked,
-                              }))}
-                            />
-                            <span className="relative inline-flex h-7 w-12 items-center rounded-full bg-[var(--surface-elevated)] transition peer-checked:bg-[var(--primary-color)]">
-                              <span className="absolute left-1 h-5 w-5 rounded-full bg-[var(--surface-plain)] shadow-sm transition-transform peer-checked:translate-x-5" />
-                            </span>
-                          </label>
-                          <Badge tone={category.isActive ? "success" : "neutral"}>
-                            {category.isActive ? "Active" : "Inactive"}
-                          </Badge>
+                        <button
+                          type="button"
+                          onClick={() => updateCategory(category.id, (current) => ({ ...current, isActive: !current.isActive }))}
+                          className={`relative h-6 w-[42px] shrink-0 rounded-full transition ${category.isActive ? "bg-[var(--primary-color)]" : "bg-[#d6dbe0]"}`}
+                        >
+                          <span className={`absolute top-[3px] h-[18px] w-[18px] rounded-full bg-white shadow-sm transition ${category.isActive ? "left-[21px]" : "left-[3px]"}`} />
+                        </button>
+
+                        <div className="flex items-center gap-2">
+                          {category.isSystem ? (
+                            <Badge tone="warning" className="px-2 py-0.5 text-[9px]">System</Badge>
+                          ) : null}
+                          {!category.isSystem && isAdvancedMode ? (
+                            <button type="button" className="text-xs text-rose-600 hover:underline" onClick={() => deleteCategory(category.id)}>Delete</button>
+                          ) : null}
                         </div>
                       </div>
 
-                      <div className="flex flex-col gap-2">
-                        <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                          Controls
-                        </span>
-                        <div className="flex items-center justify-between rounded-[1.1rem] border px-3 py-2.5" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
-                          <div className="flex items-center gap-2">
-                            {category.isSystem ? (
-                              <Badge tone="warning" className="px-2 py-0.5 text-[10px]">
-                                System
-                              </Badge>
-                            ) : (
-                              <Badge tone="neutral" className="px-2 py-0.5 text-[10px]">
-                                Custom
-                              </Badge>
-                            )}
-                          </div>
-                          <span className="text-[12px] text-[var(--text-muted)]">
-                            {isAdvancedMode ? "Advanced open" : "Simple view"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {isAdvancedMode ? (
-                      <div className="mt-4 rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
-                        <div className="grid gap-4 md:grid-cols-[1fr,160px,auto]">
+                      {isAdvancedMode ? (
+                        <div className="mb-3 ml-[22px] grid gap-3 rounded-xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-3 md:grid-cols-[1fr,120px]">
                           <label className="block">
-                            <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                              Slug
-                            </span>
+                            <span className="mb-1 block text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-muted)]">Slug</span>
                             <input
-                              className="ui-field disabled:opacity-60"
+                              className="ui-field text-sm disabled:opacity-60"
                               value={category.slug}
                               disabled={!category.isNew}
                               onChange={(event) => updateCategory(category.id, (current) => ({
@@ -546,14 +507,12 @@ export function AllocationPreferences() {
                                 slugEdited: true,
                               }))}
                             />
-                            {errors.slug ? <p className="mt-2 text-xs text-rose-600">{errors.slug}</p> : null}
+                            {errors.slug ? <p className="mt-1 text-[10px] text-rose-600">{errors.slug}</p> : null}
                           </label>
                           <label className="block">
-                            <span className="mb-2 block text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                              Sort order
-                            </span>
+                            <span className="mb-1 block text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-muted)]">Sort order</span>
                             <input
-                              className="ui-field"
+                              className="ui-field text-sm"
                               type="number"
                               step="1"
                               value={category.sortOrder}
@@ -562,48 +521,25 @@ export function AllocationPreferences() {
                                 sortOrder: Number.parseInt(event.target.value || "0", 10),
                               }))}
                             />
-                            {errors.sortOrder ? <p className="mt-2 text-xs text-rose-600">{errors.sortOrder}</p> : null}
+                            {errors.sortOrder ? <p className="mt-1 text-[10px] text-rose-600">{errors.sortOrder}</p> : null}
                           </label>
-                          <div className="flex items-end justify-start gap-3">
-                            <p className="text-sm text-[var(--text-muted)]">
-                              Backend fields stay tucked away here unless you need them.
-                            </p>
-                            {!category.isSystem ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                className="h-auto rounded-2xl px-0 py-0 text-rose-700"
-                                onClick={() => deleteCategory(category.id)}
-                              >
-                                Delete category
-                              </Button>
-                            ) : (
-                              <span className="text-xs text-[var(--text-muted)]">System categories stay protected.</span>
-                            )}
-                          </div>
                         </div>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
 
-              <div className="flex flex-col gap-4 border-t pt-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "var(--border-color)" }}>
-                <div>
-                  <Button type="button" variant="secondary" onClick={openAddCategoryModal}>
-                    Add Category
-                  </Button>
-                </div>
+              <div className="mt-4 flex flex-col gap-3 border-t border-[var(--border-color)] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <Button type="button" variant="secondary" onClick={openAddCategoryModal}>Add Category</Button>
                 <div className="flex flex-wrap items-center justify-end gap-3">
-                  <Button type="button" variant="secondary" onClick={resetDrafts} disabled={isLoading || isSaving}>
-                    Cancel
-                  </Button>
+                  <Button type="button" variant="secondary" onClick={resetDrafts} disabled={isLoading || isSaving}>Cancel</Button>
                   <Button type="button" disabled={!canSave || isSaving} onClick={() => setIsConfirmModalOpen(true)}>
                     {isSaving ? "Saving..." : "Save Preferences"}
                   </Button>
                 </div>
               </div>
-            </div>
+            </>
           ) : null}
         </Card>
 
