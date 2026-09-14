@@ -8,22 +8,22 @@ interface TableProps {
 
 export function Table({ headers, footer, tableClassName = "", children }: PropsWithChildren<TableProps>) {
   return (
-    <div className="ui-table">
+    <div className="ui-card overflow-hidden" style={{ borderRadius: 16 }}>
       <div className="overflow-x-auto">
-        <table className={`min-w-full divide-y divide-stone-200/90 ${tableClassName}`.trim()}>
+        <table className={`min-w-full ${tableClassName}`.trim()}>
           <thead>
-            <tr>
+            <tr style={{ background: "#fafaf8" }}>
               {headers.map((header, index) => (
-                <th key={index} className="px-4 py-3.5 text-left text-[0.7rem] font-semibold uppercase text-stone-500 first:pl-5 last:pr-5">
+                <th key={index} className="px-[13px] py-[11px] text-left text-[8.5px] font-[900] uppercase tracking-[0.14em] text-[var(--text-secondary)] first:pl-[18px] last:pr-[18px]">
                   {header}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-stone-100">{children}</tbody>
+          <tbody className="divide-y divide-[var(--border-subtle)]">{children}</tbody>
         </table>
       </div>
-      {footer ? <div className="border-t border-stone-200 bg-stone-50/80 px-5 py-3">{footer}</div> : null}
+      {footer ? <div className="border-t border-[var(--border-subtle)] px-[18px] py-3" style={{ background: "#fafaf8" }}>{footer}</div> : null}
     </div>
   );
 }
