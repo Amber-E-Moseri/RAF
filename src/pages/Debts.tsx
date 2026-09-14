@@ -332,7 +332,7 @@ export function Debts() {
     <PageShell
       eyebrow="Liabilities"
       title="Debts"
-      description="See obligation and trajectory separately."
+      description="Track payoff progress and keep debt reduction visible in your monthly plan."
       actions={data?.items.length ? (
         <Button type="button" onClick={() => setShowCreateDebtForm((current) => !current)}>
           {showCreateDebtForm ? "Hide Add Debt" : "Add Debt"}

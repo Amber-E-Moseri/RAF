@@ -9,12 +9,12 @@ interface CardProps {
 
 export function Card({ title, subtitle, actions, className = "", children }: PropsWithChildren<CardProps>) {
   return (
-    <section className={`ui-card ${className}`.trim()} style={{ padding: 18 }}>
+    <section className={`ui-card p-5 sm:p-6 ${className}`.trim()}>
       {(title || subtitle || actions) ? (
-        <header className="mb-4 flex items-start justify-between gap-3">
+        <header className="mb-5 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            {title ? <h2 className="text-[13.5px] font-[900] tracking-[-0.02em] text-[var(--text-primary)]">{title}</h2> : null}
-            {subtitle ? <p className="mt-1.5 max-w-2xl text-[10.5px] leading-[1.45] text-[var(--text-secondary)]">{subtitle}</p> : null}
+            {title ? <h2 className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">{title}</h2> : null}
+            {subtitle ? <p className="mt-2 max-w-2xl text-[14px] leading-6 text-[var(--text-secondary)]">{subtitle}</p> : null}
           </div>
           {actions}
         </header>
