@@ -315,13 +315,20 @@ test('R4: financialContext.buildFinancialContext is a separate code path from th
         async getHousehold() { return { name: 'Test Household' }; },
         async listTransactions() {
           return [
-            { amount: '-75.25', merchant: 'Private Store 4111111111111111', transactionDate: '2026-03-10' },
+            { amount: '-75.25', direction: 'debit', merchant: 'Private Store 4111111111111111', transactionDate: '2026-03-10' },
           ];
         },
         async listIncomeEntries() { return [{ amount: '3000.00', receivedDate: '2026-03-05' }]; },
-        async listDebts() { return [{ name: 'Visa', currentBalance: '2500.00', minimumPayment: '90.00', interestRate: 19.99 }]; },
+        async listDebts() {
+          return [{
+            id: 'debt_r4', name: 'Visa', startingBalance: '2500.00',
+            minimumPayment: '90.00', monthlyPayment: '150.00', apr: 19.99, isActive: true,
+          }];
+        },
+        async listDebtPayments() { return []; },
+        async listDebtAdjustments() { return []; },
         async listGoals() {
-          return [{ id: 'goal_1', name: 'Emergency Fund', targetAmount: '2000.00', currentAmount: 0 }];
+          return [{ id: 'goal_1', name: 'Emergency Fund', targetAmount: '2000.00' }];
         },
         async listMonthlyReviews() { return []; },
       });
