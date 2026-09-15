@@ -6,7 +6,7 @@ import { ApiError } from "../api/client";
 import { getIncome, getIncomeAllocations } from "../api/incomeApi";
 import { applyMonthlyReview } from "../api/monthlyReviewApi";
 import { getDashboardAggregateReport } from "../api/reportsApi";
-import { getTransactions } from "../api/transactionsApi";
+import { getTransactions, markTransactionReviewed, markTransactionUnreviewed } from "../api/transactionsApi";
 import { AllocationBarChart } from "../components/dashboard/AllocationBarChart";
 import { FinancialAttentionAggregator, deriveAttentionItems } from "../components/dashboard/FinancialAttentionAggregator";
 import { SummaryMetricCard } from "../components/dashboard/SummaryMetricCard";
@@ -208,6 +208,45 @@ export function Dashboard() {
   const [setupDone, setSetupDone] = useState(readSetupDone);
   const [howRafWorksOpen, setHowRafWorksOpen] = useState(false);
   const [netSurplusExplanationOpen, setNetSurplusExplanationOpen] = useState(false);
+
+  const [reviewUndoId, setReviewUndoId] = useState<string | null>(null);
+  const [reviewUndoLabel, setReviewUndoLabel] = useState<string>("");
+  const [isReviewingId, setIsReviewingId] = useState<string | null>(null);
+
+  const {
+    data: inboxData,
+    reload: reloadInbox,
+  } = useAsyncData<Transaction[]>(async () => {
+    const result = await getTransactions({ from, to, reviewed: false, limit: 50 });
+    return result.items;
+  }, [from, to]);
+
+  const eligibleForReview = (inboxData ?? []).filter(
+    (t) => t.direction === "credit" || t.linkedDebtId || t.linkedGoalId || t.categoryId,
+  );
+
+  async function handleMarkReviewed(txn: Transaction) {
+    setIsReviewingId(txn.id);
+    try {
+      await markTransactionReviewed(txn.id);
+      setReviewUndoId(txn.id);
+      setReviewUndoLabel(txn.description);
+      reloadInbox();
+    } finally {
+      setIsReviewingId(null);
+    }
+  }
+
+  async function handleUndoReview() {
+    if (!reviewUndoId) return;
+    try {
+      await markTransactionUnreviewed(reviewUndoId);
+      setReviewUndoId(null);
+      reloadInbox();
+    } catch {
+      setReviewUndoId(null);
+    }
+  }
 
   const { data, error, isLoading, reload } = useAsyncData<DashboardViewModel>(async () => {
     const [aggregate, incomeResponse, transactionsResponse] = await Promise.all([
@@ -501,8 +540,55 @@ export function Dashboard() {
               nextStepState.kind === "month-reminder"
                 ? (workflowData.reminderMonth?.unresolvedImports ?? 0)
                 : workflowData.activeMonthStatus.unresolvedImports,
+            unreviewedTransactionsCount: eligibleForReview.length,
           })}
         />
+      ) : null}
+      {eligibleForReview.length > 0 ? (
+        <div id="transaction-review">
+        <Card
+          title="Mark Transactions Reviewed"
+          subtitle={`${eligibleForReview.length} transaction${eligibleForReview.length === 1 ? "" : "s"} ready to confirm`}
+        >
+          {reviewUndoId ? (
+            <div className="mb-3 flex items-center justify-between rounded-lg border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-2 text-sm">
+              <span className="text-[var(--text-secondary)]">Marked reviewed: <span className="font-medium text-[var(--text-strong)]">{reviewUndoLabel}</span></span>
+              <button
+                type="button"
+                className="ml-4 text-[var(--primary-color)] text-xs font-semibold"
+                onClick={handleUndoReview}
+              >
+                Undo
+              </button>
+            </div>
+          ) : null}
+          <div className="space-y-2">
+            {eligibleForReview.slice(0, 10).map((txn) => (
+              <div
+                key={txn.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border-color)] px-4 py-2.5"
+                style={{ background: "var(--surface-plain)" }}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-[var(--text-strong)]">{txn.description}</p>
+                  <p className="text-xs text-[var(--text-secondary)]">{txn.transactionDate} · {txn.direction === "debit" ? "-" : "+"}{txn.amount}</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={isReviewingId === txn.id}
+                  onClick={() => handleMarkReviewed(txn)}
+                  className="min-h-8 shrink-0 rounded-full border border-[var(--border-color)] bg-[var(--surface-plain)] px-3 py-1 text-xs font-medium text-[var(--text-strong)] transition hover:bg-[var(--surface-elevated)] disabled:opacity-50"
+                >
+                  {isReviewingId === txn.id ? "Marking…" : "Mark reviewed"}
+                </button>
+              </div>
+            ))}
+            {eligibleForReview.length > 10 ? (
+              <p className="text-xs text-[var(--text-secondary)]">... and {eligibleForReview.length - 10} more</p>
+            ) : null}
+          </div>
+        </Card>
+        </div>
       ) : null}
       {nextStepState?.kind === "setup-incomplete" ? (
         <Card
