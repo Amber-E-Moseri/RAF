@@ -408,6 +408,8 @@ test('listTransactions returns items and nextCursor', async () => {
         linkedDebtId: null,
         linkedGoalId: null,
         source: 'manual',
+        reviewedAt: null,
+        reviewedBy: null,
       },
       {
         id: 'txn_2',
@@ -420,6 +422,8 @@ test('listTransactions returns items and nextCursor', async () => {
         linkedDebtId: null,
         linkedGoalId: null,
         source: 'manual',
+        reviewedAt: null,
+        reviewedBy: null,
       },
     ],
     nextCursor: null,
