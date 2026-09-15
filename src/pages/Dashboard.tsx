@@ -8,7 +8,8 @@ import { applyMonthlyReview } from "../api/monthlyReviewApi";
 import { getDashboardAggregateReport } from "../api/reportsApi";
 import { getTransactions, markTransactionReviewed, markTransactionUnreviewed, bulkReviewTransactions } from "../api/transactionsApi";
 import { AllocationBarChart } from "../components/dashboard/AllocationBarChart";
-import { FinancialAttentionAggregator, deriveAttentionItems } from "../components/dashboard/FinancialAttentionAggregator";
+import { FinancialAttentionAggregator } from "../components/dashboard/FinancialAttentionAggregator";
+import { getFinancialAttention } from "../api/financialAttentionApi";
 import { SummaryMetricCard } from "../components/dashboard/SummaryMetricCard";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingState } from "../components/feedback/LoadingState";
@@ -222,6 +223,11 @@ export function Dashboard() {
     const result = await getTransactions({ from, to, reviewed: false, limit: 50 });
     return result.items;
   }, [from, to]);
+
+  const { data: attentionData } = useAsyncData(
+    () => getFinancialAttention(),
+    [from],
+  );
 
   const eligibleForReview = (inboxData ?? []).filter(
     (t) => !reviewedOutIds.has(t.id) && (t.direction === "credit" || t.linkedDebtId || t.linkedGoalId || t.categoryId),
@@ -584,15 +590,7 @@ export function Dashboard() {
       {(nextStepState?.kind === "income-transactions-open" ||
         nextStepState?.kind === "income-no-transactions" ||
         nextStepState?.kind === "month-reminder") ? (
-        <FinancialAttentionAggregator
-          items={deriveAttentionItems({
-            unreviewedImportsCount:
-              nextStepState.kind === "month-reminder"
-                ? (workflowData.reminderMonth?.unresolvedImports ?? 0)
-                : workflowData.activeMonthStatus.unresolvedImports,
-            unreviewedTransactionsCount: eligibleForReview.length,
-          })}
-        />
+        <FinancialAttentionAggregator items={attentionData?.items ?? []} />
       ) : null}
       {eligibleForReview.length > 0 ? (
         <div id="transaction-review">
