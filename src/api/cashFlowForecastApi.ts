@@ -83,6 +83,24 @@ export interface CategoryBaseline {
   confidence: ConfidenceLevel;
 }
 
+export interface AccountFreshnessInfo {
+  accountId: string;
+  accountName: string;
+  accountType: string;
+  balance: string;
+  balanceAsOf: string | null;
+  balanceAgeInDays: number | null;
+  lastReconciliationDate: string | null;
+  lastImportDate: string | null;
+}
+
+export interface CoverageGap {
+  accountId: string;
+  name: string;
+  accountType: string;
+  reason: "payment_coverage_unknown";
+}
+
 export interface CashFlowForecast {
   forecastPeriod: string;
   generatedAt: string;
@@ -94,6 +112,9 @@ export interface CashFlowForecast {
     liquidCashBalance: string;
     savingsAccountBalance: string;
     investmentAccountsExcluded: string;
+    accountBalanceAsOf: string | null;
+    daysSinceOldestBalance: number | null;
+    accountBreakdown: Array<{ accountId: string | null; type: string; balance: string; balanceAsOf: string | null }>;
     savingsFloor: string;
     savingsFloorEnabled: boolean;
     baselineSource: string;
@@ -103,6 +124,9 @@ export interface CashFlowForecast {
     upcomingExpensesCount: number;
     obligationCategoriesExcluded: string[];
     categoryBaselines: CategoryBaseline[];
+    accountBreakdown?: AccountFreshnessInfo[];
+    coverageGaps?: CoverageGap[];
+    pendingReviewCount?: number;
   };
   projections: DayProjection[];
   summaryMetrics: {
@@ -122,6 +146,10 @@ export interface CashFlowForecast {
       daysWithShortfall: number;
       totalShortfall: string;
     };
+    headroom?: string | null;
+    shortfall?: string | null;
+    projectedLowDate?: string;
+    firstShortfallDate?: string | null;
   };
   pressurePoints: Array<{ date: string; reason: string; riskLevel: string }>;
 }
