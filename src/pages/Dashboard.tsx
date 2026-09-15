@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { getFinancialAccounts } from "../api/accountsApi";
 import { getAllocationCategoriesAsOf } from "../api/allocationCategoriesApi";
 import { ApiError } from "../api/client";
 import { getIncome, getIncomeAllocations } from "../api/incomeApi";
@@ -32,6 +33,7 @@ import { normalizeMoneyInput } from "../lib/validation";
 import type {
   AllocationCategory,
   DashboardPeriod,
+  FinancialAccount,
   IncomeAllocationReport,
   SurplusRecommendationsReport,
   Transaction,
@@ -46,6 +48,7 @@ interface DashboardViewModel {
   surplusRecommendations: SurplusRecommendationsReport;
   recentTransactions: Transaction[];
   incomeCount: number;
+  accounts: FinancialAccount[];
 }
 
 interface SurplusSuggestionDraftRow {
@@ -72,6 +75,17 @@ type DashboardNextStepState =
 type DashboardAggregateReport = Awaited<ReturnType<typeof getDashboardAggregateReport>>;
 type DashboardViewModelReport = DashboardAggregateReport["dashboard"];
 type DashboardHealthReport = DashboardAggregateReport["financialHealth"];
+
+function mostRecentTimestamp(values: Array<string | null | undefined>) {
+  return values.filter((v): v is string => Boolean(v)).sort((l, r) => r.localeCompare(l))[0] ?? null;
+}
+
+function formatFreshnessTimestamp(value: string | null) {
+  if (!value) return "Unknown / not recorded";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Unknown / not recorded";
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(parsed);
+}
 
 function alertTone(status: "ok" | "elevated" | "risky" | undefined) {
   if (status === "risky") {
@@ -274,10 +288,11 @@ export function Dashboard() {
   }
 
   const { data, error, isLoading, reload } = useAsyncData<DashboardViewModel>(async () => {
-    const [aggregate, incomeResponse, transactionsResponse] = await Promise.all([
+    const [aggregate, incomeResponse, transactionsResponse, accountsResponse] = await Promise.all([
       getDashboardAggregateReport({ from, to }),
       getIncome({ from, to }),
       getTransactions({ from, to, limit: 10 }),
+      getFinancialAccounts().catch(() => ({ items: [] as FinancialAccount[] })),
     ]);
 
     let categories: AllocationCategory[] = [];
@@ -303,6 +318,7 @@ export function Dashboard() {
       surplusRecommendations: aggregate.surplusRecommendations,
       recentTransactions: transactionsResponse.items.slice(0, 5),
       incomeCount: incomeResponse.items.length,
+      accounts: accountsResponse.items,
     };
   }, [from, to]);
 
@@ -1035,6 +1051,33 @@ export function Dashboard() {
               />
             )}
           </Card>
+
+          {(() => {
+            const activeAccounts = data.accounts.filter((a) => a.status === "active");
+            const dashboardAsOf = data.latestPeriod?.month ?? null;
+            const accountFreshness = mostRecentTimestamp(activeAccounts.map((a) => a.balance_as_of));
+            const activityFreshness = mostRecentTimestamp(data.recentTransactions.map((t) => t.transactionDate));
+            const freshnessRows: Array<{ label: string; value: string | null }> = [
+              { label: "Dashboard totals", value: dashboardAsOf },
+              { label: "Account balances", value: accountFreshness },
+              { label: "Recorded activity", value: activityFreshness },
+            ];
+            return (
+              <Card title="Data Freshness">
+                <p className="mb-3 text-[11px] text-[var(--text-muted)]">
+                  RAF does not treat age alone as proof that a balance is wrong.
+                </p>
+                <div className="divide-y" style={{ borderColor: "var(--border-color)" }}>
+                  {freshnessRows.map((row) => (
+                    <div key={row.label} className="flex items-center justify-between gap-3 py-2.5 text-[13px]">
+                      <span className="text-[var(--text-muted)]">{row.label}</span>
+                      <span className="font-medium text-[var(--text-strong)]">{formatFreshnessTimestamp(row.value)}</span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            );
+          })()}
         </div>
       </section>
 

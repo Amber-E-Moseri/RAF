@@ -693,3 +693,106 @@ export interface IncomeAllocationReport {
   receivedDate: string;
   allocations: DistributionLine[];
 }
+
+export interface FinancialAccount {
+  id: string;
+  workspace_id: string;
+  name: string;
+  account_type: "checking" | "savings" | "credit_card" | "line_of_credit" | "loan" | "investment" | "cash" | "other";
+  institution: string | null;
+  currency: string;
+  current_balance: string;
+  available_balance: string | null;
+  balance_as_of: string;
+  is_manual: boolean;
+  status: "active" | "archived" | "closed";
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface FinancialAccountCreateRequest {
+  name: string;
+  account_type: FinancialAccount["account_type"];
+  institution?: string | null;
+  currency?: string;
+  current_balance: string;
+  available_balance?: string | null;
+  balance_as_of: string;
+  is_manual?: boolean;
+}
+
+export interface FinancialAccountListResponse {
+  items: FinancialAccount[];
+}
+
+export interface AccountReconciliation {
+  id: string;
+  workspace_id: string;
+  account_id: string;
+  status: "pending" | "confirmed" | "disputed";
+  reported_as_of: string | null;
+  discrepancy: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AccountReconciliationListResponse {
+  items: AccountReconciliation[];
+}
+
+export interface ImportHistoryAccountSummary {
+  id: string;
+  name: string;
+  institution: string | null;
+  account_type: FinancialAccount["account_type"];
+}
+
+export interface ImportHistoryReconciliationSummary {
+  count: number;
+  latest_status: AccountReconciliation["status"] | null;
+  latest_reported_as_of: string | null;
+  latest_discrepancy: string | null;
+}
+
+export interface ImportHistoryCounts {
+  imported_rows: number;
+  pending_rows: number;
+  approved_rows: number;
+  duplicate_rows: number;
+  skipped_rows: number;
+  rejected_rows: number;
+  canonical_transactions: number;
+}
+
+export interface ImportHistoryRow {
+  id: string;
+  date: string | null;
+  description: string | null;
+  amount: string | null;
+  status: string;
+  classification_type: string | null;
+  duplicate_of_id: string | null;
+  linked_transaction_id: string | null;
+}
+
+export interface ImportHistoryItem {
+  id: string;
+  source_kind: "import_batch" | "bank_import_rows";
+  filename: string | null;
+  source: string | null;
+  status: string;
+  created_at: string | null;
+  updated_at: string | null;
+  row_count: number;
+  counts: ImportHistoryCounts;
+  account: ImportHistoryAccountSummary | null;
+  reconciliation: ImportHistoryReconciliationSummary | null;
+}
+
+export interface ImportHistoryListResponse {
+  items: ImportHistoryItem[];
+}
+
+export interface ImportHistoryDetailResponse extends ImportHistoryItem {
+  rows: ImportHistoryRow[];
+}

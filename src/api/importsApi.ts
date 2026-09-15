@@ -7,6 +7,8 @@ import type {
   ImportReviewRule,
   ImportReviewRuleListResponse,
   ImportReviewRuleUpdatePayload,
+  ImportHistoryListResponse,
+  ImportHistoryDetailResponse,
 } from "../lib/types";
 import { deleteJson, getJson, patchJson, postForm, postJson } from "./client";
 
@@ -69,4 +71,12 @@ export function deleteImportReviewRule(ruleId: string) {
   return deleteJson<{ success: true }>(`/import-rules/${ruleId}`, {
     headers: importHeaders,
   });
+}
+
+export function getImportHistory() {
+  return getJson<ImportHistoryListResponse>("/imports/history/list", undefined, { headers: importHeaders });
+}
+
+export function getImportHistoryDetail(importId: string) {
+  return getJson<ImportHistoryDetailResponse>(`/imports/history/${importId}`, undefined, { headers: importHeaders });
 }
