@@ -28,6 +28,7 @@ import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingSpinner } from "../components/feedback/LoadingSpinner";
 import { LoadingState } from "../components/feedback/LoadingState";
 import { SuccessNotice } from "../components/feedback/SuccessNotice";
+import { IncomeModal } from "../components/income/IncomeModal";
 import { PageShell } from "../components/layout/PageShell";
 import { usePeriod } from "../components/layout/PeriodProvider";
 import { Badge } from "../components/ui/Badge";
@@ -339,6 +340,7 @@ export function Transactions() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showIncomeModal, setShowIncomeModal] = useState(false);
   const [showCreateTransactionForm, setShowCreateTransactionForm] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<TransactionEditState | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
@@ -1319,6 +1321,9 @@ export function Transactions() {
       description="Bank activity stays canonical. Categories, notes and splits explain what the money was for without duplicating the underlying transaction."
       actions={
         <div className="flex gap-2">
+          <Button type="button" onClick={() => setShowIncomeModal(true)}>
+            Add Income
+          </Button>
           {data?.transactions.items.length ? (
             <Button
               type="button"
@@ -2714,6 +2719,7 @@ export function Transactions() {
           </div>
         </div>
       ) : null}
+      <IncomeModal isOpen={showIncomeModal} onClose={() => setShowIncomeModal(false)} onSuccess={() => void reload()} />
     </PageShell>
   );
 }

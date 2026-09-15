@@ -225,7 +225,7 @@ test('household allocation category routes expose GET and PUT payloads', async (
   );
 
   assert.equal(getResponse.status, 200);
-  assert.equal((await getResponse.json()).items.length, 6);
+  assert.equal((await getResponse.json()).items.length, 7);
 
   const putResponse = await PUT(
     new Request('http://localhost/api/v1/household/allocation-categories', {
