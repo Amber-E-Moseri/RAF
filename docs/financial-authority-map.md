@@ -129,7 +129,42 @@ Investment and liability accounts are excluded from `accountBreakdown` (they are
 
 ---
 
-## 8. Remaining Authority Risks (Follow-Up Work)
+## 8. Financial Attention Aggregator
+
+`buildFinancialAttention({ db, householdId })` → `lib/raf/financialAttention.js`
+
+The aggregator is a **canonical, read-only, deterministic** service that answers "What needs my attention right now?" for the Dashboard. It consumes already-authoritative domain outputs — never re-derives financial truth.
+
+**Invariants:**
+- READ-ONLY: no DB mutations
+- DETERMINISTIC: same inputs → same outputs every call
+- WORKSPACE-SCOPED: every query keyed to `householdId`
+- AUTHORITY-PRESERVING: consumes domain outputs, never re-derives financial policy
+
+**Signal sources:**
+
+| Signal | Authority Source | Item Type | Priority |
+|---|---|---|---|
+| Unreviewed imports | `tx.listImportedTransactions` — `status === 'unreviewed'` | `IMPORT_REVIEW` | `ACTION_NEEDED` |
+| Unreviewed eligible transactions | `tx.listTransactions` + `deriveReviewEligibility()` | `TRANSACTION_REVIEW` | `REVIEW` |
+| Debt payment overdue | `deriveDebtSnapshot().paymentObligation.status === 'missed_payment'` | `DEBT_OBLIGATION` | `BLOCKING` |
+| Debt payment under-minimum | `deriveDebtSnapshot().paymentObligation.status === 'under_minimum'` | `DEBT_OBLIGATION` | `ACTION_NEEDED` |
+| Debt balance increasing | `deriveDebtSnapshot().balanceTrajectory.warning === true` | `DEBT_TRAJECTORY` | `ACTION_NEEDED` |
+| Forecast cash pressure | `computeCashFlowForecast().pressurePoints` — `riskLevel === 'critical'` | `FORECAST_PRESSURE` | `BLOCKING` |
+| Forecast cash tight | `computeCashFlowForecast().pressurePoints` — `riskLevel === 'tight'` | `FORECAST_PRESSURE` | `ACTION_NEEDED` |
+| Open reconciliation | `tx.listAccountReconciliations` — `status === 'open'` | `RECONCILIATION_DISCREPANCY` | `REVIEW` |
+
+**Debt invariant (never collapsed):** `paymentObligation` and `balanceTrajectory` are independent dimensions. `in_progress` obligation (partial payment before due date) is NOT a negative signal — no item is emitted.
+
+**Priority ordering:** `BLOCKING` → `ACTION_NEEDED` → `REVIEW` → `dueAt` ascending (nulls last) → stable `id` tiebreak.
+
+**Pure function:** `deriveFinancialAttentionItems(inputs)` is separately testable and receives pre-computed domain outputs. The async `buildFinancialAttention` wrapper loads data within one `db.transaction`.
+
+**Deferred signals:** `GOAL_FUNDING_REVIEW` (requires Goal lifecycle branch), `PLAN_EXECUTION` (requires full dashboard pipeline).
+
+---
+
+## 9. Remaining Authority Risks (Follow-Up Work)
 
 ### LEGACY_DIRECT_READ — `toolHandlers.js` belt-and-suspenders debit filter
 

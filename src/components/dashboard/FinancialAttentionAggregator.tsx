@@ -1,10 +1,9 @@
 /**
  * Financial Attention Aggregator
- * Currently implements IMPORT_REVIEW only.
- * RECONCILIATION_DISCREPANCY deferred (requires open-discrepancy query integration).
+ * Renders canonical attention items from the /api/v1/financial-attention endpoint.
  * GOAL_FUNDING_REVIEW deferred (requires Goal lifecycle branch, Phase-2 gate).
- * Hidden when no items. Max 3 visible; overflow summarized as "... and N more".
- * Derived on each render; no persistent state. No permanent Inbox nav; Home only.
+ * Shows empty state when no items. Max 3 visible; overflow summarized as "... and N more".
+ * No persistent state. No permanent Inbox nav; Home only.
  */
 import { Link } from "react-router-dom";
 import { Card } from "../ui/Card";
@@ -12,9 +11,17 @@ import { Card } from "../ui/Card";
 export type AttentionItemType =
   | "IMPORT_REVIEW"
   | "TRANSACTION_REVIEW"
+  | "DEBT_OBLIGATION"
+  | "DEBT_TRAJECTORY"
+  | "FORECAST_PRESSURE"
   | "RECONCILIATION_DISCREPANCY"
   | "GOAL_FUNDING_REVIEW";
 
+/**
+ * BLOCKING:      RAF prevents progression until resolved.
+ * ACTION_NEEDED: Concrete unresolved action; does not block normal use.
+ * REVIEW:        Non-blocking financial decision awaiting deliberate review.
+ */
 export type AttentionPriority = "BLOCKING" | "ACTION_NEEDED" | "REVIEW";
 
 export interface AttentionItem {
@@ -28,6 +35,7 @@ export interface AttentionItem {
     href: string;
   };
   count?: number;
+  dueAt?: string | null;
   metadata?: Record<string, unknown>;
 }
 
@@ -36,7 +44,13 @@ interface FinancialAttentionAggregatorProps {
 }
 
 export function FinancialAttentionAggregator({ items }: FinancialAttentionAggregatorProps) {
-  if (!items.length) return null;
+  if (!items.length) {
+    return (
+      <Card title="Attention Required" subtitle="Decisions waiting for your action">
+        <p className="py-2 text-sm text-[var(--text-secondary)]">Nothing needs your attention right now.</p>
+      </Card>
+    );
+  }
   const visibleItems = items.slice(0, 3);
   const hiddenCount = items.length - visibleItems.length;
   return (
