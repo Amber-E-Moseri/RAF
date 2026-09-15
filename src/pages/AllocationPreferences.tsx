@@ -346,9 +346,9 @@ export function AllocationPreferences() {
 
   return (
     <PageShell
-      eyebrow="Planning"
-      title="Allocation Preferences"
-      description="Adjust category percentages and keep the active total balanced."
+      eyebrow="Plan"
+      title="Allocation without noise."
+      description="Adjust allocation preferences, see execution, and keep Buffer visible without turning RAF into a traditional budgeting app."
       actions={(
         <Button type="button" variant="ghost" onClick={() => setIsAdvancedMode((current) => !current)}>
           {isAdvancedMode ? "Hide Advanced" : "Show Advanced"}

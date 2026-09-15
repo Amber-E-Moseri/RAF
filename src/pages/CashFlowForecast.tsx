@@ -657,9 +657,9 @@ export function CashFlowForecast() {
 
   return (
     <PageShell
-      eyebrow="Planning"
-      title="Cash-Flow Forecast"
-      description="See the next 30 days with context."
+      eyebrow="Cash Flow"
+      title="See the next 30 days with context."
+      description="RAF keeps household cash pooled, separates freshness from certainty, and avoids inventing obligations it cannot prove."
       actions={tabActions}
     >
       {isLoading && <LoadingState label="Building forecast…" />}

@@ -1247,9 +1247,9 @@ export function Transactions() {
 
   return (
     <PageShell
-      eyebrow="Ledger"
-      title="Transactions"
-      description={`${activeMonthLabel} transactions, imports, and review flow.`}
+      eyebrow="Transactions"
+      title="Review and organize activity."
+      description="Bank activity stays canonical. Categories, notes and splits explain what the money was for without duplicating the underlying transaction."
       actions={
         <div className="flex gap-2">
           {data?.transactions.items.length ? (

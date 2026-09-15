@@ -340,8 +340,8 @@ export function AppearanceSettings() {
   return (
     <PageShell
       eyebrow="Settings"
-      title="Settings"
-      description="Manage appearance, savings floor alerts, and import rules for this device."
+      title="Make RAF feel like yours."
+      description="Appearance, privacy and notification preferences live here. Financial semantics are not changed by presentation settings."
     >
       <section className="grid gap-6 xl:grid-cols-2">
         <Card>

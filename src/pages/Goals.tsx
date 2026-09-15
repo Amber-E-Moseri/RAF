@@ -446,9 +446,9 @@ export function Goals() {
 
   return (
     <PageShell
-      eyebrow="Planning"
-      title="Goals"
-      description="Fund what matters next."
+      eyebrow="Goals"
+      title="Fund what matters next."
+      description="Track progress, target dates and milestones without silently redirecting your money."
       actions={
         <Button type="button" onClick={() => { resetForm(); setShowCreateForm(true); }}>
           New goal
