@@ -130,6 +130,26 @@ describe('deriveReviewEligibility', () => {
     assert.equal(eligible, false);
     assert.deepEqual(reasons, ['unresolved_split']);
   });
+
+  it('7b. split with mismatched total is ineligible (invalid_split_total)', () => {
+    const t = makeTransaction({ amount: '127.40', categoryId: null });
+    const splits = [
+      { id: 'sp-1', transactionId: t.id, amount: '50.00', categoryId: 'cat-food' },
+      { id: 'sp-2', transactionId: t.id, amount: '50.00', categoryId: 'cat-home' },
+    ];
+    const { eligible, reasons } = deriveReviewEligibility(t, splits);
+    assert.equal(eligible, false);
+    assert.ok(reasons.includes('invalid_split_total'), `expected invalid_split_total in ${JSON.stringify(reasons)}`);
+  });
+
+  it('7c. split with exact conservation and all categories is eligible', () => {
+    const t = makeTransaction({ amount: '127.40', categoryId: null });
+    const splits = [
+      { id: 'sp-1', transactionId: t.id, amount: '50.00', categoryId: 'cat-food' },
+      { id: 'sp-2', transactionId: t.id, amount: '77.40', categoryId: 'cat-home' },
+    ];
+    assert.deepEqual(deriveReviewEligibility(t, splits), { eligible: true, reasons: [] });
+  });
 });
 
 // ─── 2. markTransactionReviewed ───────────────────────────────────────────────

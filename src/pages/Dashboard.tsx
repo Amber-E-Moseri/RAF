@@ -6,7 +6,7 @@ import { ApiError } from "../api/client";
 import { getIncome, getIncomeAllocations } from "../api/incomeApi";
 import { applyMonthlyReview } from "../api/monthlyReviewApi";
 import { getDashboardAggregateReport } from "../api/reportsApi";
-import { getTransactions, markTransactionReviewed, markTransactionUnreviewed } from "../api/transactionsApi";
+import { getTransactions, markTransactionReviewed, markTransactionUnreviewed, bulkReviewTransactions } from "../api/transactionsApi";
 import { AllocationBarChart } from "../components/dashboard/AllocationBarChart";
 import { FinancialAttentionAggregator, deriveAttentionItems } from "../components/dashboard/FinancialAttentionAggregator";
 import { SummaryMetricCard } from "../components/dashboard/SummaryMetricCard";
@@ -212,6 +212,8 @@ export function Dashboard() {
   const [reviewUndoId, setReviewUndoId] = useState<string | null>(null);
   const [reviewUndoLabel, setReviewUndoLabel] = useState<string>("");
   const [isReviewingId, setIsReviewingId] = useState<string | null>(null);
+  const [isBulkReviewing, setIsBulkReviewing] = useState(false);
+  const [reviewedOutIds, setReviewedOutIds] = useState<Set<string>>(new Set());
 
   const {
     data: inboxData,
@@ -222,18 +224,35 @@ export function Dashboard() {
   }, [from, to]);
 
   const eligibleForReview = (inboxData ?? []).filter(
-    (t) => t.direction === "credit" || t.linkedDebtId || t.linkedGoalId || t.categoryId,
+    (t) => !reviewedOutIds.has(t.id) && (t.direction === "credit" || t.linkedDebtId || t.linkedGoalId || t.categoryId),
   );
 
   async function handleMarkReviewed(txn: Transaction) {
     setIsReviewingId(txn.id);
+    setReviewedOutIds((prev) => new Set([...prev, txn.id]));
     try {
       await markTransactionReviewed(txn.id);
       setReviewUndoId(txn.id);
       setReviewUndoLabel(txn.description);
-      reloadInbox();
+    } catch {
+      setReviewedOutIds((prev) => { const next = new Set(prev); next.delete(txn.id); return next; });
     } finally {
       setIsReviewingId(null);
+    }
+  }
+
+  async function handleBulkReviewAll() {
+    const ids = eligibleForReview.map((t) => t.id);
+    if (ids.length === 0) return;
+    setIsBulkReviewing(true);
+    setReviewedOutIds((prev) => new Set([...prev, ...ids]));
+    try {
+      await bulkReviewTransactions({ transactionIds: ids });
+      setReviewUndoId(null);
+    } catch {
+      setReviewedOutIds((prev) => { const next = new Set(prev); for (const id of ids) next.delete(id); return next; });
+    } finally {
+      setIsBulkReviewing(false);
     }
   }
 
@@ -241,8 +260,8 @@ export function Dashboard() {
     if (!reviewUndoId) return;
     try {
       await markTransactionUnreviewed(reviewUndoId);
+      setReviewedOutIds((prev) => { const next = new Set(prev); next.delete(reviewUndoId); return next; });
       setReviewUndoId(null);
-      reloadInbox();
     } catch {
       setReviewUndoId(null);
     }
@@ -550,6 +569,21 @@ export function Dashboard() {
           title="Mark Transactions Reviewed"
           subtitle={`${eligibleForReview.length} transaction${eligibleForReview.length === 1 ? "" : "s"} ready to confirm`}
         >
+          {eligibleForReview.length >= 2 ? (
+            <div className="mb-3 flex items-center justify-between rounded-lg border border-[var(--border-color)] bg-[var(--surface-plain)] px-4 py-2">
+              <p className="text-sm text-[var(--text-strong)]">
+                {eligibleForReview.length} transaction{eligibleForReview.length !== 1 ? "s" : ""} ready
+              </p>
+              <button
+                type="button"
+                disabled={isBulkReviewing}
+                onClick={() => void handleBulkReviewAll()}
+                className="min-h-8 rounded-full bg-[var(--primary-color)] px-3 py-1 text-xs font-semibold text-[var(--primary-contrast)] disabled:opacity-50"
+              >
+                {isBulkReviewing ? "Marking…" : `Mark all ${eligibleForReview.length} reviewed`}
+              </button>
+            </div>
+          ) : null}
           {reviewUndoId ? (
             <div className="mb-3 flex items-center justify-between rounded-lg border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-2 text-sm">
               <span className="text-[var(--text-secondary)]">Marked reviewed: <span className="font-medium text-[var(--text-strong)]">{reviewUndoLabel}</span></span>
