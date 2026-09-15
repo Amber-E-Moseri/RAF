@@ -47,6 +47,7 @@ export async function GET(request, context = {}) {
         categoryId: searchParams.get('categoryId'),
         categorySlug: searchParams.get('categorySlug'),
         direction: searchParams.get('direction'),
+        reviewed: searchParams.get('reviewed'),
         cursor: searchParams.get('cursor'),
         limit: searchParams.get('limit'),
       },
