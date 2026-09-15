@@ -1,5 +1,5 @@
 import { TransactionReviewError, bulkMarkTransactionsReviewed } from '../../../../../lib/transactions/transactionReview.js';
-import { json, getHouseholdId, getDb, respondWithHandledError, readJsonBody, buildErrorBody } from '../../../_shared/http.js';
+import { json, getHouseholdId, getDb, respondWithHandledError, readJsonBody, buildErrorBody } from '../../_shared/http.js';
 
 // POST /transactions/bulk-review
 // Body: { transactionIds: string[] }  — max 50; workspace and actor come from trusted context only

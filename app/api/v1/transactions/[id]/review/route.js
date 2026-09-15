@@ -1,5 +1,5 @@
 import { TransactionReviewError, markTransactionReviewed, markTransactionUnreviewed } from '../../../../../../lib/transactions/transactionReview.js';
-import { json, getHouseholdId, getDb, respondWithHandledError } from '../../../../_shared/http.js';
+import { json, getHouseholdId, getDb, respondWithHandledError } from '../../../_shared/http.js';
 
 // POST /transactions/:id/review — mark reviewed; actor derived from trusted context only
 export async function POST(request, context = {}) {
