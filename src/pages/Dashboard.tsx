@@ -5,7 +5,6 @@ import { getFinancialAccounts } from "../api/accountsApi";
 import { getAllocationCategoriesAsOf } from "../api/allocationCategoriesApi";
 import { ApiError } from "../api/client";
 import { getIncome, getIncomeAllocations } from "../api/incomeApi";
-import { applyMonthlyReview } from "../api/monthlyReviewApi";
 import { getDashboardAggregateReport } from "../api/reportsApi";
 import { getTransactions, markTransactionReviewed, markTransactionUnreviewed, bulkReviewTransactions } from "../api/transactionsApi";
 import { AllocationBarChart } from "../components/dashboard/AllocationBarChart";
@@ -15,21 +14,19 @@ import { SummaryMetricCard } from "../components/dashboard/SummaryMetricCard";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingState } from "../components/feedback/LoadingState";
 import { MonthReminderBanner } from "../components/feedback/MonthReminderBanner";
-import { SuccessNotice } from "../components/feedback/SuccessNotice";
+import { IncomeModal } from "../components/income/IncomeModal";
 import { PageShell } from "../components/layout/PageShell";
 import { usePeriod } from "../components/layout/PeriodProvider";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
-import { MoneyInput } from "../components/ui/MoneyInput";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { useMonthWorkflow } from "../hooks/useMonthWorkflow";
 import { useAuth } from "../context/AuthContext";
 import { formatIsoDate } from "../lib/format";
 import { Money } from "../components/ui/Money";
 import { useMoneyFormat } from "../hooks/useMoneyFormat";
-import { normalizeMoneyInput } from "../lib/validation";
 import type {
   AllocationCategory,
   DashboardPeriod,
@@ -49,17 +46,6 @@ interface DashboardViewModel {
   recentTransactions: Transaction[];
   incomeCount: number;
   accounts: FinancialAccount[];
-}
-
-interface SurplusSuggestionDraftRow {
-  id: string;
-  sourceSlug: string;
-  destinationSlug: string;
-  destinationLabel: string;
-  destinationType: "bucket" | "goal" | "debt";
-  destinationGoalId: string | null;
-  destinationDebtId: string | null;
-  amount: string;
 }
 
 type DashboardNextStepState =
@@ -213,12 +199,7 @@ export function Dashboard() {
   const activeWorkspaceId = session?.workspaceId ?? session?.householdId ?? "local";
   const { from, to } = activeRange;
   const monthWorkflow = useMonthWorkflow(activeRange.from.slice(0, 7));
-  const [surplusDraftRows, setSurplusDraftRows] = useState<SurplusSuggestionDraftRow[]>([]);
-  const [editingSurplusRowId, setEditingSurplusRowId] = useState<string | null>(null);
-  const [surplusRowDraft, setSurplusRowDraft] = useState<{ destinationSlug: string; amount: string }>({ destinationSlug: "", amount: "0.00" });
-  const [surplusMessage, setSurplusMessage] = useState<string | null>(null);
-  const [surplusApplyError, setSurplusApplyError] = useState<string | null>(null);
-  const [isQuickApplyingSurplus, setIsQuickApplyingSurplus] = useState(false);
+  const [showIncomeModal, setShowIncomeModal] = useState(false);
   const [startHereDismissed, setStartHereDismissed] = useState(() => readOnboardingDismissed(activeWorkspaceId));
   const [setupDone, setSetupDone] = useState(readSetupDone);
   const [howRafWorksOpen, setHowRafWorksOpen] = useState(false);
@@ -323,30 +304,6 @@ export function Dashboard() {
   }, [from, to]);
 
   useEffect(() => {
-    if (!data?.surplusRecommendations) {
-      return;
-    }
-
-    setSurplusDraftRows(
-      data.surplusRecommendations.distributions
-        .filter((distribution) => Number(distribution.amount) > 0)
-        .map((distribution, index) => ({
-          id: `surplus_row_${index}_${distribution.slug}`,
-          sourceSlug: distribution.slug,
-          destinationSlug: distribution.destinationBucketSlug ?? distribution.slug,
-          destinationLabel: distribution.label,
-          destinationType: distribution.destinationType ?? "bucket",
-          destinationGoalId: distribution.destinationGoalId ?? null,
-          destinationDebtId: distribution.destinationDebtId ?? null,
-          amount: distribution.amount,
-        })),
-    );
-    setSurplusMessage(null);
-    setSurplusApplyError(null);
-    setEditingSurplusRowId(null);
-  }, [data?.surplusRecommendations]);
-
-  useEffect(() => {
     setStartHereDismissed(readOnboardingDismissed(activeWorkspaceId));
     setSetupDone(readSetupDone());
   }, [activeWorkspaceId]);
@@ -419,25 +376,7 @@ export function Dashboard() {
   const savingsFloor = Number(dashboardData.financialHealth.savingsFloor);
   const savingsFloorEnabled = dashboardData.financialHealth.savingsFloorEnabled === true;
   const isBelowSavingsFloor = savingsFloorEnabled && savingsBalance < savingsFloor;
-  const activeDestinationOptions = activeCategories.map((category) => ({
-    slug: category.slug,
-    label: category.label,
-  }));
-  const suggestedRows = savingsFloorEnabled && isBelowSavingsFloor
-    ? [...surplusDraftRows].sort((left, right) => (left.destinationSlug === "savings" ? -1 : 0) - (right.destinationSlug === "savings" ? -1 : 0))
-    : surplusDraftRows;
-  const surplusExists = Number(dashboardData.surplusRecommendations.netSurplus) > 0 && suggestedRows.length > 0;
-  const draftTotal = suggestedRows.reduce((sum, row) => sum + Number(normalizeMoneyInput(row.amount) ?? "0.00"), 0);
-  const netSurplus = Number(dashboardData.surplusRecommendations.netSurplus);
-  const draftMatchesSurplus = Math.abs(draftTotal - netSurplus) < 0.005;
-  const editingSurplusRow = suggestedRows.find((row) => row.id === editingSurplusRowId) ?? null;
-  const movingSavingsPriorityAway = Boolean(
-    editingSurplusRow
-    && savingsFloorEnabled
-    && isBelowSavingsFloor
-    && editingSurplusRow.destinationSlug === "savings"
-    && surplusRowDraft.destinationSlug !== "savings",
-  );
+  const surplusExists = Number(dashboardData.surplusRecommendations.netSurplus) > 0;
   const activeMonthStatus = workflowData.activeMonthStatus.status;
   const nextStepState = deriveDashboardNextStepState({
     isCurrentMonth,
@@ -454,106 +393,6 @@ export function Dashboard() {
     setStartHereDismissed(true);
   }
 
-  function handleResetSurplusDraftRows() {
-    setSurplusDraftRows(
-      dashboardData.surplusRecommendations.distributions
-        .filter((distribution) => Number(distribution.amount) > 0)
-        .map((distribution, index) => ({
-          id: `surplus_row_${index}_${distribution.slug}`,
-          sourceSlug: distribution.slug,
-          destinationSlug: distribution.destinationBucketSlug ?? distribution.slug,
-          destinationLabel: distribution.label,
-          destinationType: distribution.destinationType ?? "bucket",
-          destinationGoalId: distribution.destinationGoalId ?? null,
-          destinationDebtId: distribution.destinationDebtId ?? null,
-          amount: distribution.amount,
-        })),
-    );
-    setSurplusMessage(null);
-    setSurplusApplyError(null);
-    setEditingSurplusRowId(null);
-  }
-
-  function openSurplusRowEditor(row: SurplusSuggestionDraftRow) {
-    setEditingSurplusRowId(row.id);
-    setSurplusRowDraft({
-      destinationSlug: row.destinationSlug,
-      amount: row.amount,
-    });
-    setSurplusMessage(null);
-  }
-
-  function handleApplySurplusRowEdit() {
-    const nextDestination = activeDestinationOptions.find((option) => option.slug === surplusRowDraft.destinationSlug);
-    if (!editingSurplusRow || !nextDestination) {
-      return;
-    }
-
-    setSurplusDraftRows((current) => current.map((row) => (
-      row.id === editingSurplusRow.id
-        ? {
-          ...row,
-          destinationSlug: nextDestination.slug,
-          destinationLabel: nextDestination.label,
-          destinationType: "bucket",
-          destinationGoalId: null,
-          destinationDebtId: null,
-          amount: normalizeMoneyInput(surplusRowDraft.amount) ?? surplusRowDraft.amount,
-        }
-        : row
-    )));
-    setEditingSurplusRowId(null);
-    setSurplusApplyError(null);
-    setSurplusMessage("Suggestion updated. Use Quick apply when you are ready to confirm it in Monthly Review.");
-  }
-
-  function handleCancelSurplusRowEdit() {
-    setEditingSurplusRowId(null);
-    setSurplusRowDraft({ destinationSlug: "", amount: "0.00" });
-  }
-
-  async function handleQuickApplySurplus() {
-    if (!surplusExists || !draftMatchesSurplus || workflowData.closeSummary.canClose === false || workflowData.activeMonthStatus.status === "closed") {
-      return;
-    }
-
-    setIsQuickApplyingSurplus(true);
-    setSurplusMessage(null);
-    setSurplusApplyError(null);
-
-    try {
-      const normalizedNetSurplus = Number(dashboardData.surplusRecommendations.netSurplus || "0");
-      const splitOverride = suggestedRows.map((row, index) => {
-        const normalizedAmount = Number(normalizeMoneyInput(row.amount) ?? row.amount ?? "0");
-        const splitPercent = normalizedNetSurplus > 0 ? (normalizedAmount / normalizedNetSurplus).toFixed(4) : "0.0000";
-
-        return {
-          slug: row.sourceSlug,
-          label: row.destinationLabel,
-          splitPercent,
-          sortOrder: index + 1,
-          isActive: true,
-          destinationType: row.destinationType,
-          destinationBucketSlug: row.destinationType === "bucket" ? row.destinationSlug : null,
-          destinationGoalId: row.destinationType === "goal" ? row.destinationGoalId : null,
-          destinationDebtId: row.destinationType === "debt" ? row.destinationDebtId : null,
-        };
-      });
-
-      await applyMonthlyReview({
-        reviewMonth: from,
-        splitOverride,
-      });
-
-      setSurplusMessage(`Surplus for ${activeMonthLabel} was applied. The month is now saved through Monthly Review.`);
-      await Promise.all([reload(), monthWorkflow.reload()]);
-    } catch (applyError) {
-      setSurplusApplyError(applyError instanceof Error ? applyError.message : "Quick apply failed.");
-    } finally {
-      setIsQuickApplyingSurplus(false);
-    }
-  }
-
   const latestSpending = dashboardData.latestPeriod?.spendingTotal ?? "0.00";
 
   return (
@@ -564,7 +403,7 @@ export function Dashboard() {
       actions={(
         <div className="flex items-center gap-2">
           <Link to="/monthly-review" className="inline-flex min-h-[40px] items-center rounded-[11px] border border-[var(--border-subtle)] bg-[var(--surface-card)] px-[13px] text-[11.5px] font-semibold text-[var(--text-primary)] shadow-[var(--shadow-sm)] transition hover:bg-[var(--surface-muted)]">Monthly review</Link>
-          <Link to="/income/new" className="inline-flex min-h-[40px] items-center rounded-[11px] bg-[var(--theme-primary)] px-[13px] text-[11.5px] font-semibold text-white transition hover:opacity-90">Add income</Link>
+          <button type="button" onClick={() => setShowIncomeModal(true)} className="inline-flex min-h-[40px] items-center rounded-[11px] bg-[var(--theme-primary)] px-[13px] text-[11.5px] font-semibold text-white transition hover:opacity-90">Add income</button>
         </div>
       )}
     >
@@ -578,7 +417,7 @@ export function Dashboard() {
           </div>
           <div className="raf-hero-actions hidden sm:flex">
             <Link to="/monthly-review" className="inline-flex min-h-[38px] items-center rounded-[11px] border border-[var(--border-subtle)] bg-white/70 px-[13px] text-[11.5px] font-semibold text-[var(--text-primary)] transition hover:bg-white/90">Monthly review</Link>
-            <Link to="/income/new" className="inline-flex min-h-[38px] items-center rounded-[11px] bg-[var(--theme-primary)] px-[13px] text-[11.5px] font-semibold text-white transition hover:opacity-90">Add income</Link>
+            <button type="button" onClick={() => setShowIncomeModal(true)} className="inline-flex min-h-[38px] items-center rounded-[11px] bg-[var(--theme-primary)] px-[13px] text-[11.5px] font-semibold text-white transition hover:opacity-90">Add income</button>
           </div>
         </div>
         <div className="raf-hero-meta">
@@ -728,9 +567,9 @@ export function Dashboard() {
               Log this month's income to begin.
             </span>
           </div>
-          <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/income/new">
+          <button type="button" onClick={() => setShowIncomeModal(true)} className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]">
             Add income -&gt;
-          </Link>
+          </button>
         </div>
       ) : null}
       {nextStepState?.kind === "closed-current-month" ? (
@@ -861,154 +700,19 @@ export function Dashboard() {
             </div>
           ) : null}
 
-          {surplusExists ? (
-            <Card
-              title="Surplus Allocation"
-              subtitle="Where surplus goes when you close the month."
-              actions={(
-                <div className="flex flex-wrap items-center gap-2">
-                  <Link className="text-[11px] font-medium text-[var(--primary-color)]" to="/monthly-review">
-                    Default split in Monthly Review
-                  </Link>
-                  <Badge tone={alertTone(data.surplusRecommendations.alertStatus)}>Surplus</Badge>
-                </div>
-              )}
-            >
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-[var(--border-color)] px-4 py-4" style={{ background: "var(--surface-plain)" }}>
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                      <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Surplus available</div>
-                      <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]"><Money value={data.surplusRecommendations.netSurplus} /></div>
-                      <div className="mt-2 text-[12px] text-[var(--text-muted)]">
-                        These are editable suggestions only. Nothing moves until you confirm it in Monthly Review.
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        className="inline-flex min-h-9 items-center rounded-full bg-[var(--primary-color)] px-3.5 py-1.5 text-xs font-semibold text-[var(--primary-contrast)] disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={isQuickApplyingSurplus || !draftMatchesSurplus || monthWorkflow.data.closeSummary.canClose === false || monthWorkflow.data.activeMonthStatus.status === "closed"}
-                        onClick={() => void handleQuickApplySurplus()}
-                      >
-                        {isQuickApplyingSurplus ? "Applying..." : "Quick apply all"}
-                      </button>
-                      <Link className="inline-flex min-h-9 items-center rounded-full border border-[var(--border-color)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)]" to="/monthly-review">
-                        Review in Monthly Review
-                      </Link>
-                    </div>
-                  </div>
-                  <div className="mt-3 text-[12px] text-[var(--text-muted)]">
-                    Adjust the saved default split in Monthly Review when this month's surplus needs a different plan.
-                  </div>
-                  <div className="mt-4 grid gap-3">
-                    {suggestedRows.map((row) => (
-                      <div
-                        key={row.id}
-                        className="rounded-2xl border border-[var(--border-color)] px-3 py-3"
-                        style={{ background: "var(--surface-color)" }}
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="text-base font-semibold text-[var(--text-strong)]"><Money value={row.amount} /></div>
-                            <div className="mt-1 text-sm font-medium text-[var(--text-strong)]">To {row.destinationLabel}</div>
-                            <div className="mt-1 text-[12px] text-[var(--text-muted)]">Included in the current quick-apply draft.</div>
-                            {savingsFloorEnabled && isBelowSavingsFloor && row.destinationSlug === "savings" ? (
-                              <span className="mt-2 inline-flex rounded-full bg-[var(--badge-warning-bg,var(--surface-elevated))] px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">
-                                Savings priority
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <Button type="button" variant="secondary" className="min-h-8 rounded-full px-3 py-1 text-[11px]" onClick={() => openSurplusRowEditor(row)}>
-                              Edit
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {editingSurplusRow ? (
-                  <div className="rounded-[1.5rem] border border-[var(--border-color)] px-4 py-4" style={{ background: "var(--surface-plain)" }}>
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold text-[var(--text-strong)]">Edit suggestion</div>
-                        <div className="mt-1 text-[12px] text-[var(--text-muted)]">Adjust the amount and destination category, then save the draft before using Quick apply.</div>
-                      </div>
-                    </div>
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <MoneyInput
-                        label="Amount"
-                        name={`surplus-amount-${editingSurplusRow.id}`}
-                        value={surplusRowDraft.amount}
-                        onChange={(value) => {
-                          setSurplusRowDraft((current) => ({ ...current, amount: value }));
-                          setSurplusMessage(null);
-                        }}
-                      />
-                      <label className="block">
-                        <span className="mb-2 block text-sm font-medium tracking-[0.01em] text-[var(--text-strong)]">Destination category</span>
-                        <select
-                          className="ui-field"
-                          value={surplusRowDraft.destinationSlug}
-                          onChange={(event) => {
-                            setSurplusRowDraft((current) => ({ ...current, destinationSlug: event.target.value }));
-                            setSurplusMessage(null);
-                          }}
-                        >
-                          {activeDestinationOptions.map((option) => (
-                            <option key={option.slug} value={option.slug}>{option.label}</option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                    {movingSavingsPriorityAway ? (
-                      <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
-                        Warning: this choice conflicts with your savings floor. Savings is already below the floor, so RAF is prioritizing Savings in the recommendation.
-                      </div>
-                    ) : null}
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border-color)] px-3 py-3 text-sm" style={{ background: "var(--surface-color)" }}>
-                      <div>
-                        <div className="font-semibold text-[var(--text-strong)]">Draft total <Money value={draftTotal.toFixed(2)} /></div>
-                        <div className="mt-1 text-[12px] text-[var(--text-muted)]">
-                          {draftMatchesSurplus
-                            ? "The draft matches the current surplus."
-                            : `Keep this aligned with ${format(data.surplusRecommendations.netSurplus)} before confirming.`}
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="secondary" className="min-h-9 rounded-full px-3 py-1.5 text-xs" onClick={handleCancelSurplusRowEdit}>
-                          Cancel
-                        </Button>
-                        <Button type="button" className="min-h-9 rounded-full px-3 py-1.5 text-xs" disabled={!draftMatchesSurplus} onClick={handleApplySurplusRowEdit}>
-                          Save draft
-                        </Button>
-                      </div>
-                    </div>
-                    {surplusMessage ? <div className="mt-3"><SuccessNotice title="Surplus draft saved" message={surplusMessage} /></div> : null}
-                    {surplusApplyError ? <p className="mt-3 text-[12px] italic text-rose-500">{surplusApplyError}</p> : null}
-                  </div>
-                ) : null}
-                <div className="flex justify-end">
-                  <Button type="button" variant="secondary" className="min-h-9 rounded-full px-3 py-1.5 text-xs" onClick={handleResetSurplusDraftRows}>
-                    Reset suggestions
-                  </Button>
-                </div>
-                {!editingSurplusRow && surplusApplyError ? <p className="text-[12px] italic text-rose-500">{surplusApplyError}</p> : null}
-                {!editingSurplusRow && surplusMessage ? <SuccessNotice title="Surplus updated" message={surplusMessage} /> : null}
+          {surplusExists && activeMonthStatus !== "closed" ? (
+            <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>$</span>
+                <span className="text-[var(--text-muted)]">
+                  <span className="font-semibold text-[var(--text-strong)]">Surplus available.</span>{" "}
+                  <Money value={dashboardData.surplusRecommendations.netSurplus} /> ready to allocate.
+                </span>
               </div>
-            </Card>
-          ) : data.incomeCount > 0 ? (
-            <Card
-              title="Surplus Allocation"
-              subtitle="Where surplus goes when you close the month."
-            >
-              <div className="rounded-2xl border border-[var(--border-color)] px-4 py-4 text-sm text-[var(--text-muted)]" style={{ background: "var(--surface-plain)" }}>
-                No surplus to distribute yet. Close the month in Monthly Review to see whether there's a surplus.
-              </div>
-            </Card>
+              <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/monthly-review">
+                Review allocation →
+              </Link>
+            </div>
           ) : null}
 
           <Card
@@ -1142,6 +846,7 @@ export function Dashboard() {
         </div>
       ) : null}
 
+      <IncomeModal isOpen={showIncomeModal} onClose={() => setShowIncomeModal(false)} onSuccess={() => void reload()} />
     </PageShell>
   );
 }
