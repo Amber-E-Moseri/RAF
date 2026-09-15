@@ -156,7 +156,7 @@ export function Profile() {
     <PageShell
       eyebrow="Profile"
       title="Profile"
-      description="Account and planning summary placeholders for future profile features."
+      description="Account summary."
     >
       {isLoading ? <LoadingState label="Loading profile overview..." /> : null}
       {!isLoading && error ? (
@@ -311,7 +311,7 @@ export function Profile() {
                             {milestone.label}
                           </span>
                           <span className={milestone.completed ? "text-emerald-600" : "text-[var(--text-muted)]"}>
-                            {milestone.completed ? "âœ“" : "â—‹"}
+                            {milestone.completed ? "✓" : "○"}
                           </span>
                         </div>
                       ))}

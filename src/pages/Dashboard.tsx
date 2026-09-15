@@ -346,7 +346,7 @@ export function Dashboard() {
 
   if (isLoading || monthWorkflow.isLoading) {
     return (
-      <PageShell eyebrow="Overview" title="Dashboard" description={`${activeMonthLabel} financial snapshot.`}>
+      <PageShell eyebrow="Home" title="Your money, with a clear next move." description="RAF keeps the important decisions visible without turning your finances into a wall of charts.">
         <LoadingState label="Loading the current financial snapshot..." />
       </PageShell>
     );
@@ -354,7 +354,7 @@ export function Dashboard() {
 
   if (error || !data || monthWorkflow.error || !monthWorkflow.data) {
     return (
-      <PageShell eyebrow="Overview" title="Dashboard" description={`${activeMonthLabel} financial snapshot.`}>
+      <PageShell eyebrow="Home" title="Your money, with a clear next move." description="RAF keeps the important decisions visible without turning your finances into a wall of charts.">
         <ErrorState
           title="Failed to load dashboard"
           message={error ?? monthWorkflow.error ?? "We could not load the current dashboard data. Please try again."}
@@ -532,8 +532,39 @@ export function Dashboard() {
     }
   }
 
+  const latestSpending = dashboardData.latestPeriod?.spendingTotal ?? "0.00";
+
   return (
-    <PageShell eyebrow="Overview" title="Dashboard" description={`${activeMonthLabel} financial snapshot.`}>
+    <PageShell
+      eyebrow="Home"
+      title="Your money, with a clear next move."
+      description="RAF keeps the important decisions visible without turning your finances into a wall of charts."
+      actions={(
+        <div className="flex items-center gap-2">
+          <Link to="/monthly-review" className="inline-flex min-h-[40px] items-center rounded-[11px] border border-[var(--border-subtle)] bg-[var(--surface-card)] px-[13px] text-[11.5px] font-semibold text-[var(--text-primary)] shadow-[var(--shadow-sm)] transition hover:bg-[var(--surface-muted)]">Monthly review</Link>
+          <Link to="/income/new" className="inline-flex min-h-[40px] items-center rounded-[11px] bg-[var(--theme-primary)] px-[13px] text-[11.5px] font-semibold text-white transition hover:opacity-90">Add income</Link>
+        </div>
+      )}
+    >
+      {/* Net surplus hero — closest truthful RAF equivalent to prototype "Available to allocate" */}
+      <div className="raf-hero">
+        <div className="raf-hero-top">
+          <div>
+            <div className="raf-hero-label">Net surplus</div>
+            <div className="raf-hero-value"><Money value={latestSurplus} /></div>
+            <div className="raf-hero-note">Income remaining after this month's recorded spending. Applied to categories when you close the month in Monthly Review.</div>
+          </div>
+          <div className="raf-hero-actions hidden sm:flex">
+            <Link to="/monthly-review" className="inline-flex min-h-[38px] items-center rounded-[11px] border border-[var(--border-subtle)] bg-white/70 px-[13px] text-[11.5px] font-semibold text-[var(--text-primary)] transition hover:bg-white/90">Monthly review</Link>
+            <Link to="/income/new" className="inline-flex min-h-[38px] items-center rounded-[11px] bg-[var(--theme-primary)] px-[13px] text-[11.5px] font-semibold text-white transition hover:opacity-90">Add income</Link>
+          </div>
+        </div>
+        <div className="raf-hero-meta">
+          <div className="meta"><b><Money value={latestPeriodIncome} /></b>Income this month</div>
+          <div className="meta"><b><Money value={latestSpending} /></b>Spent this month</div>
+          <div className="meta"><b>{activeMonthLabel}</b>Active period</div>
+        </div>
+      </div>
       {nextStepState?.kind === "historical" ? (
         <div
           className="rounded-2xl border px-4 py-3 text-sm"
@@ -691,7 +722,7 @@ export function Dashboard() {
       {nextStepState?.kind === "closed-current-month" ? (
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
           <div className="flex items-center gap-3">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>âœ“</span>
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>✓</span>
             <span className="text-[var(--text-muted)]">
               <span className="font-semibold text-[var(--text-strong)]">{activeMonthName} is closed. Your month is complete.</span>{" "}
               RAF will guide the next cycle when new activity begins.
@@ -702,28 +733,28 @@ export function Dashboard() {
       {nextStepState?.kind === "income-no-transactions" ? (
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
           <div className="flex items-center gap-3">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>â†’</span>
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>→</span>
             <span className="text-[var(--text-muted)]">
               <span className="font-semibold text-[var(--text-strong)]">Income logged.</span>{" "}
               Next: record transactions to track where it goes.
             </span>
           </div>
           <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/transactions">
-            Track spending â†’
+            Track spending →
           </Link>
         </div>
       ) : null}
       {nextStepState?.kind === "income-transactions-open" ? (
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
           <div className="flex items-center gap-3">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>âœ“</span>
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>✓</span>
             <span className="text-[var(--text-muted)]">
               <span className="font-semibold text-[var(--text-strong)]">Looking good.</span>{" "}
               When you are done spending, close {activeMonthLabel} in Monthly Review.
             </span>
           </div>
           <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/monthly-review">
-            Monthly Review â†’
+            Monthly Review →
           </Link>
         </div>
       ) : null}

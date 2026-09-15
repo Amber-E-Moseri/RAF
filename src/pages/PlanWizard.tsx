@@ -237,7 +237,7 @@ export function PlanWizard() {
 
   if (categoriesLoading) {
     return (
-      <PageShell eyebrow="Plan wizard" title="Create your monthly plan" description="Loading setup data...">
+      <PageShell eyebrow="Plan wizard" title="Create your monthly plan">
         <LoadingState label="Loading categories..." />
       </PageShell>
     );
@@ -245,14 +245,14 @@ export function PlanWizard() {
 
   if (categoriesError || !categories) {
     return (
-      <PageShell eyebrow="Plan wizard" title="Create your monthly plan" description="Loading setup data...">
+      <PageShell eyebrow="Plan wizard" title="Create your monthly plan">
         <ErrorState title="Failed to load wizard setup" message={categoriesError ?? "Unable to load categories."} onRetry={() => void reloadCategories()} />
       </PageShell>
     );
   }
 
   return (
-    <PageShell eyebrow="Plan wizard" title="Create your monthly plan" description="Move step by step. Save income, fixed bills, debts, and goals in one flow.">
+    <PageShell eyebrow="Plan wizard" title="Create your monthly plan">
       <div className="mx-auto max-w-3xl space-y-6">
         <div className="space-y-3">
           <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">

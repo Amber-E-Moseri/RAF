@@ -243,6 +243,40 @@ function PeriodPicker({
   );
 }
 
+function getInitials(name?: string | null, email?: string | null): string {
+  if (name) {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  }
+  if (email) return email.slice(0, 2).toUpperCase();
+  return "U";
+}
+
+function TopbarMonthSwitch({
+  label,
+  isCurrentMonth,
+  onPrev,
+  onNext,
+}: {
+  label: string;
+  isCurrentMonth: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-[6px]">
+      <button type="button" className="topbar-iconbtn" onClick={onPrev} title="Previous month" aria-label="Previous month">
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M15 18l-6-6 6-6" /></svg>
+      </button>
+      <span className="topbar-month-pill">{label}</span>
+      <button type="button" className="topbar-iconbtn" onClick={onNext} disabled={isCurrentMonth} title="Next month" aria-label="Next month">
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M9 18l6-6-6-6" /></svg>
+      </button>
+    </div>
+  );
+}
+
 function SidebarGroup({ label, items }: { label: string; items: Array<{ to: string; label: string; icon: string }> }) {
   return (
     <section className="space-y-2">
@@ -276,114 +310,127 @@ export function AppLayout() {
   const { preferences, togglePrivacyMode } = useAppearance();
   const workspaces = session?.workspaces ?? [];
   const activeWorkspaceId = session?.workspaceId ?? session?.householdId;
+  const initials = getInitials(null, session?.email);
 
   return (
-    <div className="theme-shell min-h-screen">
-      <header className="mobile-top md:hidden">
-        <div className="flex items-center justify-between gap-3">
+    <div className="theme-shell app-grid">
+      {/* ── Dark sidebar (desktop only) ── */}
+      <aside className="hidden md:flex sidebar-shell">
+        <div className="sidebar-brand">
+          <img src={rafLogo} alt="RAF" className="brand-logo" />
+          <div>
+            <p className="sidebar-brand-name">{APP_NAME}</p>
+            <p className="sidebar-brand-sub">Revenue Allocation Formula</p>
+          </div>
+        </div>
+
+        {workspaces.length > 1 ? (
+          <select
+            className="ui-field mb-3 text-[12px] font-semibold"
+            aria-label="Active household"
+            value={activeWorkspaceId}
+            onChange={(event) => switchWorkspace(event.target.value)}
+          >
+            {workspaces.map((workspace) => (
+              <option key={workspace.id} value={workspace.id}>{workspace.name}</option>
+            ))}
+          </select>
+        ) : null}
+
+        <nav className="min-h-0 flex-1 space-y-6 overflow-y-auto py-4">
+          {desktopNavigation.map((group) => (
+            <SidebarGroup key={group.label} label={group.label} items={group.items} />
+          ))}
+        </nav>
+
+        <div className="sidebar-footer">
+          <NavLink to="/profile" className="sidebar-action">
+            <span className="inline-flex h-4 w-4 items-center justify-center">
+              <NavIcon type="user" />
+            </span>
+            <span>Profile</span>
+          </NavLink>
+          <button
+            type="button"
+            aria-pressed={preferences.privacy_mode}
+            onClick={togglePrivacyMode}
+            className={["sidebar-action w-full", preferences.privacy_mode ? "opacity-60" : ""].filter(Boolean).join(" ")}
+            title={preferences.privacy_mode ? "Privacy mode on" : "Privacy mode off"}
+          >
+            <span className="inline-flex h-4 w-4 items-center justify-center" aria-hidden="true">
+              {preferences.privacy_mode ? (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" /><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" /><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" /><line x1="2" x2="22" y1="2" y2="22" /></svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
+              )}
+            </span>
+            <span>{preferences.privacy_mode ? "Privacy on" : "Privacy off"}</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* ── Right-side content shell ── */}
+      <div className="shell">
+        {/* Mobile header */}
+        <header className="mobile-top">
           <div className="flex items-center gap-2">
             <img src={rafLogo} alt="RAF" className="brand-logo" />
             <div className="leading-none">
               <p className="text-[15px] font-bold text-[var(--text-primary)]">{APP_NAME}</p>
-              <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">Finance OS</p>
+              <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)]">Revenue Allocation Formula</p>
             </div>
           </div>
-        </div>
-        <PeriodPicker
-          activeMonth={activeMonth}
-          activeMonthLabel={activeMonthLabel}
-          isCurrentMonth={isCurrentMonth}
-          monthOptions={monthOptions}
-          onPrev={prevMonth}
-          onNext={nextMonth}
-          onCurrent={jumpToCurrentMonth}
-          onSelect={setActiveMonth}
-        />
-      </header>
+          <PeriodPicker
+            activeMonth={activeMonth}
+            activeMonthLabel={activeMonthLabel}
+            isCurrentMonth={isCurrentMonth}
+            monthOptions={monthOptions}
+            onPrev={prevMonth}
+            onNext={nextMonth}
+            onCurrent={jumpToCurrentMonth}
+            onSelect={setActiveMonth}
+          />
+        </header>
 
-      <div className="mx-auto flex max-w-[1320px] gap-6 px-4 pb-[calc(92px+env(safe-area-inset-bottom))] pt-4 md:px-6 md:pb-6 md:pt-6">
-        <aside className="hidden w-56 shrink-0 md:block">
-          <div className="sidebar-shell">
-            <div className="space-y-4 border-b border-[var(--border-subtle)] pb-4">
-              <div className="flex items-center gap-3">
-                <img src={rafLogo} alt="RAF" className="brand-logo" />
-                <div>
-                  <p className="text-[16px] font-bold tracking-[-0.01em] text-[var(--text-primary)]">{APP_NAME}</p>
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">Finance OS</p>
-                </div>
-              </div>
-              <PeriodPicker
-                activeMonth={activeMonth}
-                activeMonthLabel={activeMonthLabel}
-                isCurrentMonth={isCurrentMonth}
-                monthOptions={monthOptions}
-                onPrev={prevMonth}
-                onNext={nextMonth}
-                onCurrent={jumpToCurrentMonth}
-                onSelect={setActiveMonth}
-              />
-              {workspaces.length > 1 ? (
-                <select
-                  className="ui-field min-h-[40px] text-[12px] font-semibold"
-                  aria-label="Active household"
-                  value={activeWorkspaceId}
-                  onChange={(event) => switchWorkspace(event.target.value)}
-                >
-                  {workspaces.map((workspace) => (
-                    <option key={workspace.id} value={workspace.id}>{workspace.name}</option>
-                  ))}
-                </select>
-              ) : null}
-            </div>
-
-            <nav className="min-h-0 flex-1 space-y-6 overflow-y-auto py-5">
-              {desktopNavigation.map((group) => (
-                <SidebarGroup key={group.label} label={group.label} items={group.items} />
-              ))}
-            </nav>
-
-            <div className="mt-auto space-y-3 border-t border-[var(--border-subtle)] pt-4">
-              <NavLink to="/profile" className={({ isActive }) => navClassName(isActive)}>
-                <span className="inline-flex h-4 w-4 items-center justify-center">
-                  <NavIcon type="user" />
-                </span>
-                <span>Profile</span>
-              </NavLink>
-              <button
-                type="button"
-                aria-pressed={preferences.privacy_mode}
-                onClick={togglePrivacyMode}
-                className={["nav-link w-full motion-safe:transition-opacity motion-safe:duration-150", preferences.privacy_mode ? "opacity-60" : ""].filter(Boolean).join(" ")}
-                title={preferences.privacy_mode ? "Privacy mode on" : "Privacy mode off"}
-              >
-                <span className="inline-flex h-4 w-4 items-center justify-center" aria-hidden="true">
-                  {preferences.privacy_mode ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" /><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" /><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" /><line x1="2" x2="22" y1="2" y2="22" /></svg>
-                  ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
-                  )}
-                </span>
-                <span>{preferences.privacy_mode ? "Privacy on" : "Privacy off"}</span>
-              </button>
-            </div>
+        {/* Desktop topbar (md+ only) */}
+        <header className="topbar-desktop hidden md:flex">
+          <div className="flex items-center gap-2">
+            <TopbarMonthSwitch
+              label={activeMonthLabel}
+              isCurrentMonth={isCurrentMonth}
+              onPrev={prevMonth}
+              onNext={nextMonth}
+            />
           </div>
-        </aside>
+          <div className="flex items-center gap-[7px]">
+            {preferences.privacy_mode ? (
+              <span className="topbar-privacy-badge">Privacy on</span>
+            ) : null}
+            <NavLink to="/income/new" className="topbar-iconbtn" title="Add income">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+            </NavLink>
+            <NavLink to="/profile" className="topbar-avatar" title="Profile" aria-label="Profile">
+              {initials}
+            </NavLink>
+          </div>
+        </header>
 
-        <main className="min-w-0 flex-1">
+        <main className="shell-content">
           <Outlet />
         </main>
-      </div>
 
-      <nav className="mobile-bottom-nav md:hidden">
-        {mobileTabs.map((item) => (
-          <NavLink key={item.to} to={item.to} className={({ isActive }) => mobileTabClassName(isActive)}>
-            <span className="inline-flex h-4 w-4 items-center justify-center">
-              <NavIcon type={item.icon} />
-            </span>
-            <span>{item.label}</span>
-          </NavLink>
-        ))}
-      </nav>
+        {/* Mobile bottom nav */}
+        <nav className="mobile-bottom-nav">
+          {mobileTabs.map((item) => (
+            <NavLink key={item.to} to={item.to} className={({ isActive }) => mobileTabClassName(isActive)}>
+              <span className="inline-flex h-4 w-4 items-center justify-center">
+                <NavIcon type={item.icon} />
+              </span>
+              <span>{item.label}</span>
+            </NavLink>
+          ))}
+        </nav>
+      </div>
     </div>
   );
 }

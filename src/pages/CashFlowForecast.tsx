@@ -18,7 +18,7 @@ import { formatIsoDate } from "../lib/format";
 import { Money } from "../components/ui/Money";
 import { useMoneyFormat } from "../hooks/useMoneyFormat";
 
-// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Helpers ──────────────────────────────────────────────────────────
 
 const DAYS_OPTIONS: { label: string; value: ForecastDays }[] = [
   { label: "30 days", value: 30 },
@@ -57,7 +57,7 @@ function confidenceBadge(level: string) {
   );
 }
 
-// â”€â”€ Sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Sub-components ────────────────────────────────────────────────────
 
 function SummaryCard({
   label,
@@ -91,7 +91,7 @@ function SummaryCard({
 function DeficitBanner({ date }: { date: string }) {
   return (
     <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800/40 dark:bg-red-900/10">
-      <span className="mt-0.5 text-[16px] text-red-500">âš </span>
+      <span className="mt-0.5 text-[16px] text-red-500">⚠</span>
       <div>
         <p className="text-[13px] font-semibold text-red-800 dark:text-red-300">Projected deficit detected</p>
         <p className="text-[12px] text-red-700 dark:text-red-400">
@@ -310,7 +310,7 @@ function DailyTimeline({ forecast }: { forecast: CashFlowForecast }) {
                 ))}
                 {p.pressureIndicators.riskLevel !== "healthy" && (
                   <span className={`text-[11px] font-medium ${riskColor}`}>
-                    âš  {p.pressureIndicators.riskLevel}
+                    ⚠ {p.pressureIndicators.riskLevel}
                   </span>
                 )}
               </div>
@@ -321,7 +321,7 @@ function DailyTimeline({ forecast }: { forecast: CashFlowForecast }) {
                 <Money value={balance} />
               </div>
 
-              <span className="text-[var(--text-subtle)]">{isOpen ? "â–²" : "â–¼"}</span>
+              <span className="text-[var(--text-subtle)]">{isOpen ? "▲" : "▼"}</span>
             </button>
 
             {isOpen && (
@@ -615,7 +615,7 @@ function UpcomingExpensesSection({ onForecastInvalidated }: { onForecastInvalida
                 className="ml-1 text-[12px] text-[var(--text-subtle)] transition-colors hover:text-red-500"
                 title="Remove"
               >
-                âœ•
+                ✕
               </button>
             </li>
           ))}
@@ -625,7 +625,7 @@ function UpcomingExpensesSection({ onForecastInvalidated }: { onForecastInvalida
   );
 }
 
-// â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export function CashFlowForecast() {
   const format = useMoneyFormat();
@@ -657,9 +657,9 @@ export function CashFlowForecast() {
 
   return (
     <PageShell
-      eyebrow="Planning"
-      title="Cash-Flow Forecast"
-      description="A read-only projection of your household's cash position over the next 30, 60, or 90 days. Income, fixed bills, and spending are estimated — not guaranteed."
+      eyebrow="Cash Flow"
+      title="See the next 30 days with context."
+      description="RAF keeps household cash pooled, separates freshness from certainty, and avoids inventing obligations it cannot prove."
       actions={tabActions}
     >
       {isLoading && <LoadingState label="Building forecast…" />}
