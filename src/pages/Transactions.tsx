@@ -11,6 +11,8 @@ import {
   classifyImportedTransaction,
   deleteImportReviewRule,
   getImportedTransactions,
+  getImportHistory,
+  getImportHistoryDetail,
   updateImportReviewRule,
   importBankStatement,
   unprocessImportedTransaction,
@@ -54,6 +56,8 @@ import type {
   Goal,
   ImportedTransaction,
   ImportClassificationPayload,
+  ImportHistoryDetailResponse,
+  ImportHistoryItem,
   ImportReviewRule,
   ImportReviewSuggestion,
   Transaction,
@@ -69,6 +73,7 @@ interface TransactionsViewModel {
   fixedBills: FixedBill[];
   goals: Goal[];
   imports: ImportedTransaction[];
+  importHistory: ImportHistoryItem[];
 }
 
 interface ImportReviewDraft {
@@ -247,6 +252,38 @@ function importRowStatus(item: ImportedTransaction, draft: ImportReviewDraft) {
   } as const;
 }
 
+function formatOptionalDateTime(value: string | null | undefined) {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(parsed);
+}
+
+function importHistoryTitle(item: ImportHistoryItem) {
+  if (item.source_kind === "bank_import_rows") return "Bank import rows";
+  return item.filename ?? item.source ?? item.id;
+}
+
+function importHistoryAccountLabel(item: ImportHistoryItem) {
+  if (!item.account) return "—";
+  return item.account.institution ? `${item.account.name} · ${item.account.institution}` : item.account.name;
+}
+
+function importHistoryReviewLabel(item: ImportHistoryItem) {
+  const { pending_rows, approved_rows, duplicate_rows, skipped_rows } = item.counts;
+  const parts = [];
+  if (pending_rows > 0) parts.push(`${pending_rows} pending`);
+  if (approved_rows > 0) parts.push(`${approved_rows} approved`);
+  if (duplicate_rows > 0) parts.push(`${duplicate_rows} duplicate`);
+  if (skipped_rows > 0) parts.push(`${skipped_rows} skipped`);
+  return parts.join(", ") || "no rows";
+}
+
+function importHistoryLinkedLabel(item: ImportHistoryItem) {
+  const linked = item.counts.canonical_transactions;
+  return linked === 1 ? "1 canonical transaction" : `${linked} canonical transactions`;
+}
+
 function canReviewImportedTransaction(item: ImportedTransaction) {
   return item.status === "unreviewed";
 }
@@ -327,6 +364,10 @@ export function Transactions() {
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [ruleDrafts, setRuleDrafts] = useState<Record<string, ReturnType<typeof buildImportRuleDraft>>>({});
   const [pendingRuleId, setPendingRuleId] = useState<string | null>(null);
+  const [selectedImportHistoryId, setSelectedImportHistoryId] = useState<string | null>(null);
+  const [importHistoryDetail, setImportHistoryDetail] = useState<ImportHistoryDetailResponse | null>(null);
+  const [isLoadingImportHistoryDetail, setIsLoadingImportHistoryDetail] = useState(false);
+  const [importHistoryDetailError, setImportHistoryDetailError] = useState<string | null>(null);
   const cursor = cursorHistory[cursorHistory.length - 1];
 
   useEffect(() => {
@@ -346,6 +387,9 @@ export function Transactions() {
     setBulkRuleMode("none");
     setImportsView("needs_review");
     setOpenImportMenuId(null);
+    setSelectedImportHistoryId(null);
+    setImportHistoryDetail(null);
+    setImportHistoryDetailError(null);
   }, [activeMonth]);
 
   useEffect(() => {
@@ -369,7 +413,7 @@ export function Transactions() {
   }, [categoryFilterFromUrl, location.hash]);
 
   const { data, error, isLoading, reload } = useAsyncData<TransactionsViewModel>(async () => {
-    const [transactions, debts, imports, fixedBills, goals] = await Promise.all([
+    const [transactions, debts, imports, fixedBills, goals, importHistory] = await Promise.all([
       getTransactions({
         from: fromDate,
         to: toDate,
@@ -382,6 +426,7 @@ export function Transactions() {
       getImportedTransactions(),
       getFixedBills(),
       getGoals(),
+      getImportHistory().catch(() => ({ items: [] as ImportHistoryItem[] })),
     ]);
 
     let categories: AllocationCategory[] = [];
@@ -401,6 +446,7 @@ export function Transactions() {
       fixedBills: fixedBills.items,
       goals: goals.items.filter((goal) => goal.active !== false),
       imports: imports.items,
+      importHistory: importHistory.items,
     };
   }, [categoryFilter, categorySlugFilterFromUrl, cursor, fromDate, toDate]);
 
@@ -1095,6 +1141,27 @@ export function Transactions() {
     itemsWithSuggestions.forEach((item) => applySuggestion(item));
     setReviewSuccess(`Applied remembered suggestions to ${itemsWithSuggestions.length} selected row${itemsWithSuggestions.length === 1 ? "" : "s"}.`);
     setReviewError(null);
+  }
+
+  async function selectImportHistory(importId: string) {
+    if (selectedImportHistoryId === importId) {
+      setSelectedImportHistoryId(null);
+      setImportHistoryDetail(null);
+      setImportHistoryDetailError(null);
+      return;
+    }
+    setSelectedImportHistoryId(importId);
+    setImportHistoryDetail(null);
+    setImportHistoryDetailError(null);
+    setIsLoadingImportHistoryDetail(true);
+    try {
+      const detail = await getImportHistoryDetail(importId);
+      setImportHistoryDetail(detail);
+    } catch (err) {
+      setImportHistoryDetailError(err instanceof Error ? err.message : "Failed to load detail");
+    } finally {
+      setIsLoadingImportHistoryDetail(false);
+    }
   }
 
   async function handleBulkReview(action: "approve" | "ignore") {
@@ -2256,6 +2323,98 @@ export function Transactions() {
             )
           ) : null}
         </div>
+      </Card>
+
+      <Card
+        title="Import History"
+        subtitle="A read-only record of all import events. Mutations happen in the Imported Rows Review panel above."
+      >
+        {isLoading ? <LoadingState label="Loading import history..." /> : null}
+        {!isLoading && (data?.importHistory?.length ?? 0) === 0 ? (
+          <EmptyState
+            title="No import history"
+            message="Import history will appear here once you have uploaded bank statements or imported rows."
+          />
+        ) : null}
+        {!isLoading && (data?.importHistory?.length ?? 0) > 0 ? (
+          <div className="divide-y" style={{ borderColor: "var(--border-color)" }}>
+            {(data?.importHistory ?? []).map((item) => {
+              const isSelected = selectedImportHistoryId === item.id;
+              return (
+                <div key={item.id} className="py-3">
+                  <button
+                    type="button"
+                    className="flex w-full items-start justify-between gap-3 text-left"
+                    onClick={() => void selectImportHistory(item.id)}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13px] font-semibold text-[var(--text-strong)] truncate">{importHistoryTitle(item)}</div>
+                      <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">
+                        {importHistoryAccountLabel(item)} · {formatOptionalDateTime(item.created_at)}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="text-[12px] text-[var(--text-muted)]">{item.row_count} rows</div>
+                      <div className="text-[11px] text-[var(--text-muted)]">{importHistoryReviewLabel(item)}</div>
+                    </div>
+                  </button>
+                  {isSelected ? (
+                    <div className="mt-3">
+                      {isLoadingImportHistoryDetail ? <LoadingState label="Loading detail..." /> : null}
+                      {importHistoryDetailError ? (
+                        <p className="text-[12px] italic text-rose-500">{importHistoryDetailError}</p>
+                      ) : null}
+                      {importHistoryDetail?.id === item.id ? (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-2 gap-2 text-[12px] sm:grid-cols-3">
+                            <div>
+                              <div className="text-[var(--text-muted)]">Linked transactions</div>
+                              <div className="font-medium text-[var(--text-strong)]">{importHistoryLinkedLabel(item)}</div>
+                            </div>
+                            <div>
+                              <div className="text-[var(--text-muted)]">Status</div>
+                              <div className="font-medium text-[var(--text-strong)]">{item.status}</div>
+                            </div>
+                            <div>
+                              <div className="text-[var(--text-muted)]">Updated</div>
+                              <div className="font-medium text-[var(--text-strong)]">{formatOptionalDateTime(item.updated_at)}</div>
+                            </div>
+                          </div>
+                          {importHistoryDetail.rows.length > 0 ? (
+                            <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "var(--border-color)" }}>
+                              <table className="w-full text-[12px]">
+                                <thead>
+                                  <tr className="border-b text-left text-[var(--text-muted)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+                                    <th className="px-3 py-2 font-medium">Date</th>
+                                    <th className="px-3 py-2 font-medium">Description</th>
+                                    <th className="px-3 py-2 font-medium text-right">Amount</th>
+                                    <th className="px-3 py-2 font-medium">Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y" style={{ borderColor: "var(--border-color)" }}>
+                                  {importHistoryDetail.rows.map((row) => (
+                                    <tr key={row.id}>
+                                      <td className="px-3 py-2 text-[var(--text-muted)]">{row.date ?? "—"}</td>
+                                      <td className="max-w-[200px] truncate px-3 py-2 text-[var(--text-strong)]">{row.description ?? "—"}</td>
+                                      <td className="px-3 py-2 text-right font-medium text-[var(--text-strong)]">{row.amount ?? "—"}</td>
+                                      <td className="px-3 py-2 text-[var(--text-muted)]">{row.status}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <p className="text-[12px] italic text-[var(--text-muted)]">No row-level detail available.</p>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
       </Card>
 
       <div id="transactions-table">
