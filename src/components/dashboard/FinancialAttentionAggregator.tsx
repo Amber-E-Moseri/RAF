@@ -11,6 +11,7 @@ import { Card } from "../ui/Card";
 
 export type AttentionItemType =
   | "IMPORT_REVIEW"
+  | "TRANSACTION_REVIEW"
   | "RECONCILIATION_DISCREPANCY"
   | "GOAL_FUNDING_REVIEW";
 
@@ -73,10 +74,29 @@ export function FinancialAttentionAggregator({ items }: FinancialAttentionAggreg
 
 export function deriveAttentionItems({
   unreviewedImportsCount = 0,
+  unreviewedTransactionsCount = 0,
 }: {
   unreviewedImportsCount?: number;
+  unreviewedTransactionsCount?: number;
 }): AttentionItem[] {
   const items: AttentionItem[] = [];
+  if (unreviewedTransactionsCount > 0) {
+    items.push({
+      id: "transaction-review",
+      type: "TRANSACTION_REVIEW",
+      priority: "REVIEW",
+      title: "Transactions Ready to Mark Reviewed",
+      description:
+        unreviewedTransactionsCount === 1
+          ? "1 transaction is categorized and ready to be marked reviewed."
+          : `${unreviewedTransactionsCount} transactions are categorized and ready to be marked reviewed.`,
+      action: {
+        label: "Mark Reviewed",
+        href: "#transaction-review",
+      },
+      count: unreviewedTransactionsCount,
+    });
+  }
   if (unreviewedImportsCount > 0) {
     items.push({
       id: "import-review",

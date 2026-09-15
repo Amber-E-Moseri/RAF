@@ -89,6 +89,8 @@ export interface Transaction {
   linkedDebtId: string | null;
   linkedGoalId: string | null;
   source?: string | null;
+  reviewedAt?: string | null;
+  reviewedBy?: string | null;
 }
 
 export interface TransactionCreateRequest {

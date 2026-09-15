@@ -12,8 +12,18 @@ export interface TransactionsQuery {
   to: string;
   categoryId?: string | null;
   categorySlug?: string | null;
+  reviewed?: boolean | null;
   cursor?: string | null;
   limit?: number;
+}
+
+export interface BulkReviewPayload {
+  transactionIds: string[];
+}
+
+export interface BulkReviewResult {
+  reviewedIds: string[];
+  reviewedAt: string;
 }
 
 export function getTransactions(query: TransactionsQuery) {
@@ -42,4 +52,16 @@ export function setTransactionSplits(transactionId: string, splits: TransactionS
 
 export function clearTransactionSplits(transactionId: string) {
   return deleteJson<void>(`/transactions/${transactionId}/splits`);
+}
+
+export function markTransactionReviewed(transactionId: string) {
+  return postJson<Transaction>(`/transactions/${transactionId}/review`, {});
+}
+
+export function markTransactionUnreviewed(transactionId: string) {
+  return deleteJson<Transaction>(`/transactions/${transactionId}/review`);
+}
+
+export function bulkReviewTransactions(payload: BulkReviewPayload) {
+  return postJson<BulkReviewResult>("/transactions/bulk-review", payload);
 }
