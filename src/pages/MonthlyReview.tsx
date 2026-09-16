@@ -1,7 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAllocationCategories } from "../api/allocationCategoriesApi";
 import { getDebts } from "../api/debtsApi";
 import { getGoals } from "../api/goalsApi";
+import {
+  closeMonth,
+  getCloseReadiness,
+  getMonthLifecycle,
+  reopenMonth,
+  startReview,
+} from "../api/monthLifecycleApi";
+import type { CloseMonthResponse, CloseReadinessResponse, MonthLifecycleResponse } from "../api/monthLifecycleApi";
 import { applyMonthlyReview, applyMonthlyReviewsInRange, deleteMonthlyReview as removeMonthlyReview } from "../api/monthlyReviewApi";
 import { getSurplusRecommendations } from "../api/reportsApi";
 import { saveSurplusAllocationPreferences } from "../api/surplusAllocationApi";
@@ -20,6 +28,7 @@ import { Input } from "../components/ui/Input";
 import { Table } from "../components/ui/Table";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { useMonthWorkflow } from "../hooks/useMonthWorkflow";
+import { useRole } from "../hooks/usePermission";
 import { Money } from "../components/ui/Money";
 import { validateFirstDayOfMonth, validateIsoDate } from "../lib/validation";
 import type { AllocationCategory, ApplyMonthlyReviewResponse, Debt, Goal, SurplusRecommendationsReport } from "../lib/types";
@@ -135,8 +144,25 @@ function buildSurplusDistributionPreview(netSurplus: string, rows: SurplusSplitD
   return distributions;
 }
 
+function nextMonthPeriod(period: string): string {
+  const d = new Date(`${period}T00:00:00.000Z`);
+  d.setUTCMonth(d.getUTCMonth() + 1);
+  return d.toISOString().slice(0, 7);
+}
+
+function formatMonthLabel(period: string): string {
+  try {
+    return new Date(`${period}T12:00:00.000Z`).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+  } catch {
+    return period;
+  }
+}
+
 export function MonthlyReview() {
   const { activeMonth, activeMonthLabel, isCurrentMonth, jumpToCurrentMonth, setActiveMonth } = usePeriod();
+  const role = useRole();
+  const canClose = role === "owner" || role === "admin" || role === "member";
+  const canReopen = role === "owner" || role === "admin";
   const initialMonth = useMemo(() => activeMonth ? `${activeMonth}-01` : defaultReviewMonth(), [activeMonth]);
   const [reviewMonth, setReviewMonth] = useState(initialMonth);
   const [batchStartMonth, setBatchStartMonth] = useState(initialMonth);
@@ -163,6 +189,100 @@ export function MonthlyReview() {
   } | null>(null);
   const [previewVersion, setPreviewVersion] = useState(0);
   const monthWorkflow = useMonthWorkflow(activeMonth);
+
+  // ── Wave C lifecycle state ──────────────────────────────────────────────────
+  const [lifecycle, setLifecycle] = useState<MonthLifecycleResponse | null>(null);
+  const [closeReadiness, setCloseReadiness] = useState<CloseReadinessResponse | null>(null);
+  const [lifecycleLoading, setLifecycleLoading] = useState(false);
+  const [lifecycleError, setLifecycleError] = useState<string | null>(null);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [showReopenConfirm, setShowReopenConfirm] = useState(false);
+  const [showCloseSummary, setShowCloseSummary] = useState(false);
+  const [isClosingMonth, setIsClosingMonth] = useState(false);
+  const [isReopeningMonth, setIsReopeningMonth] = useState(false);
+  const [isStartingReview, setIsStartingReview] = useState(false);
+  const [closeResult, setCloseResult] = useState<CloseMonthResponse | null>(null);
+  const [lifecycleActionError, setLifecycleActionError] = useState<string | null>(null);
+  const lifecyclePeriodRef = useRef<string | null>(null);
+
+  const lifecyclePeriod = useMemo(() => activeMonth ? `${activeMonth}-01` : null, [activeMonth]);
+
+  const loadLifecycle = useCallback(async (period: string) => {
+    setLifecycleLoading(true);
+    setLifecycleError(null);
+    try {
+      const [lc, cr] = await Promise.all([
+        getMonthLifecycle(period),
+        getCloseReadiness(period),
+      ]);
+      setLifecycle(lc);
+      setCloseReadiness(cr);
+    } catch (e) {
+      setLifecycleError(e instanceof Error ? e.message : "Could not load lifecycle state.");
+    } finally {
+      setLifecycleLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!lifecyclePeriod) return;
+    if (lifecyclePeriodRef.current === lifecyclePeriod) return;
+    lifecyclePeriodRef.current = lifecyclePeriod;
+    void loadLifecycle(lifecyclePeriod);
+  }, [lifecyclePeriod, loadLifecycle]);
+
+  async function handleStartReview() {
+    if (!lifecyclePeriod) return;
+    setIsStartingReview(true);
+    setLifecycleActionError(null);
+    try {
+      await startReview({ period: lifecyclePeriod });
+      await loadLifecycle(lifecyclePeriod);
+    } catch (e) {
+      setLifecycleActionError(e instanceof Error ? e.message : "Could not start review.");
+    } finally {
+      setIsStartingReview(false);
+    }
+  }
+
+  async function handleCloseMonth() {
+    if (!lifecyclePeriod) return;
+    setIsClosingMonth(true);
+    setLifecycleActionError(null);
+    try {
+      const result = await closeMonth({ period: lifecyclePeriod });
+      setCloseResult(result);
+      setShowCloseConfirm(false);
+      setShowCloseSummary(true);
+      await loadLifecycle(lifecyclePeriod);
+      await monthWorkflow.reload();
+    } catch (e) {
+      setLifecycleActionError(e instanceof Error ? e.message : "Could not close month.");
+      setShowCloseConfirm(false);
+    } finally {
+      setIsClosingMonth(false);
+    }
+  }
+
+  async function handleReopenMonth() {
+    if (!lifecyclePeriod) return;
+    setIsReopeningMonth(true);
+    setLifecycleActionError(null);
+    try {
+      await reopenMonth({ period: lifecyclePeriod });
+      setShowReopenConfirm(false);
+      setCloseResult(null);
+      setShowCloseSummary(false);
+      lifecyclePeriodRef.current = null;
+      await loadLifecycle(lifecyclePeriod);
+      await monthWorkflow.reload();
+    } catch (e) {
+      setLifecycleActionError(e instanceof Error ? e.message : "Could not reopen month.");
+      setShowReopenConfirm(false);
+    } finally {
+      setIsReopeningMonth(false);
+    }
+  }
   const destinationData = useAsyncData<{ categories: AllocationCategory[]; goals: Goal[]; debts: Debt[] }>(async () => {
     const [categories, goalsResponse, debtsResponse] = await Promise.all([
       getAllocationCategories(),
@@ -173,7 +293,7 @@ export function MonthlyReview() {
     return {
       categories: categories.filter((category) => category.isActive !== false),
       goals: goalsResponse.items.filter((goal) => goal.active !== false),
-      debts: debtsResponse.items.filter((debt) => debt.active !== false),
+      debts: debtsResponse.items.filter((debt) => debt.isActive !== false),
     };
   }, []);
 
@@ -182,6 +302,15 @@ export function MonthlyReview() {
     setReviewMonth(nextMonth);
     setBatchStartMonth(nextMonth);
     setBatchEndMonth(nextMonth);
+    // Reset lifecycle so it reloads for the new period
+    lifecyclePeriodRef.current = null;
+    setLifecycle(null);
+    setCloseReadiness(null);
+    setCloseResult(null);
+    setShowCloseSummary(false);
+    setShowCloseConfirm(false);
+    setShowReopenConfirm(false);
+    setLifecycleActionError(null);
   }, [activeMonth]);
 
   useEffect(() => {
@@ -433,6 +562,257 @@ export function MonthlyReview() {
         </div>
       ) : null}
       {monthWorkflow.data?.reminderMonth ? <MonthReminderBanner monthKey={monthWorkflow.data.reminderMonth.monthKey} tone="danger" ctaLabel="Close month" /> : null}
+
+      {/* ── Wave C Month Lifecycle ─────────────────────────────────────────── */}
+      {lifecycleLoading ? (
+        <div className="rounded-2xl border px-4 py-3 text-sm text-[var(--text-muted)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+          Loading month lifecycle…
+        </div>
+      ) : lifecycleError ? (
+        <ErrorState title="Lifecycle unavailable" message={lifecycleError} />
+      ) : lifecycle ? (
+        <Card
+          title={`${activeMonthLabel} — ${lifecycle.state}`}
+          subtitle={
+            lifecycle.state === "CLOSED"
+              ? `Closed ${lifecycle.closedAt ? new Date(lifecycle.closedAt).toLocaleDateString() : ""} · version ${lifecycle.version ?? 1}`
+              : lifecycle.state === "REVIEWING"
+              ? "Review in progress. Close the month when ready."
+              : "Month is open. Begin the review when ready to close."
+          }
+        >
+          {lifecycleActionError ? <ErrorState title="Action failed" message={lifecycleActionError} /> : null}
+
+          {/* OPEN state */}
+          {lifecycle.state === "OPEN" && (
+            <div className="space-y-4">
+              {closeReadiness && closeReadiness.warnings.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-[var(--text-strong)]">Warnings</p>
+                  {closeReadiness.warnings.map((w) => (
+                    <div key={w.code} className="rounded-2xl border px-4 py-3 text-sm text-[var(--text-muted)]" style={{ borderColor: "rgba(245,158,11,0.4)", background: "color-mix(in srgb, var(--surface-plain) 90%, rgba(245,158,11,0.1))" }}>
+                      {w.message}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {canClose && (
+                <Button type="button" variant="secondary" disabled={isStartingReview} onClick={() => void handleStartReview()}>
+                  {isStartingReview ? <LoadingSpinner inline size="sm" label="Starting review…" /> : "Start Review"}
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* REVIEWING state */}
+          {lifecycle.state === "REVIEWING" && (
+            <div className="space-y-4">
+              {closeReadiness && (
+                <div className="space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+                      <p className="text-sm text-[var(--text-muted)]">Transactions</p>
+                      <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{closeReadiness.summary.totalTransactions}</p>
+                      {closeReadiness.summary.unreviewedTransactions > 0 && (
+                        <p className="mt-1 text-xs text-amber-600">{closeReadiness.summary.unreviewedTransactions} unreviewed</p>
+                      )}
+                    </div>
+                    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+                      <p className="text-sm text-[var(--text-muted)]">Goal contributions</p>
+                      <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]"><Money value={closeReadiness.summary.goalContributionsTotal} /></p>
+                    </div>
+                    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+                      <p className="text-sm text-[var(--text-muted)]">Debt payments</p>
+                      <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]"><Money value={closeReadiness.summary.debtPaymentsTotal} /></p>
+                    </div>
+                  </div>
+                  {closeReadiness.warnings.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold text-amber-700">Warnings (not blockers)</p>
+                      {closeReadiness.warnings.map((w) => (
+                        <div key={w.code} className="rounded-2xl border px-4 py-3 text-sm" style={{ borderColor: "rgba(245,158,11,0.4)", background: "color-mix(in srgb, var(--surface-plain) 90%, rgba(245,158,11,0.1))" }}>
+                          {w.message}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {closeReadiness.blockers.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold text-red-600">Blockers</p>
+                      {closeReadiness.blockers.map((b) => (
+                        <div key={b.code} className="rounded-2xl border px-4 py-3 text-sm text-red-700" style={{ borderColor: "rgba(239,68,68,0.4)", background: "color-mix(in srgb, var(--surface-plain) 90%, rgba(239,68,68,0.07))" }}>
+                          {b.message}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {canClose && closeReadiness?.canClose !== false && (
+                <Button type="button" onClick={() => { setShowCloseConfirm(true); setLifecycleActionError(null); }}>
+                  Close {activeMonthLabel}
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* CLOSED state */}
+          {lifecycle.state === "CLOSED" && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <Badge tone="success">Closed</Badge>
+                <span className="text-sm text-[var(--text-muted)]">
+                  Closed {lifecycle.closedAt ? new Date(lifecycle.closedAt).toLocaleDateString() : ""} · version {lifecycle.version ?? 1}
+                </span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="min-h-8 rounded-full px-3 py-1 text-xs"
+                  onClick={() => setShowCloseSummary((v) => !v)}
+                >
+                  {showCloseSummary ? "Hide close summary" : "View close summary"}
+                </Button>
+              </div>
+
+              {/* Close summary from snapshot */}
+              {showCloseSummary && lifecycle.snapshot && (
+                <div className="space-y-3 rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+                  <p className="text-sm font-semibold text-[var(--text-strong)]">Close snapshot · {lifecycle.snapshot.period}</p>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div>
+                      <p className="text-xs text-[var(--text-muted)]">Income received</p>
+                      <p className="text-base font-semibold text-[var(--text-strong)]"><Money value={lifecycle.snapshot.income.totalReceived} /></p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[var(--text-muted)]">Total spent</p>
+                      <p className="text-base font-semibold text-[var(--text-strong)]"><Money value={lifecycle.snapshot.spending.totalSpent} /></p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[var(--text-muted)]">Net surplus</p>
+                      <p className="text-base font-semibold text-[var(--text-strong)]"><Money value={lifecycle.snapshot.spending.netSurplus} /></p>
+                    </div>
+                  </div>
+                  {lifecycle.snapshot.buffer && (
+                    <div className="rounded-[1.25rem] border p-3" style={{ borderColor: "var(--border-color)", background: "var(--surface-color)" }}>
+                      <p className="text-xs font-semibold text-[var(--text-strong)]">Buffer at close — {lifecycle.snapshot.buffer.label}</p>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-3 text-xs text-[var(--text-muted)]">
+                        <span>Starting <span className="font-medium text-[var(--text-strong)]"><Money value={lifecycle.snapshot.buffer.allocated} /></span></span>
+                        <span>Used <span className="font-medium text-[var(--text-strong)]"><Money value={lifecycle.snapshot.buffer.spent} /></span></span>
+                        <span>Remaining <span className="font-medium text-[var(--text-strong)]"><Money value={lifecycle.snapshot.buffer.remaining} /></span></span>
+                      </div>
+                    </div>
+                  )}
+                  {lifecycle.snapshot.goals.contributions.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-[var(--text-strong)]">Goal contributions · <Money value={lifecycle.snapshot.goals.totalContributions} /></p>
+                      <ul className="mt-1 space-y-1">
+                        {lifecycle.snapshot.goals.contributions.map((c) => (
+                          <li key={c.goalId} className="text-xs text-[var(--text-muted)]">{c.goalName ?? c.goalId} — <Money value={c.amount} /></li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {lifecycle.snapshot.debts.payments.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-[var(--text-strong)]">Debt payments · <Money value={lifecycle.snapshot.debts.totalPayments} /></p>
+                      <p className="mt-1 text-xs text-[var(--text-muted)]">Balance at close: not captured. Historical debt balance semantics apply.</p>
+                      <ul className="mt-1 space-y-1">
+                        {lifecycle.snapshot.debts.payments.map((p) => (
+                          <li key={p.debtId} className="text-xs text-[var(--text-muted)]">{p.debtName ?? p.debtId} — <Money value={p.amount} /></li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <div className="text-xs text-[var(--text-muted)]">
+                    Transactions: {lifecycle.snapshot.transactions.reviewed} reviewed, {lifecycle.snapshot.transactions.unreviewed} unreviewed of {lifecycle.snapshot.transactions.total} total
+                  </div>
+                  <div className="text-xs text-[var(--text-muted)]">Captured {new Date(lifecycle.snapshot.capturedAt).toLocaleString()} — immutable.</div>
+                </div>
+              )}
+
+              {/* Continue to next month */}
+              <div className="flex flex-wrap gap-3">
+                {(() => {
+                  const nextMonth = nextMonthPeriod(activeMonth ?? "");
+                  const nextMonthLabel = formatMonthLabel(nextMonth);
+                  // Check if next month is in the future by comparing YYYY-MM strings
+                  const now = new Date();
+                  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+                  const nextMonthIsFuture = nextMonth > currentMonthKey;
+
+                  if (nextMonthIsFuture) {
+                    const nextMonthDate = new Date(`${nextMonth}-01T00:00:00.000Z`);
+                    const nextMonthDateFormatted = nextMonthDate.toLocaleString("en-US", {
+                      month: "long",
+                      day: "numeric",
+                      timeZone: "UTC"
+                    });
+                    return (
+                      <div className="text-sm text-[var(--text-muted)]">
+                        {nextMonthLabel}
+                        <br />
+                        Available {nextMonthDateFormatted}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <Button
+                      type="button"
+                      onClick={() => setActiveMonth(nextMonth)}
+                    >
+                      Continue to {nextMonthLabel}
+                    </Button>
+                  );
+                })()}
+                {canReopen && (
+                  <Button type="button" variant="secondary" onClick={() => { setShowReopenConfirm(true); setLifecycleActionError(null); }}>
+                    Reopen {activeMonthLabel}
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Close confirmation dialog */}
+          {showCloseConfirm && (
+            <div className="mt-4 rounded-2xl border p-4 space-y-3" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+              <p className="text-sm font-semibold text-[var(--text-strong)]">Close {activeMonthLabel}?</p>
+              <p className="text-sm text-[var(--text-muted)]">
+                RAF will preserve an immutable historical snapshot of this period — income, spending, allocations, buffer, goal contributions, and debt payments captured at this exact moment. The snapshot cannot be modified after closing.
+              </p>
+              <div className="flex gap-3">
+                <Button type="button" disabled={isClosingMonth} onClick={() => void handleCloseMonth()}>
+                  {isClosingMonth ? <LoadingSpinner inline size="sm" label="Closing…" /> : `Confirm — close ${activeMonthLabel}`}
+                </Button>
+                <Button type="button" variant="secondary" disabled={isClosingMonth} onClick={() => setShowCloseConfirm(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Reopen confirmation dialog */}
+          {showReopenConfirm && (
+            <div className="mt-4 rounded-2xl border p-4 space-y-3" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+              <p className="text-sm font-semibold text-[var(--text-strong)]">Reopen {activeMonthLabel}?</p>
+              <p className="text-sm text-[var(--text-muted)]">
+                The previous close snapshot will be preserved in history. Normal financial operations will become available again. A new close will create a new snapshot version.
+              </p>
+              <div className="flex gap-3">
+                <Button type="button" variant="secondary" disabled={isReopeningMonth} onClick={() => void handleReopenMonth()}>
+                  {isReopeningMonth ? <LoadingSpinner inline size="sm" label="Reopening…" /> : `Confirm — reopen ${activeMonthLabel}`}
+                </Button>
+                <Button type="button" variant="secondary" disabled={isReopeningMonth} onClick={() => setShowReopenConfirm(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+        </Card>
+      ) : null}
+      {/* ── End Wave C lifecycle ─────────────────────────────────────────────── */}
+
       {monthWorkflow.data ? (
         <Card
           title="Month Status"

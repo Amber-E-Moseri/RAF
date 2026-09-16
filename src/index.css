@@ -842,3 +842,97 @@ button, input, textarea, select {
   margin-bottom: 2px;
   font-weight: 700;
 }
+
+/* ── Tab workspace — suppress nested PageShell headers ── */
+.tab-content-wrapper .page-shell-header {
+  display: none !important;
+}
+
+/* ── Page-level tab navigation ── */
+.page-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 20px;
+  overflow-x: auto;
+}
+
+.page-tab {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 9px 12px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  display: inline-block;
+  transition: color 0.15s;
+  margin-bottom: -1px;
+}
+
+.page-tab:hover {
+  color: var(--text-primary);
+}
+
+.page-tab-active {
+  color: var(--theme-accent);
+  border-bottom-color: var(--theme-primary);
+}
+
+/* ── Quick Add dropdown ── */
+.quick-add-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 60;
+  min-width: 180px;
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-card);
+  padding: 6px;
+  box-shadow: var(--shadow-lg);
+}
+
+.quick-add-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  border-radius: 9px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-decoration: none;
+  text-align: left;
+  transition: background 0.13s;
+}
+
+.quick-add-item:hover {
+  background: var(--surface-muted);
+}
+
+.quick-add-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--theme-soft);
+  color: var(--theme-accent);
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.quick-add-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 4px 6px;
+}

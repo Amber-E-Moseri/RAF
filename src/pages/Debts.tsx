@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { acknowledgePaceInsight, createDebt, getDebts, updateDebt } from "../api/debtsApi";
+import { getTransactions } from "../api/transactionsApi";
 import { PaymentPaceInsight } from "../components/debt/PaymentPaceInsight";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingSpinner } from "../components/feedback/LoadingSpinner";
 import { LoadingState } from "../components/feedback/LoadingState";
 import { SuccessNotice } from "../components/feedback/SuccessNotice";
 import { PageShell } from "../components/layout/PageShell";
+import { usePeriod } from "../components/layout/PeriodProvider";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
@@ -16,7 +18,7 @@ import { MoneyInput } from "../components/ui/MoneyInput";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { formatIsoDate, percentPaidOff } from "../lib/format";
 import { Money } from "../components/ui/Money";
-import type { DebtPaymentPaceAcknowledgement } from "../lib/types";
+import type { DebtPaymentPaceAcknowledgement, Transaction } from "../lib/types";
 import { normalizeMoneyInput, validateApr, validateNonNegativeMoney, validatePositiveMoney, validateRequiredText } from "../lib/validation";
 
 function paymentStatusLabel(status?: string) {
@@ -108,8 +110,13 @@ function actualVsPlannedPaymentMessage(plannedPayment: string, actualPayment: st
 }
 
 export function Debts() {
-  // Debt balances stay current-only for now; month switching does not backdate debt snapshots yet.
+  const { activeRange, isCurrentMonth } = usePeriod();
+  // Debt balances stay current-only; month switching does not backdate debt snapshots.
   const { data, error, isLoading, reload } = useAsyncData(() => getDebts(), []);
+  const transactionsData = useAsyncData(
+    () => getTransactions({ from: activeRange.from, to: activeRange.to, limit: 100 }),
+    [activeRange.from, activeRange.to],
+  );
   const [form, setForm] = useState({
     name: "",
     startingBalance: "",
@@ -142,21 +149,22 @@ export function Debts() {
   const [editFieldErrors, setEditFieldErrors] = useState<Record<string, string | null>>({});
   const [editError, setEditError] = useState<string | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [expandedSections, setExpandedSections] = useState<Record<string, { month: boolean; payoff: boolean }>>({});
+  const [expandedSections, setExpandedSections] = useState<Record<string, { month: boolean; payoff: boolean; transactions: boolean }>>({});
   const [showCreateDebtForm, setShowCreateDebtForm] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [paceAction, setPaceAction] = useState<{ debtId: string; action: DebtPaymentPaceAcknowledgement["action"] } | null>(null);
 
-  function isSectionExpanded(debtId: string, section: "month" | "payoff") {
+  function isSectionExpanded(debtId: string, section: "month" | "payoff" | "transactions") {
     return expandedSections[debtId]?.[section] ?? false;
   }
 
-  function toggleSection(debtId: string, section: "month" | "payoff") {
+  function toggleSection(debtId: string, section: "month" | "payoff" | "transactions") {
     setExpandedSections((current) => ({
       ...current,
       [debtId]: {
         month: current[debtId]?.month ?? false,
         payoff: current[debtId]?.payoff ?? false,
+        transactions: current[debtId]?.transactions ?? false,
         [section]: !(current[debtId]?.[section] ?? false),
       },
     }));
@@ -262,6 +270,20 @@ export function Debts() {
   const editPaymentPreviewWarning = editingDebt
     ? paymentTooLowWarning(editingDebt.currentBalance, editForm.apr, editForm.monthlyPayment)
     : null;
+
+  const transactionsByDebtId = useMemo(() => {
+    const grouped = new Map<string, Transaction[]>();
+    for (const transaction of transactionsData.data?.items ?? []) {
+      if (!transaction.linkedDebtId) continue;
+      const current = grouped.get(transaction.linkedDebtId) ?? [];
+      current.push(transaction);
+      grouped.set(transaction.linkedDebtId, current);
+    }
+    for (const [debtId, items] of grouped.entries()) {
+      grouped.set(debtId, [...items].sort((a, b) => b.transactionDate.localeCompare(a.transactionDate)));
+    }
+    return grouped;
+  }, [transactionsData.data?.items]);
 
   function validateForm() {
     const nextErrors = {
@@ -519,6 +541,12 @@ export function Debts() {
 
       {isLoading ? <LoadingState label="Loading debt accounts..." /> : null}
       {!isLoading && error ? <ErrorState title="Failed to fetch debts" message={error} onRetry={() => void reload()} /> : null}
+      {!isCurrentMonth && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" style={{ background: "color-mix(in srgb, #fef3c7 80%, transparent)" }}>
+          <strong>Viewing a past period.</strong> Debt balances shown below reflect the current outstanding balance, not the balance at the end of this period. RAF does not snapshot historical debt balances.
+        </div>
+      )}
+
       {!isLoading && !error && data ? (
         <>
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -704,6 +732,49 @@ export function Debts() {
                           </div>
                         ) : null}
                       </div>
+
+                      {(() => {
+                        const debtTxns = transactionsByDebtId.get(debt.id) ?? [];
+                        return (
+                          <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)]">
+                            <button
+                              type="button"
+                              onClick={() => toggleSection(debt.id, "transactions")}
+                              className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+                            >
+                              <div>
+                                <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Linked transactions</p>
+                                <p className="mt-1 text-sm text-[var(--text-muted)]">Payments and charges linked to this debt this period.</p>
+                              </div>
+                              <span className="text-sm text-[var(--text-muted)]">
+                                {isSectionExpanded(debt.id, "transactions") ? "Hide" : `Show${debtTxns.length ? ` (${debtTxns.length})` : ""}`}
+                              </span>
+                            </button>
+                            {isSectionExpanded(debt.id, "transactions") ? (
+                              <div className="border-t border-[var(--border-color)] px-4 py-4">
+                                {debtTxns.length ? (
+                                  <div className="space-y-2">
+                                    {debtTxns.map((t) => (
+                                      <div key={t.id} className="flex items-start justify-between gap-3 border-b border-[var(--border-color)] pb-2 last:border-b-0 last:pb-0">
+                                        <div className="min-w-0">
+                                          <p className="text-sm font-medium text-[var(--text-strong)]">{t.description}</p>
+                                          <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.transactionDate}</p>
+                                        </div>
+                                        <p className={`shrink-0 text-sm font-semibold ${t.direction === "credit" ? "text-emerald-700" : "text-rose-700"}`}>
+                                          {t.direction === "credit" ? "+" : "-"}<Money value={t.amount} />
+                                        </p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-[var(--text-muted)]">No transactions linked to this debt this period.</p>
+                                )}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })()}
+
                       <div>
                         <div className="mb-2 flex items-center justify-between gap-3 text-sm">
                           <span className="text-[var(--text-muted)]">Debt payoff progress</span>

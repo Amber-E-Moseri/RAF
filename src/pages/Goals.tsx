@@ -238,13 +238,29 @@ export function Goals() {
     return grouped;
   }, [activeGoals, goalsData.data?.imports, goalsData.data?.transactions]);
 
+  const goalPaceLookup = useMemo(() => {
+    const fromDate = new Date(activeRange.from);
+    const toDate = new Date(activeRange.to);
+    const diffMonths = Math.max(1, (toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24 * 30.44));
+    const lookup = new Map<string, number>();
+    for (const goal of activeGoals) {
+      const totalCredits = (goalsData.data?.transactions ?? [])
+        .filter((t) => t.linkedGoalId === goal.id && t.direction === "credit")
+        .reduce((sum, t) => sum + Number(t.amount), 0);
+      if (totalCredits > 0) {
+        lookup.set(goal.id, totalCredits / diffMonths);
+      }
+    }
+    return lookup;
+  }, [activeGoals, goalsData.data?.transactions, activeRange.from, activeRange.to]);
+
   const canSubmit = form.name.trim() && form.bucketId && form.targetAmount.trim();
 
   useEffect(() => {
     if (!editingGoalId && !form.bucketId && goalsData.data?.categories.length) {
       setForm((current) => ({
         ...current,
-        bucketId: current.bucketId || goalsData.data.categories[0].id,
+        bucketId: current.bucketId || goalsData.data?.categories[0]?.id || current.bucketId,
       }));
     }
   }, [editingGoalId, form.bucketId, goalsData.data?.categories]);
@@ -362,7 +378,12 @@ export function Goals() {
   const selectedGoal = activeGoals.find((goal) => goal.id === selectedGoalId) ?? null;
   const selectedGoalProgress = selectedGoal ? (progressLookup.get(selectedGoal.id) ?? null) : null;
   const selectedGoalMilestones = getGoalMilestones(selectedGoalProgress);
-  const selectedGoalRecentTransactions = selectedGoal ? (recentActivityByGoalId.get(selectedGoal.id) ?? []).slice(0, 5) : [];
+  const selectedGoalRecentTransactions = selectedGoal ? (recentActivityByGoalId.get(selectedGoal.id) ?? []) : [];
+  const selectedGoalAvgMonthly = selectedGoal ? (goalPaceLookup.get(selectedGoal.id) ?? 0) : 0;
+  const selectedGoalRemaining = selectedGoalProgress ? Math.max(0, Number(selectedGoalProgress.remaining_amount)) : 0;
+  const selectedGoalProjectedMonths = selectedGoalAvgMonthly > 0 && selectedGoalRemaining > 0
+    ? Math.ceil(selectedGoalRemaining / selectedGoalAvgMonthly)
+    : null;
 
   async function handleSubmit() {
     if (!canSubmit) {
@@ -478,8 +499,10 @@ export function Goals() {
               <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]"><Money value={String(activeGoals.reduce((sum, g) => sum + Number(progressLookup.get(g.id)?.current_amount || "0"), 0).toFixed(2))} /></p>
             </Card>
             <Card>
-              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Active goals</p>
-              <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]">{activeGoals.length}</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Still needed</p>
+              <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]">
+                <Money value={String(activeGoals.reduce((sum, g) => sum + Math.max(0, Number(progressLookup.get(g.id)?.remaining_amount || "0")), 0).toFixed(2))} />
+              </p>
             </Card>
           </section>
 
@@ -491,6 +514,9 @@ export function Goals() {
                 const isReached = (progress?.progress_percent ?? 0) >= 100;
                 const isCelebrating = celebratingGoalIds[goal.id] === true;
                 const showCelebrationMessage = goalCelebrationMessages[goal.id] === true;
+                const avgMonthly = goalPaceLookup.get(goal.id) ?? 0;
+                const cardRemaining = Math.max(0, Number(progress?.remaining_amount ?? "0"));
+                const projectedMonths = avgMonthly > 0 && cardRemaining > 0 ? Math.ceil(cardRemaining / avgMonthly) : null;
 
                 return (
                   <div
@@ -533,7 +559,7 @@ export function Goals() {
                     <div className="mt-3">
                       <div className="mb-1 flex justify-between text-xs text-[var(--text-muted)]">
                         <span>{progressPercent.toFixed(0)}% funded</span>
-                        {progress?.milestone_label ? <span>{progress.milestone_label}</span> : null}
+                        {cardRemaining > 0 ? <span><Money value={String(cardRemaining.toFixed(2))} /> left</span> : null}
                       </div>
                       <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-elevated)]">
                         <div
@@ -541,6 +567,9 @@ export function Goals() {
                           style={{ width: `${progressPercent}%`, background: goalProgressFill() }}
                         />
                       </div>
+                      {projectedMonths !== null ? (
+                        <p className="mt-2 text-xs text-[var(--text-muted)]">~{projectedMonths} mo if this period's pace holds</p>
+                      ) : null}
                     </div>
                     {goal.notes ? (
                       <p className="mt-3 text-xs italic text-[var(--text-muted)]">{goal.notes}</p>
@@ -713,7 +742,7 @@ export function Goals() {
               </Button>
             </div>
 
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div className="mt-5 grid gap-4 grid-cols-1 sm:grid-cols-3">
               <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
                 <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Target amount</div>
                 <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]">{<Money value={selectedGoal.target_amount} />}</div>
@@ -722,6 +751,12 @@ export function Goals() {
                 <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Paid so far</div>
                 <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]">
                   {<Money value={selectedGoalProgress.current_amount} />}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
+                <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Still needed</div>
+                <div className="mt-2 text-lg font-semibold text-[var(--text-strong)]">
+                  <Money value={String(selectedGoalRemaining.toFixed(2))} />
                 </div>
               </div>
             </div>
@@ -768,6 +803,24 @@ export function Goals() {
               </div>
             </div>
 
+            {selectedGoalAvgMonthly > 0 ? (
+              <div className="mt-4 rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
+                <div className="text-sm font-semibold text-[var(--text-strong)]">Pace</div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Avg / month (this period)</div>
+                    <div className="mt-1 text-base font-semibold text-[var(--text-strong)]"><Money value={selectedGoalAvgMonthly.toFixed(2)} /></div>
+                  </div>
+                  {selectedGoalProjectedMonths !== null ? (
+                    <div>
+                      <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Est. at this pace</div>
+                      <div className="mt-1 text-base font-semibold text-[var(--text-strong)]">~{selectedGoalProjectedMonths} month{selectedGoalProjectedMonths === 1 ? "" : "s"}</div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
             <div className="mt-4 rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
               <button
                 type="button"
@@ -776,7 +829,7 @@ export function Goals() {
               >
                 <div>
                   <div className="text-sm font-semibold text-[var(--text-strong)]">Recent transactions</div>
-                  <div className="mt-1 text-xs italic text-[var(--text-muted)]">Latest 5 goal-linked items</div>
+                  <div className="mt-1 text-xs italic text-[var(--text-muted)]">All linked transactions (this period)</div>
                 </div>
                 <div className="text-sm text-[var(--text-muted)]">
                   {expandedRecentActivity[selectedGoal.id] ? "Hide" : "Show"} {selectedGoalRecentTransactions.length ? `(${selectedGoalRecentTransactions.length})` : ""}

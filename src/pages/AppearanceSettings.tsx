@@ -125,9 +125,9 @@ function selectedCardStyle(selected: boolean) {
     };
 }
 
-export function AppearanceSettings() {
+export function AppearanceSettings({ defaultTab }: { defaultTab?: SettingsTab } = {}) {
   const { preferences, saveAppearance, togglePrivacyMode } = useAppearance();
-  const [activeTab, setActiveTab] = useState<SettingsTab>("preferences");
+  const [activeTab, setActiveTab] = useState<SettingsTab>(defaultTab ?? "preferences");
   const [draft, setDraft] = useState<AppearancePreferences>(preferences);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [ruleMessage, setRuleMessage] = useState<string | null>(null);
@@ -355,9 +355,9 @@ export function AppearanceSettings() {
               <button
                 type="button"
                 onClick={togglePrivacyMode}
-                className={`relative h-6 w-[42px] shrink-0 rounded-full transition ${preferences.privacyMode ? "bg-[var(--primary-color)]" : "bg-[#d6dbe0]"}`}
+                className={`relative h-6 w-[42px] shrink-0 rounded-full transition ${preferences.privacy_mode ? "bg-[var(--primary-color)]" : "bg-[#d6dbe0]"}`}
               >
-                <span className={`absolute top-[3px] h-[18px] w-[18px] rounded-full bg-white shadow-sm transition ${preferences.privacyMode ? "left-[21px]" : "left-[3px]"}`} />
+                <span className={`absolute top-[3px] h-[18px] w-[18px] rounded-full bg-white shadow-sm transition ${preferences.privacy_mode ? "left-[21px]" : "left-[3px]"}`} />
               </button>
             </div>
             <div className="flex items-center justify-between gap-4 py-3">
@@ -367,10 +367,10 @@ export function AppearanceSettings() {
               </div>
               <button
                 type="button"
-                onClick={() => void saveAppearance({ interface_scale: draft.interface_scale === "compact" ? "default" : "compact" })}
-                className={`relative h-6 w-[42px] shrink-0 rounded-full transition ${draft.interface_scale === "compact" ? "bg-[var(--primary-color)]" : "bg-[#d6dbe0]"}`}
+                onClick={() => void saveAppearance({ ...draft, interface_scale: draft.interface_scale === "small" ? "medium" : "small" })}
+                className={`relative h-6 w-[42px] shrink-0 rounded-full transition ${draft.interface_scale === "small" ? "bg-[var(--primary-color)]" : "bg-[#d6dbe0]"}`}
               >
-                <span className={`absolute top-[3px] h-[18px] w-[18px] rounded-full bg-white shadow-sm transition ${draft.interface_scale === "compact" ? "left-[21px]" : "left-[3px]"}`} />
+                <span className={`absolute top-[3px] h-[18px] w-[18px] rounded-full bg-white shadow-sm transition ${draft.interface_scale === "small" ? "left-[21px]" : "left-[3px]"}`} />
               </button>
             </div>
           </div>
@@ -715,12 +715,12 @@ export function AppearanceSettings() {
               {ruleMessage ? <SuccessNotice title="Import rules updated" message={ruleMessage} /> : null}
               {!rulesData.isLoading && !rulesData.error && rulesData.data ? (
                 <Card title="Import Rules" subtitle="Suggestions stay review-only. Reusable rules can have auto-apply enabled or disabled at any time.">
-                  {rulesData.data.rules.length ? (
+                  {rulesData.data?.rules.length ? (
                     <div className="space-y-2">
                       {rulesData.data.rules.map((rule) => {
                         const isPending = pendingRuleId === rule.id;
                         const categoryLabel = rule.category_id
-                          ? (rulesData.data.categories.find((item) => item.id === rule.category_id)?.label ?? rule.category_id)
+                          ? (rulesData.data?.categories.find((item) => item.id === rule.category_id)?.label ?? rule.category_id)
                           : null;
                         return (
                           <div

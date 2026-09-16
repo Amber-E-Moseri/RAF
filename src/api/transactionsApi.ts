@@ -27,7 +27,7 @@ export interface BulkReviewResult {
 }
 
 export function getTransactions(query: TransactionsQuery) {
-  return getJson<TransactionListResponse>("/transactions", query);
+  return getJson<TransactionListResponse>("/transactions", query as unknown as Record<string, string | number | null | undefined>);
 }
 
 export function createTransaction(payload: TransactionCreateRequest) {
@@ -64,4 +64,27 @@ export function markTransactionUnreviewed(transactionId: string) {
 
 export function bulkReviewTransactions(payload: BulkReviewPayload) {
   return postJson<BulkReviewResult>("/transactions/bulk-review", payload);
+}
+
+export interface TransactionSuggestion {
+  id: string;
+  normalized_description: string;
+  normalized_merchant: string | null;
+  classification_type: string | null;
+  category_id: string | null;
+  linked_debt_id: string | null;
+  linked_fixed_bill_id: string | null;
+  linked_goal_id: string | null;
+  rule_type: string;
+  auto_apply: boolean;
+  confirmation_count: number;
+  correction_count: number;
+}
+
+export interface TransactionSuggestionResponse {
+  suggestion: TransactionSuggestion | null;
+}
+
+export function fetchTransactionSuggestion(transactionId: string) {
+  return getJson<TransactionSuggestionResponse>(`/transactions/${transactionId}/suggestion`);
 }

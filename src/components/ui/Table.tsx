@@ -2,11 +2,12 @@ import type { PropsWithChildren, ReactNode } from "react";
 
 interface TableProps {
   headers: ReactNode[];
+  thClassNames?: (string | undefined)[];
   footer?: ReactNode;
   tableClassName?: string;
 }
 
-export function Table({ headers, footer, tableClassName = "", children }: PropsWithChildren<TableProps>) {
+export function Table({ headers, thClassNames, footer, tableClassName = "", children }: PropsWithChildren<TableProps>) {
   return (
     <div className="ui-table">
       <div className="overflow-x-auto">
@@ -14,7 +15,7 @@ export function Table({ headers, footer, tableClassName = "", children }: PropsW
           <thead>
             <tr>
               {headers.map((header, index) => (
-                <th key={index} className="px-4 py-3.5 text-left text-[0.7rem] font-semibold uppercase text-stone-500 first:pl-5 last:pr-5">
+                <th key={index} className={["px-4 py-3.5 text-left text-[0.7rem] font-semibold uppercase text-stone-500 first:pl-5 last:pr-5", thClassNames?.[index] ?? ""].filter(Boolean).join(" ")}>
                   {header}
                 </th>
               ))}

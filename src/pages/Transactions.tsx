@@ -18,7 +18,8 @@ import {
   unprocessImportedTransaction,
   unignoreImportedTransaction,
 } from "../api/importsApi";
-import { createTransaction, deleteTransaction, getTransactions, updateTransaction } from "../api/transactionsApi";
+import { createTransaction, deleteTransaction, fetchTransactionSuggestion, getTransactions, updateTransaction } from "../api/transactionsApi";
+import type { TransactionSuggestion } from "../api/transactionsApi";
 import {
   buildImportRuleDraft,
   ImportRuleEditor,
@@ -39,6 +40,8 @@ import { Input } from "../components/ui/Input";
 import { MoneyInput } from "../components/ui/MoneyInput";
 import { Table } from "../components/ui/Table";
 import { SplitTransactionEditor } from "../components/transactions/SplitTransactionEditor";
+import { TransactionRowActions } from "../components/transactions/TransactionRowActions";
+import type { QuickLinkState } from "../components/transactions/TransactionRowActions";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { DEFAULT_PAGE_SIZE } from "../lib/constants";
 import { formatIsoDate } from "../lib/format";
@@ -344,12 +347,15 @@ export function Transactions() {
   const [showCreateTransactionForm, setShowCreateTransactionForm] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<TransactionEditState | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editSuggestion, setEditSuggestion] = useState<TransactionSuggestion | null>(null);
+  const [editSuggestionDismissed, setEditSuggestionDismissed] = useState(false);
   const [isDeletingTransaction, setIsDeletingTransaction] = useState<string | null>(null);
   const [selectedImportFile, setSelectedImportFile] = useState<File | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isImportsExpanded, setIsImportsExpanded] = useState(false);
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
   const [reviewDrafts, setReviewDrafts] = useState<Record<string, ImportReviewDraft>>({});
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewSuccess, setReviewSuccess] = useState<string | null>(null);
@@ -370,6 +376,10 @@ export function Transactions() {
   const [importHistoryDetail, setImportHistoryDetail] = useState<ImportHistoryDetailResponse | null>(null);
   const [isLoadingImportHistoryDetail, setIsLoadingImportHistoryDetail] = useState(false);
   const [importHistoryDetailError, setImportHistoryDetailError] = useState<string | null>(null);
+  const [quickLinkOpen, setQuickLinkOpen] = useState<QuickLinkState | null>(null);
+  const [isLinking, setIsLinking] = useState(false);
+  const [reviewFocusId, setReviewFocusId] = useState<string | null>(null);
+  const [mobileActionsId, setMobileActionsId] = useState<string | null>(null);
   const cursor = cursorHistory[cursorHistory.length - 1];
 
   useEffect(() => {
@@ -398,6 +408,15 @@ export function Transactions() {
     setCategoryFilter(categorySlugFilterFromUrl ? "" : categoryFilterFromUrl);
     setCursorHistory([null]);
   }, [categoryFilterFromUrl, categorySlugFilterFromUrl]);
+
+  useEffect(() => {
+    if (!mobileActionsId) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setMobileActionsId(null);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileActionsId]);
 
   useEffect(() => {
     if (location.hash !== "#transactions-table") {
@@ -599,6 +618,23 @@ export function Transactions() {
     const validIds = new Set(needsReviewImports.map((item) => item.id));
     setSelectedImportIds((current) => current.filter((id) => validIds.has(id)));
   }, [needsReviewImports]);
+
+  useEffect(() => {
+    if (!editingTransaction) {
+      setEditSuggestion(null);
+      setEditSuggestionDismissed(false);
+      return;
+    }
+    setEditSuggestion(null);
+    setEditSuggestionDismissed(false);
+    const id = editingTransaction.id;
+    fetchTransactionSuggestion(id).then(({ suggestion }) => {
+      setEditSuggestion(suggestion);
+    }).catch(() => {
+      // suggestion is optional — fail silently
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingTransaction?.id]);
 
   function updateCategoryFilter(nextCategoryId: string) {
     setCategoryFilter(nextCategoryId);
@@ -975,6 +1011,22 @@ export function Transactions() {
     }
   }
 
+  async function handleQuickLink(txId: string, kind: "goal" | "debt", linkedId: string) {
+    setQuickLinkOpen(null);
+    setIsLinking(true);
+    const patch = kind === "goal"
+      ? { linkedGoalId: linkedId || null }
+      : { linkedDebtId: linkedId || null };
+    try {
+      await updateTransaction(txId, patch);
+      await reload();
+    } catch {
+      // silent — user can retry via full edit form
+    } finally {
+      setIsLinking(false);
+    }
+  }
+
   async function handleImportUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedImportFile) {
@@ -1073,6 +1125,20 @@ export function Transactions() {
       throw requestError instanceof Error ? requestError : new Error("Imported row review failed.");
     } finally {
       setReviewPendingIds((current) => current.filter((id) => id !== item.id));
+    }
+  }
+
+  function advanceToNextUnreviewed(afterId: string | null = null) {
+    const queue = (data?.imports ?? []).filter((item) => item.status === "unreviewed");
+    const afterIndex = afterId ? queue.findIndex((item) => item.id === afterId) : -1;
+    const next = queue[afterIndex + 1] ?? queue[0] ?? null;
+    if (next) {
+      setReviewFocusId(next.id);
+      setTimeout(() => {
+        document.getElementById(`import-row-${next.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+    } else {
+      setReviewFocusId(null);
     }
   }
 
@@ -1723,14 +1789,25 @@ export function Transactions() {
                     }}
                   >
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                      <label className="inline-flex items-center gap-3 text-sm font-medium text-raf-ink">
-                        <input
-                          type="checkbox"
-                          checked={needsReviewImports.length > 0 && selectedImportIds.length === needsReviewImports.length}
-                          onChange={toggleSelectAllImports}
-                        />
-                        <span>Select all</span>
-                      </label>
+                      <div className="flex items-center gap-3">
+                        <label className="inline-flex items-center gap-3 text-sm font-medium text-raf-ink">
+                          <input
+                            type="checkbox"
+                            checked={needsReviewImports.length > 0 && selectedImportIds.length === needsReviewImports.length}
+                            onChange={toggleSelectAllImports}
+                          />
+                          <span>Select all</span>
+                        </label>
+                        {needsReviewImports.length > 0 ? (
+                          <button
+                            type="button"
+                            className="rounded-full border border-[var(--border-color)] px-3 py-1 text-xs font-medium text-[var(--text-muted)] transition hover:bg-[var(--surface-elevated)]"
+                            onClick={() => advanceToNextUnreviewed(reviewFocusId)}
+                          >
+                            Next unreviewed ({needsReviewImports.length})
+                          </button>
+                        ) : null}
+                      </div>
                       {hasSelectedNeedsReview ? (
                         <div className="flex flex-wrap items-center gap-3">
                           <Badge tone="warning">{selectedNeedsReviewItems.length} selected</Badge>
@@ -1804,7 +1881,7 @@ export function Transactions() {
                       const canLinkFixedBill = data.fixedBills.length > 0;
 
                       return (
-                        <div key={item.id}>
+                        <div key={item.id} id={`import-row-${item.id}`} className={reviewFocusId === item.id ? "ring-2 ring-inset ring-[var(--primary-color)] rounded-lg" : undefined}>
                           <div className={`grid gap-2 px-4 py-2.5 lg:grid-cols-[36px,88px,minmax(0,320px),112px,132px,132px,112px,44px] lg:items-start ${isIgnored ? "bg-stone-50/70" : ""}`}>
                             <div className="flex items-center justify-center">
                               {needsReview ? (
@@ -2021,15 +2098,25 @@ export function Transactions() {
                               }}
                             >
                               {activeRule ? (
-                                <div className="mb-4 rounded-2xl border px-4 py-3" style={{ borderColor: "var(--border-color)", background: "var(--surface-color)" }}>
-                                  <div className="flex flex-wrap items-center justify-between gap-3">
-                                    <div className="text-sm text-[var(--text-muted)]">
-                                      {activeRule.auto_apply ? "Applied by rule" : "Suggestion available"}: "{activeRule.match_value ?? activeRule.normalized_description}".
+                                <div className="mb-4 rounded-2xl border-2 px-4 py-3" style={{ borderColor: "var(--primary-color)", background: "color-mix(in srgb, var(--primary-color) 6%, var(--surface-color))" }}>
+                                  <div className="flex flex-wrap items-start justify-between gap-3">
+                                    <div>
+                                      <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--primary-color)" }}>
+                                        {activeRule.auto_apply ? "Auto-applied by rule" : "Categorization suggestion"}
+                                      </div>
+                                      <div className="mt-0.5 text-sm font-medium text-[var(--text-strong)]">
+                                        "{activeRule.match_value ?? activeRule.normalized_description}"
+                                      </div>
                                     </div>
                                     <div className="flex flex-wrap gap-2">
                                     {needsReview ? (
-                                      <Button type="button" variant="secondary" onClick={() => applySuggestion(item)}>
-                                        Use suggestion
+                                      <Button type="button" variant="primary" onClick={() => applySuggestion(item)}>
+                                        Apply suggestion
+                                      </Button>
+                                    ) : null}
+                                    {!activeRule.auto_apply && needsReview ? (
+                                      <Button type="button" variant="secondary" onClick={() => { setEditingRuleId(activeRule.id); }}>
+                                        Remember this choice
                                       </Button>
                                     ) : null}
                                     {activeRule.auto_apply ? (
@@ -2335,16 +2422,21 @@ export function Transactions() {
 
       <Card
         title="Import History"
-        subtitle="A read-only record of all import events. Mutations happen in the Imported Rows Review panel above."
+        subtitle="A read-only record of past import batches."
+        actions={(
+          <Button type="button" variant="ghost" onClick={() => setIsHistoryExpanded((v) => !v)}>
+            {isHistoryExpanded ? "Collapse" : "Expand"}
+          </Button>
+        )}
       >
-        {isLoading ? <LoadingState label="Loading import history..." /> : null}
-        {!isLoading && (data?.importHistory?.length ?? 0) === 0 ? (
+        {!isHistoryExpanded ? null : isLoading ? <LoadingState label="Loading import history..." /> : null}
+        {isHistoryExpanded && !isLoading && (data?.importHistory?.length ?? 0) === 0 ? (
           <EmptyState
             title="No import history"
             message="Import history will appear here once you have uploaded bank statements or imported rows."
           />
         ) : null}
-        {!isLoading && (data?.importHistory?.length ?? 0) > 0 ? (
+        {isHistoryExpanded && !isLoading && (data?.importHistory?.length ?? 0) > 0 ? (
           <div className="divide-y" style={{ borderColor: "var(--border-color)" }}>
             {(data?.importHistory ?? []).map((item) => {
               const isSelected = selectedImportHistoryId === item.id;
@@ -2484,6 +2576,14 @@ export function Transactions() {
                   <span className="inline-block w-[88px] text-[0.74rem] font-bold text-[var(--text-strong)]">Amount</span>,
                   <span className="inline-block w-[110px] text-[0.68rem] text-[var(--text-muted)]">Actions</span>,
                 ]}
+                thClassNames={[
+                  undefined,
+                  undefined,
+                  "hidden sm:table-cell",
+                  "hidden sm:table-cell",
+                  undefined,
+                  "hidden sm:table-cell",
+                ]}
                 footer={(
                   <div className="flex items-center justify-between gap-4 text-sm text-stone-500">
                     <span>{visibleTransactions.length} item(s) on this page after search and sort</span>
@@ -2514,39 +2614,63 @@ export function Transactions() {
                     <tr key={transaction.id} className="transition hover:bg-[var(--surface-plain)]">
                       <td className="w-20 px-4 py-3 text-sm text-[var(--text-muted)]">{formatIsoDate(transaction.transactionDate)}</td>
                       <td className="px-4 py-3 text-sm font-medium text-[var(--text-strong)]">
-                        <div className="max-w-[420px] whitespace-normal break-words">{transaction.description}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="min-w-0 flex-1 max-w-[420px] whitespace-normal break-words">{transaction.description}</div>
+                          {!transaction.isImportOnly ? (
+                            <button
+                              type="button"
+                              aria-label="Transaction actions"
+                              className="sm:hidden inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xl text-[var(--text-muted)] transition hover:bg-[var(--surface-plain)] hover:text-[var(--text-strong)]"
+                              onClick={() => setMobileActionsId(transaction.id)}
+                            >
+                              ⋯
+                            </button>
+                          ) : null}
+                        </div>
                       </td>
-                      <td className="w-[120px] px-4 py-3 text-sm">
+                      <td className="hidden sm:table-cell w-[120px] px-4 py-3 text-sm">
                         {categoryLabel ? <Badge tone={categoryTone(categoryLabel)} className="px-2 py-0 text-[10px] font-medium leading-5">{categoryLabel}</Badge> : null}
                       </td>
-                      <td className="w-[100px] px-4 py-3 text-sm">
+                      <td className="hidden sm:table-cell w-[100px] px-4 py-3 text-sm">
                         <div className="text-[11px] text-[var(--text-muted)]">{typeSummary}</div>
                       </td>
                       <td className={`w-[88px] px-4 py-3 text-right text-sm font-bold ${amountClassName(transaction.direction)}`}>
                         {<Money value={transaction.amount} />}
                       </td>
-                      <td className="w-[110px] px-4 py-3 text-sm">
+                      {/* Desktop actions column */}
+                      <td className="hidden sm:table-cell w-[110px] px-4 py-3 text-sm">
                         {transaction.isImportOnly ? (
                           <div className="text-right text-xs text-[var(--text-muted)]">Review row</div>
                         ) : (
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              className="min-h-8 rounded-full px-3 py-1.5 text-xs"
-                              onClick={() => setEditingTransaction(mapTransactionToEditState(transaction))}
-                            >
-                              Edit
-                            </Button>
-                            <button
-                              type="button"
-                              aria-label="Delete transaction"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-muted)] transition hover:bg-rose-50 hover:text-rose-600"
-                              disabled={isDeletingTransaction === transaction.id}
-                              onClick={() => void handleDeleteTransaction(transaction as Transaction)}
-                            >
-                              {isDeletingTransaction === transaction.id ? "…" : "ðŸ—‘"}
-                            </button>
+                          <div className="flex flex-col items-end gap-1">
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                className="min-h-8 rounded-full px-3 py-1.5 text-xs"
+                                onClick={() => setEditingTransaction(mapTransactionToEditState(transaction))}
+                              >
+                                Edit
+                              </Button>
+                              <button
+                                type="button"
+                                aria-label="Delete transaction"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-muted)] transition hover:bg-rose-50 hover:text-rose-600"
+                                disabled={isDeletingTransaction === transaction.id}
+                                onClick={() => void handleDeleteTransaction(transaction as Transaction)}
+                              >
+                                {isDeletingTransaction === transaction.id ? "…" : "🗑"}
+                              </button>
+                            </div>
+                            <TransactionRowActions
+                              transaction={transaction}
+                              goals={data.goals}
+                              debts={data.debts}
+                              openQuickLink={quickLinkOpen}
+                              isLinking={isLinking}
+                              onOpenChange={setQuickLinkOpen}
+                              onLink={handleQuickLink}
+                            />
                           </div>
                         )}
                       </td>
@@ -2578,6 +2702,148 @@ export function Transactions() {
       </Card>
       </div>
 
+      {/* Mobile transaction action sheet */}
+      {(() => {
+        const mobileActionsTx = mobileActionsId !== null
+          ? visibleTransactions.find((t) => t.id === mobileActionsId) ?? null
+          : null;
+        if (!mobileActionsTx || mobileActionsTx.isImportOnly) return null;
+        const txGoals = data?.goals ?? [];
+        const txDebts = data?.debts ?? [];
+        return (
+          <div className="fixed inset-0 z-50 flex flex-col justify-end sm:hidden" role="dialog" aria-modal="true" aria-label="Transaction actions">
+            <div
+              className="absolute inset-0 bg-black/40"
+              onClick={() => setMobileActionsId(null)}
+            />
+            <div
+              className="relative rounded-t-3xl border-t border-[var(--border-color)] px-5 pb-8 pt-5 shadow-xl"
+              style={{ background: "var(--surface-color)" }}
+            >
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-[var(--text-strong)] line-clamp-2">{mobileActionsTx.description}</div>
+                  <div className={`mt-0.5 text-sm font-bold ${amountClassName(mobileActionsTx.direction)}`}>
+                    <Money value={mobileActionsTx.amount} />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Close actions"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-[var(--surface-plain)]"
+                  onClick={() => setMobileActionsId(null)}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="space-y-1">
+                {/* Edit */}
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--surface-plain)] active:bg-[var(--surface-elevated)]"
+                  onClick={() => {
+                    setMobileActionsId(null);
+                    setEditingTransaction(mapTransactionToEditState(mobileActionsTx as Transaction));
+                  }}
+                >
+                  <span className="text-base">✏️</span>
+                  Edit transaction
+                </button>
+                {/* Goal attribution */}
+                {txGoals.length > 0 ? (
+                  <div>
+                    {mobileActionsTx.linkedGoalId ? (
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--surface-plain)]"
+                        disabled={isLinking}
+                        onClick={() => {
+                          setMobileActionsId(null);
+                          void handleQuickLink(mobileActionsTx.id, "goal", "");
+                        }}
+                      >
+                        <span className="text-base">🎯</span>
+                        Remove goal link
+                      </button>
+                    ) : null}
+                    {txGoals.map((goal) => (
+                      <button
+                        key={goal.id}
+                        type="button"
+                        className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left text-sm text-[var(--text-strong)] hover:bg-[var(--surface-plain)]"
+                        disabled={isLinking}
+                        onClick={() => {
+                          setMobileActionsId(null);
+                          void handleQuickLink(mobileActionsTx.id, "goal", goal.id);
+                        }}
+                      >
+                        <span className="text-base">🎯</span>
+                        {mobileActionsTx.linkedGoalId === goal.id ? `✓ ${goal.name}` : `Apply to goal: ${goal.name}`}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {/* Debt attribution */}
+                {txDebts.length > 0 ? (
+                  <div>
+                    {mobileActionsTx.linkedDebtId ? (
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--surface-plain)]"
+                        disabled={isLinking}
+                        onClick={() => {
+                          setMobileActionsId(null);
+                          void handleQuickLink(mobileActionsTx.id, "debt", "");
+                        }}
+                      >
+                        <span className="text-base">💳</span>
+                        Remove debt link
+                      </button>
+                    ) : null}
+                    {txDebts.map((debt) => (
+                      <button
+                        key={debt.id}
+                        type="button"
+                        className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left text-sm text-[var(--text-strong)] hover:bg-[var(--surface-plain)]"
+                        disabled={isLinking}
+                        onClick={() => {
+                          setMobileActionsId(null);
+                          void handleQuickLink(mobileActionsTx.id, "debt", debt.id);
+                        }}
+                      >
+                        <span className="text-base">💳</span>
+                        {mobileActionsTx.linkedDebtId === debt.id ? `✓ ${debt.name}` : `Apply to debt: ${debt.name}`}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {/* Delete */}
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left text-sm font-medium text-rose-600 hover:bg-rose-50"
+                  disabled={isDeletingTransaction === mobileActionsTx.id}
+                  onClick={() => {
+                    setMobileActionsId(null);
+                    void handleDeleteTransaction(mobileActionsTx as Transaction);
+                  }}
+                >
+                  <span className="text-base">🗑</span>
+                  {isDeletingTransaction === mobileActionsTx.id ? "Deleting…" : "Delete transaction"}
+                </button>
+                {/* Cancel */}
+                <button
+                  type="button"
+                  className="mt-2 flex w-full items-center justify-center rounded-2xl border border-[var(--border-color)] px-4 py-3.5 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--surface-plain)]"
+                  onClick={() => setMobileActionsId(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {editingTransaction ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/35 px-4 py-6">
           <div
@@ -2599,6 +2865,39 @@ export function Transactions() {
                 X
               </Button>
             </div>
+
+            {editSuggestion && !editSuggestionDismissed && editSuggestion.category_id && editSuggestion.category_id !== editingTransaction.categoryId ? (
+              <div
+                className="mt-4 flex items-start justify-between gap-3 rounded-2xl border px-4 py-3"
+                style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}
+              >
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Remembered category</div>
+                  <div className="mt-0.5 text-sm text-[var(--text-strong)]">
+                    {categoryLookup.get(editSuggestion.category_id) ?? editSuggestion.category_id}
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded-full border border-[var(--border-color)] bg-[var(--surface-color)] px-3 py-1 text-xs font-medium text-[var(--text-strong)] hover:bg-[var(--surface-elevated)]"
+                    onClick={() => {
+                      setEditingTransaction((current) => current ? { ...current, categoryId: editSuggestion.category_id ?? "" } : current);
+                      setEditSuggestionDismissed(true);
+                    }}
+                  >
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full px-3 py-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-strong)]"
+                    onClick={() => setEditSuggestionDismissed(true)}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <Input

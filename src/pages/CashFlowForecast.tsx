@@ -625,6 +625,158 @@ function UpcomingExpensesSection({ onForecastInvalidated }: { onForecastInvalida
   );
 }
 
+function HeadroomShortfallCard({ forecast }: { forecast: CashFlowForecast }) {
+  const { headroom, shortfall } = forecast.summaryMetrics;
+  const hasHeadroom = headroom != null && headroom !== "" && parseMoney(headroom) !== 0;
+  const hasShortfall = shortfall != null && shortfall !== "" && parseMoney(shortfall) !== 0;
+  if (!hasHeadroom && !hasShortfall) return null;
+
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {hasHeadroom && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800/40 dark:bg-emerald-900/10">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Headroom</p>
+          <p className="mt-1 text-[22px] font-bold tabular-nums text-emerald-800 dark:text-emerald-300">
+            <Money value={headroom!} />
+          </p>
+          <p className="mt-0.5 text-[12px] text-emerald-700 dark:text-emerald-400">
+            Available above obligations this period
+          </p>
+        </div>
+      )}
+      {hasShortfall && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-800/40 dark:bg-red-900/10">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-red-700 dark:text-red-400">Shortfall</p>
+          <p className="mt-1 text-[22px] font-bold tabular-nums text-red-800 dark:text-red-300">
+            <Money value={shortfall!} />
+          </p>
+          <p className="mt-0.5 text-[12px] text-red-700 dark:text-red-400">
+            Obligations exceed available income this period
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FreshnessPanel({ forecast }: { forecast: CashFlowForecast }) {
+  const { freshnessBreakdown, daysSinceOldestBalance, accountBalanceAsOf } = forecast.assumptions;
+  if (!freshnessBreakdown || freshnessBreakdown.length === 0) return null;
+
+  const oldestAge = daysSinceOldestBalance;
+  const staleThreshold = 3;
+
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="text-[13px] font-semibold uppercase tracking-wide text-[var(--text-subtle)]">
+          Balance Freshness
+        </h3>
+        {accountBalanceAsOf && (
+          <span className="text-[12px] text-[var(--text-subtle)]">
+            As of {formatIsoDate(accountBalanceAsOf)}
+          </span>
+        )}
+      </div>
+      {oldestAge != null && oldestAge > staleThreshold && (
+        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800 dark:border-amber-800/40 dark:bg-amber-900/10 dark:text-amber-300">
+          Oldest balance is {oldestAge} day{oldestAge === 1 ? "" : "s"} old — may not include recent transactions.
+          Forecast accuracy improves with fresher data; older balances remain the best available until refreshed.
+        </div>
+      )}
+      <div className="divide-y divide-[var(--border)]">
+        {freshnessBreakdown.map((acct) => (
+          <div key={acct.accountId} className="flex items-center gap-3 py-2.5 text-[13px]">
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-[var(--text-primary)]">{acct.accountName}</p>
+              <p className="text-[11px] text-[var(--text-subtle)]">{acct.accountType}</p>
+            </div>
+            <div className="text-right">
+              <p className="font-semibold tabular-nums text-[var(--text-primary)]"><Money value={acct.balance} /></p>
+              {acct.balanceAgeInDays != null && (
+                <p className={`text-[11px] ${acct.balanceAgeInDays > staleThreshold ? "text-amber-600 dark:text-amber-400" : "text-[var(--text-subtle)]"}`}>
+                  {acct.balanceAgeInDays === 0 ? "today" : `${acct.balanceAgeInDays}d ago`}
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AccountCompositionPanel({ forecast }: { forecast: CashFlowForecast }) {
+  const { accountBreakdown } = forecast.assumptions;
+  if (!accountBreakdown || accountBreakdown.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-5">
+      <h3 className="mb-3 text-[13px] font-semibold uppercase tracking-wide text-[var(--text-subtle)]">
+        Account Composition
+      </h3>
+      <div className="divide-y divide-[var(--border)]">
+        {accountBreakdown.map((acct, i) => (
+          <div key={acct.accountId ?? i} className="flex items-center gap-3 py-2.5 text-[13px]">
+            <div className="min-w-0 flex-1">
+              <p className="font-medium capitalize text-[var(--text-primary)]">{acct.type.replace(/_/g, " ")}</p>
+            </div>
+            <div className="text-right">
+              <p className="font-semibold tabular-nums text-[var(--text-primary)]"><Money value={acct.balance} /></p>
+              {acct.balanceAsOf && (
+                <p className="text-[11px] text-[var(--text-subtle)]">as of {formatIsoDate(acct.balanceAsOf)}</p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CoverageGapWarning({ forecast }: { forecast: CashFlowForecast }) {
+  const gaps = forecast.assumptions.coverageGaps;
+  if (!gaps || gaps.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-800/40 dark:bg-amber-900/10">
+      <h3 className="mb-2 text-[13px] font-semibold text-amber-800 dark:text-amber-300">
+        Coverage gaps ({gaps.length})
+      </h3>
+      <p className="mb-3 text-[12px] text-amber-700 dark:text-amber-400">
+        The following accounts have payment activity that RAF cannot fully attribute. The forecast excludes these obligations.
+      </p>
+      <ul className="space-y-1.5">
+        {gaps.map((gap) => (
+          <li key={gap.accountId} className="flex items-center gap-2 text-[12px] text-amber-700 dark:text-amber-400">
+            <span className="font-medium">{gap.name}</span>
+            <span className="text-amber-500">·</span>
+            <span className="capitalize">{gap.accountType.replace(/_/g, " ")}</span>
+            <span className="ml-auto rounded-full bg-amber-200/50 px-1.5 py-0.5 text-[10px] font-medium dark:bg-amber-800/30">
+              payment coverage unknown
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function PendingReviewWarning({ forecast }: { forecast: CashFlowForecast }) {
+  const count = forecast.assumptions.pendingReviewCount;
+  if (!count || count === 0) return null;
+
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-800/40 dark:bg-blue-900/10">
+      <span className="mt-0.5 text-[16px] text-blue-500">ℹ</span>
+      <p className="text-[13px] text-blue-800 dark:text-blue-300">
+        <strong>{count} transaction{count === 1 ? "" : "s"} pending review.</strong>{" "}
+        Unreviewed transactions may affect category baselines used in this forecast.
+      </p>
+    </div>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export function CashFlowForecast() {
@@ -667,6 +819,9 @@ export function CashFlowForecast() {
 
       {forecast && !isLoading && (
         <div className="space-y-5">
+          {/* Pending review advisory */}
+          <PendingReviewWarning forecast={forecast} />
+
           {/* Deficit warning — primary alert when balance goes negative */}
           {forecast.summaryMetrics.firstProjectedDeficitDate && (
             <DeficitBanner date={forecast.summaryMetrics.firstProjectedDeficitDate} />
@@ -731,12 +886,21 @@ export function CashFlowForecast() {
             ))}
           </div>
 
+          {/* Headroom / shortfall — from summaryMetrics */}
+          <HeadroomShortfallCard forecast={forecast} />
+
           {/* Confirmed / expected / estimated totals */}
           <ConfidenceTotals forecast={forecast} />
 
           <BalanceChart forecast={forecast} />
           <DailyTimeline forecast={forecast} />
           <AssumptionsPanel forecast={forecast} />
+
+          {/* Account-level freshness breakdown */}
+          <FreshnessPanel forecast={forecast} />
+
+          {/* Account type composition */}
+          <AccountCompositionPanel forecast={forecast} />
 
           {forecast.pressurePoints.length > 0 && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-800/40 dark:bg-amber-900/10">
@@ -758,6 +922,9 @@ export function CashFlowForecast() {
               </ul>
             </div>
           )}
+
+          {/* Coverage gaps — accounts with unknown payment attribution */}
+          <CoverageGapWarning forecast={forecast} />
 
           {/* Upcoming expenses — manage planned one-time expenses */}
           <UpcomingExpensesSection onForecastInvalidated={reload} />

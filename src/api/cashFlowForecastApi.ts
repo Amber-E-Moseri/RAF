@@ -124,7 +124,7 @@ export interface CashFlowForecast {
     upcomingExpensesCount: number;
     obligationCategoriesExcluded: string[];
     categoryBaselines: CategoryBaseline[];
-    accountBreakdown?: AccountFreshnessInfo[];
+    freshnessBreakdown?: AccountFreshnessInfo[];
     coverageGaps?: CoverageGap[];
     pendingReviewCount?: number;
   };

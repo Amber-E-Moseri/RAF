@@ -25,14 +25,14 @@ export interface ImportRuleDraft {
 
 export function buildImportRuleDraft(rule: ImportReviewRule | ImportReviewSuggestion): ImportRuleDraft {
   return {
-    matchValue: rule.match_value,
-    matchType: rule.match_type,
-    classificationType: rule.classification_type,
+    matchValue: rule.match_value ?? "",
+    matchType: rule.match_type ?? "contains",
+    classificationType: rule.classification_type as ImportClassificationPayload["classification_type"],
     categoryId: rule.category_id ?? "",
     debtId: rule.linked_debt_id ?? "",
     fixedBillId: rule.linked_fixed_bill_id ?? "",
     goalId: rule.linked_goal_id ?? "",
-    ruleType: rule.rule_type,
+    ruleType: rule.rule_type ?? "suggestion",
     autoApply: rule.auto_apply,
   };
 }

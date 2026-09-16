@@ -442,11 +442,7 @@ export function Dashboard() {
         </div>
       ) : null}
       {nextStepState?.kind === "month-reminder" ? <MonthReminderBanner monthKey={nextStepState.monthKey} /> : null}
-      {(nextStepState?.kind === "income-transactions-open" ||
-        nextStepState?.kind === "income-no-transactions" ||
-        nextStepState?.kind === "month-reminder") ? (
-        <FinancialAttentionAggregator items={attentionData?.items ?? []} />
-      ) : null}
+      <FinancialAttentionAggregator items={attentionData?.items ?? []} />
       {eligibleForReview.length > 0 ? (
         <div id="transaction-review">
         <Card
