@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes, PropsWithChildren } from "react";
 
 function buttonClasses(variant: "primary" | "secondary" | "ghost", disabled?: boolean) {
-  const base = "inline-flex min-h-[44px] items-center justify-center rounded-[11px] px-[13px] py-[9px] text-[11.5px] font-semibold tracking-[0.01em] transition duration-150";
+  const base = "inline-flex min-h-[44px] items-center justify-center rounded-[11px] px-[13px] py-[9px] text-[11.5px] font-[850] tracking-[0.01em] transition duration-150";
 
   if (disabled) {
     return `${base} cursor-not-allowed border border-[var(--border-subtle)] bg-[var(--surface-muted)] text-[var(--text-subtle)]`;

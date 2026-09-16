@@ -9,22 +9,20 @@ interface TableProps {
 
 export function Table({ headers, thClassNames, footer, tableClassName = "", children }: PropsWithChildren<TableProps>) {
   return (
-    <div className="ui-table">
-      <div className="overflow-x-auto">
-        <table className={`min-w-full divide-y divide-stone-200/90 ${tableClassName}`.trim()}>
-          <thead>
-            <tr>
-              {headers.map((header, index) => (
-                <th key={index} className={["px-4 py-3.5 text-left text-[0.7rem] font-semibold uppercase text-stone-500 first:pl-5 last:pr-5", thClassNames?.[index] ?? ""].filter(Boolean).join(" ")}>
-                  {header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-stone-100">{children}</tbody>
-        </table>
-      </div>
-      {footer ? <div className="border-t border-stone-200 bg-stone-50/80 px-5 py-3">{footer}</div> : null}
+    <div className="table-wrap">
+      <table className={`w-full border-collapse ${tableClassName}`.trim()}>
+        <thead>
+          <tr>
+            {headers.map((header, index) => (
+              <th key={index} className={["px-[13px] py-[11px] text-left text-[8.5px] font-[900] uppercase tracking-[0.06em] text-[var(--text-secondary)] bg-[#fafaf8]", thClassNames?.[index] ?? ""].filter(Boolean).join(" ")}>
+                {header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>{children}</tbody>
+      </table>
+      {footer ? <div className="border-t border-[#f0efeb] bg-transparent px-[13px] py-[11px]">{footer}</div> : null}
     </div>
   );
 }
