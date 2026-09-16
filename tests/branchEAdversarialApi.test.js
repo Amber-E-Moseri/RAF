@@ -113,6 +113,7 @@ before(async () => {
       POSTGRES_CONNECTION_STRING: connectionString,
       RAF_AUTH_REQUIRED: 'true',
       JWT_SECRET: jwtSecret,
+      RAF_AUTH_RATE_LIMIT_MAX: '200',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

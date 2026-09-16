@@ -1023,7 +1023,7 @@ export function Transactions() {
   function buildImportClassificationPayload(item: ImportedTransaction, draftOverride?: ImportReviewDraft) {
     const draft = draftOverride ?? getReviewDraft(item);
     if (requiresCategorySelection(draft.classificationType) && !draft.categoryId) {
-      throw new Error("Select a category before approving this imported row.");
+      throw new Error("Transaction must end in an allocation bucket before approving this imported row.");
     }
     if (requiresDebtSelection(draft.classificationType) && !draft.debtId) {
       throw new Error("Select a debt before saving this imported row.");
@@ -2096,7 +2096,7 @@ export function Transactions() {
                                           disabled={isPending || isBulkReviewing}
                                           onChange={(event) => updateReviewDraft(item, { categoryId: event.target.value })}
                                         >
-                                          <option value="">Select a category</option>
+                                          <option value="">Select allocation bucket</option>
                                           {data.categories.map((category) => (
                                             <option key={category.id} value={category.id}>{category.label}</option>
                                           ))}
@@ -2170,6 +2170,9 @@ export function Transactions() {
                                       />
                                     </div>
 
+                                    <div className="md:col-span-2">
+                                      <span className="mb-2 block text-sm font-medium text-raf-ink">Remember this choice</span>
+                                    </div>
                                     <div className="grid gap-3 md:col-span-2 md:grid-cols-2">
                                       <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700">
                                         <input

@@ -821,7 +821,7 @@ export function MonthlyReview() {
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
             <div>
-              <div className="text-sm font-semibold text-[var(--text-strong)]">Mass Apply Review</div>
+              <div title="Mass Apply Review" className="text-sm font-semibold text-[var(--text-strong)]">Mass Apply Review</div>
               <div className="mt-1 text-[12px] text-[var(--text-muted)]">
                 Apply the same closeout flow across a date range when you need to catch up several months.
               </div>
@@ -840,24 +840,24 @@ export function MonthlyReview() {
             <div className="space-y-4 rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
               <div className="grid gap-4 lg:grid-cols-[1fr,1fr,auto]">
                 <Input
-                  label="Start date"
+                  label="Start month"
                   name="batchStartMonth"
                   type="date"
                   value={batchStartMonth}
                   error={fieldErrors.batchStartMonth}
-                  onBlur={() => setFieldErrors((current) => ({ ...current, batchStartMonth: validateIsoDate(batchStartMonth, "Start date") }))}
+                  onBlur={() => setFieldErrors((current) => ({ ...current, batchStartMonth: validateIsoDate(batchStartMonth, "Start month") }))}
                   onChange={(event) => {
                     setBatchStartMonth(event.target.value);
                     setFieldErrors((current) => ({ ...current, batchStartMonth: null, batchEndMonth: null }));
                   }}
                 />
                 <Input
-                  label="End date"
+                  label="End month"
                   name="batchEndMonth"
                   type="date"
                   value={batchEndMonth}
                   error={fieldErrors.batchEndMonth}
-                  onBlur={() => setFieldErrors((current) => ({ ...current, batchEndMonth: validateIsoDate(batchEndMonth, "End date") }))}
+                  onBlur={() => setFieldErrors((current) => ({ ...current, batchEndMonth: validateIsoDate(batchEndMonth, "End month") }))}
                   onChange={(event) => {
                     setBatchEndMonth(event.target.value);
                     setFieldErrors((current) => ({ ...current, batchStartMonth: null, batchEndMonth: null }));

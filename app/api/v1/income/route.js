@@ -22,6 +22,7 @@ export async function POST(request, context = {}) {
     const result = await createIncome({
       db: getDb(context),
       householdId: getHouseholdId(request, context),
+      userId: context?.user?.id ?? context?.userId ?? null,
       input,
       idempotencyKey: request.headers.get('Idempotency-Key'),
     });
