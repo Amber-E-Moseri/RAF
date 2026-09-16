@@ -379,6 +379,7 @@ export function Transactions() {
   const [quickLinkOpen, setQuickLinkOpen] = useState<QuickLinkState | null>(null);
   const [isLinking, setIsLinking] = useState(false);
   const [reviewFocusId, setReviewFocusId] = useState<string | null>(null);
+  const [mobileActionsId, setMobileActionsId] = useState<string | null>(null);
   const cursor = cursorHistory[cursorHistory.length - 1];
 
   useEffect(() => {
@@ -407,6 +408,15 @@ export function Transactions() {
     setCategoryFilter(categorySlugFilterFromUrl ? "" : categoryFilterFromUrl);
     setCursorHistory([null]);
   }, [categoryFilterFromUrl, categorySlugFilterFromUrl]);
+
+  useEffect(() => {
+    if (!mobileActionsId) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setMobileActionsId(null);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileActionsId]);
 
   useEffect(() => {
     if (location.hash !== "#transactions-table") {
@@ -2566,6 +2576,14 @@ export function Transactions() {
                   <span className="inline-block w-[88px] text-[0.74rem] font-bold text-[var(--text-strong)]">Amount</span>,
                   <span className="inline-block w-[110px] text-[0.68rem] text-[var(--text-muted)]">Actions</span>,
                 ]}
+                thClassNames={[
+                  undefined,
+                  undefined,
+                  "hidden sm:table-cell",
+                  "hidden sm:table-cell",
+                  undefined,
+                  "hidden sm:table-cell",
+                ]}
                 footer={(
                   <div className="flex items-center justify-between gap-4 text-sm text-stone-500">
                     <span>{visibleTransactions.length} item(s) on this page after search and sort</span>
@@ -2596,18 +2614,31 @@ export function Transactions() {
                     <tr key={transaction.id} className="transition hover:bg-[var(--surface-plain)]">
                       <td className="w-20 px-4 py-3 text-sm text-[var(--text-muted)]">{formatIsoDate(transaction.transactionDate)}</td>
                       <td className="px-4 py-3 text-sm font-medium text-[var(--text-strong)]">
-                        <div className="max-w-[420px] whitespace-normal break-words">{transaction.description}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="min-w-0 flex-1 max-w-[420px] whitespace-normal break-words">{transaction.description}</div>
+                          {!transaction.isImportOnly ? (
+                            <button
+                              type="button"
+                              aria-label="Transaction actions"
+                              className="sm:hidden inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xl text-[var(--text-muted)] transition hover:bg-[var(--surface-plain)] hover:text-[var(--text-strong)]"
+                              onClick={() => setMobileActionsId(transaction.id)}
+                            >
+                              ⋯
+                            </button>
+                          ) : null}
+                        </div>
                       </td>
-                      <td className="w-[120px] px-4 py-3 text-sm">
+                      <td className="hidden sm:table-cell w-[120px] px-4 py-3 text-sm">
                         {categoryLabel ? <Badge tone={categoryTone(categoryLabel)} className="px-2 py-0 text-[10px] font-medium leading-5">{categoryLabel}</Badge> : null}
                       </td>
-                      <td className="w-[100px] px-4 py-3 text-sm">
+                      <td className="hidden sm:table-cell w-[100px] px-4 py-3 text-sm">
                         <div className="text-[11px] text-[var(--text-muted)]">{typeSummary}</div>
                       </td>
                       <td className={`w-[88px] px-4 py-3 text-right text-sm font-bold ${amountClassName(transaction.direction)}`}>
                         {<Money value={transaction.amount} />}
                       </td>
-                      <td className="w-[110px] px-4 py-3 text-sm">
+                      {/* Desktop actions column */}
+                      <td className="hidden sm:table-cell w-[110px] px-4 py-3 text-sm">
                         {transaction.isImportOnly ? (
                           <div className="text-right text-xs text-[var(--text-muted)]">Review row</div>
                         ) : (
@@ -2670,6 +2701,148 @@ export function Transactions() {
         ) : null}
       </Card>
       </div>
+
+      {/* Mobile transaction action sheet */}
+      {(() => {
+        const mobileActionsTx = mobileActionsId !== null
+          ? visibleTransactions.find((t) => t.id === mobileActionsId) ?? null
+          : null;
+        if (!mobileActionsTx || mobileActionsTx.isImportOnly) return null;
+        const txGoals = data?.goals ?? [];
+        const txDebts = data?.debts ?? [];
+        return (
+          <div className="fixed inset-0 z-50 flex flex-col justify-end sm:hidden" role="dialog" aria-modal="true" aria-label="Transaction actions">
+            <div
+              className="absolute inset-0 bg-black/40"
+              onClick={() => setMobileActionsId(null)}
+            />
+            <div
+              className="relative rounded-t-3xl border-t border-[var(--border-color)] px-5 pb-8 pt-5 shadow-xl"
+              style={{ background: "var(--surface-color)" }}
+            >
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-[var(--text-strong)] line-clamp-2">{mobileActionsTx.description}</div>
+                  <div className={`mt-0.5 text-sm font-bold ${amountClassName(mobileActionsTx.direction)}`}>
+                    <Money value={mobileActionsTx.amount} />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Close actions"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] hover:bg-[var(--surface-plain)]"
+                  onClick={() => setMobileActionsId(null)}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="space-y-1">
+                {/* Edit */}
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--surface-plain)] active:bg-[var(--surface-elevated)]"
+                  onClick={() => {
+                    setMobileActionsId(null);
+                    setEditingTransaction(mapTransactionToEditState(mobileActionsTx as Transaction));
+                  }}
+                >
+                  <span className="text-base">✏️</span>
+                  Edit transaction
+                </button>
+                {/* Goal attribution */}
+                {txGoals.length > 0 ? (
+                  <div>
+                    {mobileActionsTx.linkedGoalId ? (
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--surface-plain)]"
+                        disabled={isLinking}
+                        onClick={() => {
+                          setMobileActionsId(null);
+                          void handleQuickLink(mobileActionsTx.id, "goal", "");
+                        }}
+                      >
+                        <span className="text-base">🎯</span>
+                        Remove goal link
+                      </button>
+                    ) : null}
+                    {txGoals.map((goal) => (
+                      <button
+                        key={goal.id}
+                        type="button"
+                        className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left text-sm text-[var(--text-strong)] hover:bg-[var(--surface-plain)]"
+                        disabled={isLinking}
+                        onClick={() => {
+                          setMobileActionsId(null);
+                          void handleQuickLink(mobileActionsTx.id, "goal", goal.id);
+                        }}
+                      >
+                        <span className="text-base">🎯</span>
+                        {mobileActionsTx.linkedGoalId === goal.id ? `✓ ${goal.name}` : `Apply to goal: ${goal.name}`}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {/* Debt attribution */}
+                {txDebts.length > 0 ? (
+                  <div>
+                    {mobileActionsTx.linkedDebtId ? (
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--surface-plain)]"
+                        disabled={isLinking}
+                        onClick={() => {
+                          setMobileActionsId(null);
+                          void handleQuickLink(mobileActionsTx.id, "debt", "");
+                        }}
+                      >
+                        <span className="text-base">💳</span>
+                        Remove debt link
+                      </button>
+                    ) : null}
+                    {txDebts.map((debt) => (
+                      <button
+                        key={debt.id}
+                        type="button"
+                        className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left text-sm text-[var(--text-strong)] hover:bg-[var(--surface-plain)]"
+                        disabled={isLinking}
+                        onClick={() => {
+                          setMobileActionsId(null);
+                          void handleQuickLink(mobileActionsTx.id, "debt", debt.id);
+                        }}
+                      >
+                        <span className="text-base">💳</span>
+                        {mobileActionsTx.linkedDebtId === debt.id ? `✓ ${debt.name}` : `Apply to debt: ${debt.name}`}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {/* Delete */}
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left text-sm font-medium text-rose-600 hover:bg-rose-50"
+                  disabled={isDeletingTransaction === mobileActionsTx.id}
+                  onClick={() => {
+                    setMobileActionsId(null);
+                    void handleDeleteTransaction(mobileActionsTx as Transaction);
+                  }}
+                >
+                  <span className="text-base">🗑</span>
+                  {isDeletingTransaction === mobileActionsTx.id ? "Deleting…" : "Delete transaction"}
+                </button>
+                {/* Cancel */}
+                <button
+                  type="button"
+                  className="mt-2 flex w-full items-center justify-center rounded-2xl border border-[var(--border-color)] px-4 py-3.5 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--surface-plain)]"
+                  onClick={() => setMobileActionsId(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {editingTransaction ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/35 px-4 py-6">

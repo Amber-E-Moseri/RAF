@@ -110,11 +110,11 @@ function actualVsPlannedPaymentMessage(plannedPayment: string, actualPayment: st
 }
 
 export function Debts() {
-  const { activeRange } = usePeriod();
+  const { activeRange, isCurrentMonth } = usePeriod();
   // Debt balances stay current-only; month switching does not backdate debt snapshots.
   const { data, error, isLoading, reload } = useAsyncData(() => getDebts(), []);
   const transactionsData = useAsyncData(
-    () => getTransactions({ from: activeRange.from, to: activeRange.to, limit: 200 }),
+    () => getTransactions({ from: activeRange.from, to: activeRange.to, limit: 100 }),
     [activeRange.from, activeRange.to],
   );
   const [form, setForm] = useState({
@@ -541,6 +541,12 @@ export function Debts() {
 
       {isLoading ? <LoadingState label="Loading debt accounts..." /> : null}
       {!isLoading && error ? <ErrorState title="Failed to fetch debts" message={error} onRetry={() => void reload()} /> : null}
+      {!isCurrentMonth && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" style={{ background: "color-mix(in srgb, #fef3c7 80%, transparent)" }}>
+          <strong>Viewing a past period.</strong> Debt balances shown below reflect the current outstanding balance, not the balance at the end of this period. RAF does not snapshot historical debt balances.
+        </div>
+      )}
+
       {!isLoading && !error && data ? (
         <>
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

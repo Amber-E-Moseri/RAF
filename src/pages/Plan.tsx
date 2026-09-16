@@ -1,6 +1,7 @@
 import { useSearchParams } from "react-router-dom";
 
 import { BufferStatusCard } from "../components/plan/BufferStatusCard";
+import { PlanExecutionCard } from "../components/plan/PlanExecutionCard";
 import { PageShell } from "../components/layout/PageShell";
 import { AllocationPreferences } from "./AllocationPreferences";
 import { Debts } from "./Debts";
@@ -45,7 +46,12 @@ export function Plan() {
       </nav>
 
       <div className="tab-content-wrapper">
-        {validTab === "allocations" && <AllocationPreferences />}
+        {validTab === "allocations" && (
+          <>
+            <AllocationPreferences />
+            <PlanExecutionCard />
+          </>
+        )}
         {validTab === "goals" && <Goals />}
         {validTab === "debts" && <Debts />}
       </div>

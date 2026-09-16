@@ -568,7 +568,7 @@ export function Goals() {
                         />
                       </div>
                       {projectedMonths !== null ? (
-                        <p className="mt-2 text-xs text-[var(--text-muted)]">~{projectedMonths} mo at current pace</p>
+                        <p className="mt-2 text-xs text-[var(--text-muted)]">~{projectedMonths} mo if this period's pace holds</p>
                       ) : null}
                     </div>
                     {goal.notes ? (
@@ -813,7 +813,7 @@ export function Goals() {
                   </div>
                   {selectedGoalProjectedMonths !== null ? (
                     <div>
-                      <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Projected to target</div>
+                      <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Est. at this pace</div>
                       <div className="mt-1 text-base font-semibold text-[var(--text-strong)]">~{selectedGoalProjectedMonths} month{selectedGoalProjectedMonths === 1 ? "" : "s"}</div>
                     </div>
                   ) : null}
