@@ -42,12 +42,15 @@ Each transition is idempotent, versioned, and audited.
 
 | Type | Effect |
 |------|--------|
-| `roll_to_next_buffer` | Creates IncomeEntry for next month's buffer allocation |
-| `apply_to_goal` | Creates Transaction linked to goal |
-| `apply_to_debt` | Creates Transaction + DebtPayment entry |
+| `apply_to_goal` | Creates Transaction linked to goal (existing canonical action) |
+| `apply_to_debt` | Creates Transaction + DebtPayment entry (existing canonical action) |
 | `return_to_plan` | No action (funds remain unallocated) |
 
-**Not Implemented:** Automatic disposition, generic rollover, buffer→savings movement
+**Deferred (Not in Wave C):**
+- roll_to_next_buffer (buffer carry-forward to next month)
+- Automatic disposition
+- Generic budget rollover
+- Buffer→savings floor movement
 
 ---
 

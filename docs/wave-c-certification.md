@@ -31,7 +31,8 @@ Wave C successfully implements period-aware month lifecycle closure for RAF. All
 - State machine: OPEN → REVIEWING → CLOSED → REOPENED
 - Snapshot capture (income, allocations, buffer, goals, debts, transaction review summary)
 - Close readiness warnings & blockers
-- Buffer disposition (4 types: roll_to_next, apply_to_goal, apply_to_debt, return_to_plan)
+- Buffer disposition (3 types: apply_to_goal, apply_to_debt, return_to_plan)
+  - Note: roll_to_next_buffer removed (deferred feature, violates scope freeze)
 - Reopen with version tracking and role-based permissions
 - Idempotency guarantees (no double-application)
 
