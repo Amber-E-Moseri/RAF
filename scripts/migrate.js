@@ -49,6 +49,7 @@ const RAF_MIGRATIONS = [
   '20260913000000_debt_financial_account_link.sql',
   '20260914000000_fix_debt_financial_account_fk_no_action.sql',
   '20260914000001_transaction_canonical_review.sql',
+  '20260916000000_add_monthly_closes.sql',
 ];
 
 const migrationsDir = path.join(
