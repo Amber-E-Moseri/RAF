@@ -14,7 +14,7 @@ export function Table({ headers, thClassNames, footer, tableClassName = "", chil
         <thead>
           <tr>
             {headers.map((header, index) => (
-              <th key={index} className={["px-[13px] py-[11px] text-left text-[8.5px] font-[900] uppercase tracking-[0.06em] text-[var(--text-secondary)] bg-[#fafaf8]", thClassNames?.[index] ?? ""].filter(Boolean).join(" ")}>
+              <th key={index} className={["px-4 py-3.5 text-left text-[8.5px] font-[900] uppercase tracking-[0.06em] text-[var(--text-secondary)] bg-[#fafaf8]", thClassNames?.[index] ?? ""].filter(Boolean).join(" ")}>
                 {header}
               </th>
             ))}
