@@ -130,18 +130,46 @@ User message → Anthropic API (model) → tool_use blocks
 |---|---|---|---|
 | B1 | Test 3.6: `get_upcoming_obligations` passed `{ days: 14 }` — handler requires 30/60/90 | TEST_BUG | Fixed: changed to `{ days: 30 }` |
 | B2 | Test 3.6: `create_scenario` missing `categorySlug` parameter | TEST_BUG | Fixed: added `categorySlug: 'personal_spending'` |
-| B3 | Test 4.6: assertion on `income.total_received` — handler accesses `periodSummary.income?.total` but `buildDashboardPeriods` returns `incomeTotal` | PRODUCT_DEFECT | Test assertion updated to verify `goals[0].target` instead; defect noted in report |
+| B3 | Test 4.6: assertion on `income.total_received` — handler accesses `periodSummary.income?.total` but `buildDashboardPeriods` returns `incomeTotal` | PRODUCT_DEFECT | **FIXED in Phase 7 closure patch** (see below) |
 | B4 | Section 5 `before()` hook at file level — cascades failure to all suites | TEST_BUG | Fixed: moved `before()` and `after()` inside the `describe()` callback |
 
-### B3 Detail — PRODUCT_DEFECT: `handleGetCurrentPlan` income field name mismatch
+### B3 Detail — PRODUCT_DEFECT: Remi current-plan income field mapping (CLOSURE PATCH)
 
-`handleGetCurrentPlan` in `lib/remi/toolHandlers.js` (lines 67–68) accesses:
+**Defect:** `handleGetCurrentPlan` in `lib/remi/toolHandlers.js` accessed stale property paths:
 ```javascript
+// BEFORE (incorrect)
 total_received: periodSummary.income?.total ?? '0.00',
 total_allocated: periodSummary.allocations?.total ?? '0.00',
+total_spending: periodSummary.spending?.total ?? '0.00',
 ```
 
-`buildDashboardPeriods` in `lib/raf/reporting.js` returns periods with `incomeTotal` (flat key), not `income.total`. As a result, `income.total_received` always returns `'0.00'` regardless of actual income. This defect is in the Remi handler's read path only — it does not affect security properties or tenant isolation. The security invariant tested by 4.6 ("Remi reads live data, not a stale snapshot") was verified via `result.goals[0].target` instead.
+`buildDashboardPeriods` in `lib/raf/reporting.js` returns:
+```javascript
+incomeTotal,        // not income.total
+spendingTotal,      // not spending.total
+// no allocations field at period level
+```
+
+As a result, `income.total_received` always returned `'0.00'` regardless of actual income.
+
+**Root Cause:** Consumer (`handleGetCurrentPlan`, `handleGetAvailableResources`, `propose_allocation_change`) accessed property names that did not exist in the producer output (`buildDashboardPeriods`). No property path was updated when the dashboard report structure changed.
+
+**Fix Applied (Phase 7 closure patch):**
+1. `handleGetCurrentPlan`: Changed `periodSummary.income?.total` → `periodSummary.incomeTotal`
+2. `handleGetCurrentPlan`: Changed `periodSummary.spending?.total` → `periodSummary.spendingTotal`
+3. `handleGetCurrentPlan`: Changed `periodSummary.allocations?.total` → sum of `monthly_bucket_progress[].allocated_this_month`
+4. `handleGetAvailableResources`: Same corrections applied; unallocated income now correctly calculated from bucket allocations
+5. `propose_allocation_change`: Same corrections applied; surplus calculation now uses correct property names
+
+**Regression Tests Added:**
+- `4.6`: Restored direct income assertion ($3000.00); verified Remi reads live income data
+- `4.6.1`: Zero legitimate income returns `"0.00"`, not a field-mapping failure
+- `4.6.2`: Multiple income entries ($1000 + $750 + $1250) aggregate to `$3000.00`
+- `4.6.3`: Tenant isolation preserved — workspace A and B read their own income independently
+
+**Impact:** Financial context correctness for Remi. No security breach; Remi still reads only from the authorized workspace. No write-authority change.
+
+**Verification:** All 51 Phase 7 tests pass (51 = 48 original + 3 regression). Full regression: 1513 passing / 0 failing / 26 skipped.
 
 ---
 
@@ -158,13 +186,50 @@ total_allocated: periodSummary.allocations?.total ?? '0.00',
 | Phase 6 — Month Lifecycle | 19 | 19 | 0 | — |
 | Phase 6 — Cash-Flow Forecast | 20 | 20 | 0 | — |
 | Phase 6 — Scenario Isolation | 26 | 26 | 0 | — |
-| **Phase 7 — Security, Remi & Collisions** | **48** | **48** | **0** | **—** |
+| **Phase 7 — Security, Remi & Collisions (base)** | **48** | **48** | **0** | **—** |
+| **Phase 7 — Closure Patch (income regression)** | **3** | **3** | **0** | **—** |
 | Postgres RLS (branchERlsEnforcement) | — | — | — | 26 (gated) |
-| **Total (all test files)** | **1530** | **1504** | **0** | **26** |
+| **Total (all test files)** | **1539** | **1513** | **0** | **26** |
 
-Phase 6 baseline was 1425 total / 1399 pass / 0 fail / 26 skip. Phase 7 adds 48 net new passing tests (plus additional coverage from `monthlyClose.test.js` and `branchEAdversarialApi.test.js` which were in earlier phases). No regressions. Baseline maintained.
+Phase 6 locked baseline: 1425 total / 1399 pass / 0 fail / 26 skip.
 
-**Note on intermittent failures:** During test development, `tests/monthlyClose.test.js` tests C.39 (`duplicate close request is safe`) and C.41 (`simultaneous buffer disposition`) and `tests/branchEAdversarialApi.test.js` tests (Phase 16/17) showed intermittent failures. C.39/C.41 are inherently timing-sensitive concurrent-operation tests. branchEAdversarialApi Phase 16/17 failures correlate with shared Postgres DB state between test runs. All pass on isolated/fresh runs. These are pre-existing conditions not introduced by Phase 7.
+Phase 7 base suite: 48 new passing tests.
+
+Phase 7 closure patch: 3 new regression tests for income field mapping correctness.
+
+Net new tests: 48 + 3 = 51 passing tests. Full suite: 1513 passing (1399 + 114 from Phases 5–7).
+
+**Note on intermittent failures:** During test development, `tests/monthlyClose.test.js` tests C.39 (`duplicate close request is safe`) and C.41 (`simultaneous buffer disposition`) and `tests/branchEAdversarialApi.test.js` tests (Phase 16/17) showed intermittent failures. C.39/C.41 are inherently timing-sensitive concurrent-operation tests. branchEAdversarialApi Phase 16/17 failures correlate with shared Postgres DB state between test runs. All pass on isolated/fresh runs. These are pre-existing conditions not introduced by Phase 7 or the closure patch.
+
+---
+
+## 8. Phase 7 Closure Patch Summary
+
+**Defect Fixed:** Remi current-plan income field returned `"0.00"` for non-zero actual income.
+
+**Classification:** PRODUCT_DEFECT / REMI_FINANCIAL_CONTEXT_CORRECTNESS
+
+**Root Cause:** Consumer handlers (`handleGetCurrentPlan`, `handleGetAvailableResources`, `propose_allocation_change`) accessed property paths that did not match the producer output (`buildDashboardPeriods`):
+- Expected: `periodSummary.income?.total`, `periodSummary.allocations?.total`, `periodSummary.spending?.total`
+- Actual output: `periodSummary.incomeTotal`, `periodSummary.spendingTotal`, per-bucket allocations only
+
+**Production Files Changed:**
+- `lib/remi/toolHandlers.js` — Fixed 3 handlers to use correct property names and calculate allocations from buckets
+
+**Tests Modified/Added:**
+- `tests/adversarialSecurityRemiCollisions.test.js` — Restored test 4.6 income assertion; added 3 regression tests (4.6.1, 4.6.2, 4.6.3)
+
+**Regression Test Coverage:**
+- `4.6.1`: Zero income control case
+- `4.6.2`: Multiple income entries aggregate correctly  
+- `4.6.3`: Tenant isolation preserved across workspaces
+
+**Test Results:**
+- Phase 7 base: 48 / 48 passing
+- Phase 7 closure: 3 / 3 passing
+- Full regression: 1513 / 1513 passing (26 skipped, RLS environment)
+
+**Security Status:** No tenant-isolation breach. No authorization boundary crossed. Remi read-only authority preserved.
 
 ---
 
