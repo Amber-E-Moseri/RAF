@@ -10,8 +10,9 @@ test("goals are wired into planning navigation and the frontend route", async ()
     readFile(new URL("../src/api/goalsApi.ts", import.meta.url), "utf8"),
   ]);
 
+  // Goals is now accessed via /plan?tab=goals; direct /goals route redirects there
   assert.match(appSource, /path="goals"/);
-  assert.match(layoutSource, /to: "\/goals", label: "Goals"/);
+  assert.match(layoutSource, /to: "\/plan"/);
   assert.match(goalsPageSource, /title="Goals"/);
   assert.match(goalsPageSource, /Paid so far/);
   assert.match(goalsPageSource, /getDashboardReport/);

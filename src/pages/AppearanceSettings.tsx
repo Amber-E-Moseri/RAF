@@ -125,9 +125,9 @@ function selectedCardStyle(selected: boolean) {
     };
 }
 
-export function AppearanceSettings() {
+export function AppearanceSettings({ defaultTab }: { defaultTab?: SettingsTab } = {}) {
   const { preferences, saveAppearance, togglePrivacyMode } = useAppearance();
-  const [activeTab, setActiveTab] = useState<SettingsTab>("preferences");
+  const [activeTab, setActiveTab] = useState<SettingsTab>(defaultTab ?? "preferences");
   const [draft, setDraft] = useState<AppearancePreferences>(preferences);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [ruleMessage, setRuleMessage] = useState<string | null>(null);
