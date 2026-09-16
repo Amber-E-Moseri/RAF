@@ -1,5 +1,6 @@
 import { useSearchParams } from "react-router-dom";
 
+import { BufferStatusCard } from "../components/plan/BufferStatusCard";
 import { PageShell } from "../components/layout/PageShell";
 import { AllocationPreferences } from "./AllocationPreferences";
 import { Debts } from "./Debts";
@@ -48,6 +49,8 @@ export function Plan() {
         {validTab === "goals" && <Goals />}
         {validTab === "debts" && <Debts />}
       </div>
+
+      <BufferStatusCard />
     </PageShell>
   );
 }
