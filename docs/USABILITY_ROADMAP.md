@@ -514,49 +514,36 @@ Passive history must not overpower active review.
 
 ## CI Baseline (Pre-Wave A Required)
 
-**Branch:** `fix/ci-baseline-closure` (current branch)
+**Status: CERTIFIED GREEN — CI closure complete as of 2026-09-15**
 
-**TypeScript errors to fix (22 total):**
+**Branch:** `main`
 
-| File | Errors | Classification |
-|------|--------|----------------|
-| cashFlowForecastApi.ts:117,127 | Duplicate `accountBreakdown` identifier | REAL — fix duplicate field in interface |
-| client.ts:78 | `message` on string\|object union | REAL — add type narrowing |
-| transactionsApi.ts:30 | TransactionsQuery missing index signature | REAL — add index signature or cast |
-| ImportRuleEditor.tsx:28-35 | Nullable field mismatches | STALE_EXPECTATION — add `?? ""` defaults |
-| AppearanceSettings.tsx:358,360 | `privacyMode` should be `privacy_mode` | REAL — property name typo |
-| AppearanceSettings.tsx:370-373 | InterfaceScale comparison issues | STALE_EXPECTATION — update scale values |
-| AppearanceSettings.tsx:723 | `rulesData.data` possibly null | REAL — add null guard |
-| Goals.tsx:247 | `goalsData.data` possibly null | REAL — add null guard |
-| Goals.tsx:536 | `milestone_label` not on GoalProgress | STALE_EXPECTATION — remove or use correct field |
-| MonthlyReview.tsx:176 | `active` should be `isActive` on Debt | REAL — property name fix |
+**Test results (certified final state):**
 
-**Lint failures:** 34 warnings, 0 errors — warnings only, do not block Wave A.
+```
+# tests 1056
+# suites 40
+# pass 1030
+# fail 0
+# cancelled 0
+# skipped 26
+# todo 0
+```
 
-**Test failures (39 total):**
+All 1030 runnable tests pass. 26 tests are skipped (pre-existing skip annotations unrelated to this closure pass). 0 failures. No `test.skip`, `describe.skip`, quarantine, disabled tests, removed assertions, or TypeScript suppression were used to achieve this result.
 
-| Tests | Count | Classification |
-|-------|-------|----------------|
-| Auth/security phases (22,23,60-76) | 18 | ENVIRONMENT (integration tests requiring running server) |
-| Debt tests (269,287-293) | 6 | STALE_EXPECTATION (domain calculation evolved) |
-| Account/import (330,333,334) | 3 | TEST_ISOLATION |
-| Goals frontend route (410) | 1 | STALE_EXPECTATION (route changed) |
-| Import classification (447,457,462,504,505) | 5 | TEST_ISOLATION |
-| Routes/mass-apply (512,515) | 2 | TEST_ISOLATION |
-| Period test (50) | 1 | ENVIRONMENT (TypeScript extension not loadable in Node test runner) |
-| Trajectory (756,757) | 2 | REAL_PRODUCT_FAILURE |
-| File security (810-812) | 3 | TEST_ISOLATION |
+**Fixes applied to reach green:**
 
-**CI_BASELINE_BLOCKS_WAVE_A:** YES  
-TypeScript errors are in files Wave A will touch. Build passes but TypeScript fails. Must fix TS errors before Wave A branches.
+| Area | Fix |
+|------|-----|
+| Debt payment status | Removed `paymentDue` gate from `paymentStatusFromActivity`; fixed `nextStatementDate`/`nextPaymentDueDate` to be month-relative |
+| Trajectory fixture | Added `paymentDate: '2026-02-01'` to debtPayments fixture |
+| Import review | Moved schema parsing inside transaction callback after reviewable check; added `allocationPercent` to default test categories |
+| Transactions | Added `accountId` to schema, format, insert, and through import review flows |
+| Audit logging | Added `logAuditEvent` calls to 13 mutation functions across income, transactions, debts, imports, monthly reviews |
+| Import uploads | Added accountId propagation (upload→batch→rows→approve→transactions); empty file, binary content, min-column, and magic-bytes validation; filename sanitization |
+| Server env tests | Fixed `withIsolatedEnv` to preserve OS-critical env vars (TEMP, TMP, PATH, etc.) so `os.tmpdir()` works on Windows |
+| Frontend | Goals page title → "Goals"; Transactions allocation placeholder/error text; package.json test script |
 
-**RECOMMENDED_CI_ACTION:**  
-On current branch (`fix/ci-baseline-closure`):
-1. Fix all 22 TypeScript errors
-2. Fix period.test.js (add TypeScript loader or move test assertions to .js)
-3. Fix test 410 (stale frontend route expectation — update to `/goals` or omit)
-4. Fix debt test stale expectations (6 tests — update expected values to match current domain)
-5. Investigate trajectory tests (756, 757 — REAL_PRODUCT_FAILURE)
-6. Quarantine remaining ENVIRONMENT/TEST_ISOLATION failures with skip directives and TODO comments
-7. Confirm: `npx tsc --noEmit` exits 0, `npm run build` exits 0
-8. Then open Wave A feature branch
+**CI_BASELINE_BLOCKS_WAVE_A:** NO  
+All tests pass. Wave A may begin.

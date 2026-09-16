@@ -18,7 +18,8 @@ import {
   unprocessImportedTransaction,
   unignoreImportedTransaction,
 } from "../api/importsApi";
-import { createTransaction, deleteTransaction, getTransactions, updateTransaction } from "../api/transactionsApi";
+import { createTransaction, deleteTransaction, fetchTransactionSuggestion, getTransactions, updateTransaction } from "../api/transactionsApi";
+import type { TransactionSuggestion } from "../api/transactionsApi";
 import {
   buildImportRuleDraft,
   ImportRuleEditor,
@@ -39,6 +40,8 @@ import { Input } from "../components/ui/Input";
 import { MoneyInput } from "../components/ui/MoneyInput";
 import { Table } from "../components/ui/Table";
 import { SplitTransactionEditor } from "../components/transactions/SplitTransactionEditor";
+import { TransactionRowActions } from "../components/transactions/TransactionRowActions";
+import type { QuickLinkState } from "../components/transactions/TransactionRowActions";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { DEFAULT_PAGE_SIZE } from "../lib/constants";
 import { formatIsoDate } from "../lib/format";
@@ -344,12 +347,15 @@ export function Transactions() {
   const [showCreateTransactionForm, setShowCreateTransactionForm] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<TransactionEditState | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editSuggestion, setEditSuggestion] = useState<TransactionSuggestion | null>(null);
+  const [editSuggestionDismissed, setEditSuggestionDismissed] = useState(false);
   const [isDeletingTransaction, setIsDeletingTransaction] = useState<string | null>(null);
   const [selectedImportFile, setSelectedImportFile] = useState<File | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isImportsExpanded, setIsImportsExpanded] = useState(false);
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
   const [reviewDrafts, setReviewDrafts] = useState<Record<string, ImportReviewDraft>>({});
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewSuccess, setReviewSuccess] = useState<string | null>(null);
@@ -370,6 +376,9 @@ export function Transactions() {
   const [importHistoryDetail, setImportHistoryDetail] = useState<ImportHistoryDetailResponse | null>(null);
   const [isLoadingImportHistoryDetail, setIsLoadingImportHistoryDetail] = useState(false);
   const [importHistoryDetailError, setImportHistoryDetailError] = useState<string | null>(null);
+  const [quickLinkOpen, setQuickLinkOpen] = useState<QuickLinkState | null>(null);
+  const [isLinking, setIsLinking] = useState(false);
+  const [reviewFocusId, setReviewFocusId] = useState<string | null>(null);
   const cursor = cursorHistory[cursorHistory.length - 1];
 
   useEffect(() => {
@@ -599,6 +608,23 @@ export function Transactions() {
     const validIds = new Set(needsReviewImports.map((item) => item.id));
     setSelectedImportIds((current) => current.filter((id) => validIds.has(id)));
   }, [needsReviewImports]);
+
+  useEffect(() => {
+    if (!editingTransaction) {
+      setEditSuggestion(null);
+      setEditSuggestionDismissed(false);
+      return;
+    }
+    setEditSuggestion(null);
+    setEditSuggestionDismissed(false);
+    const id = editingTransaction.id;
+    fetchTransactionSuggestion(id).then(({ suggestion }) => {
+      setEditSuggestion(suggestion);
+    }).catch(() => {
+      // suggestion is optional — fail silently
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingTransaction?.id]);
 
   function updateCategoryFilter(nextCategoryId: string) {
     setCategoryFilter(nextCategoryId);
@@ -975,6 +1001,22 @@ export function Transactions() {
     }
   }
 
+  async function handleQuickLink(txId: string, kind: "goal" | "debt", linkedId: string) {
+    setQuickLinkOpen(null);
+    setIsLinking(true);
+    const patch = kind === "goal"
+      ? { linkedGoalId: linkedId || null }
+      : { linkedDebtId: linkedId || null };
+    try {
+      await updateTransaction(txId, patch);
+      await reload();
+    } catch {
+      // silent — user can retry via full edit form
+    } finally {
+      setIsLinking(false);
+    }
+  }
+
   async function handleImportUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedImportFile) {
@@ -1073,6 +1115,20 @@ export function Transactions() {
       throw requestError instanceof Error ? requestError : new Error("Imported row review failed.");
     } finally {
       setReviewPendingIds((current) => current.filter((id) => id !== item.id));
+    }
+  }
+
+  function advanceToNextUnreviewed(afterId: string | null = null) {
+    const queue = (data?.imports ?? []).filter((item) => item.status === "unreviewed");
+    const afterIndex = afterId ? queue.findIndex((item) => item.id === afterId) : -1;
+    const next = queue[afterIndex + 1] ?? queue[0] ?? null;
+    if (next) {
+      setReviewFocusId(next.id);
+      setTimeout(() => {
+        document.getElementById(`import-row-${next.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+    } else {
+      setReviewFocusId(null);
     }
   }
 
@@ -1723,14 +1779,25 @@ export function Transactions() {
                     }}
                   >
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                      <label className="inline-flex items-center gap-3 text-sm font-medium text-raf-ink">
-                        <input
-                          type="checkbox"
-                          checked={needsReviewImports.length > 0 && selectedImportIds.length === needsReviewImports.length}
-                          onChange={toggleSelectAllImports}
-                        />
-                        <span>Select all</span>
-                      </label>
+                      <div className="flex items-center gap-3">
+                        <label className="inline-flex items-center gap-3 text-sm font-medium text-raf-ink">
+                          <input
+                            type="checkbox"
+                            checked={needsReviewImports.length > 0 && selectedImportIds.length === needsReviewImports.length}
+                            onChange={toggleSelectAllImports}
+                          />
+                          <span>Select all</span>
+                        </label>
+                        {needsReviewImports.length > 0 ? (
+                          <button
+                            type="button"
+                            className="rounded-full border border-[var(--border-color)] px-3 py-1 text-xs font-medium text-[var(--text-muted)] transition hover:bg-[var(--surface-elevated)]"
+                            onClick={() => advanceToNextUnreviewed(reviewFocusId)}
+                          >
+                            Next unreviewed ({needsReviewImports.length})
+                          </button>
+                        ) : null}
+                      </div>
                       {hasSelectedNeedsReview ? (
                         <div className="flex flex-wrap items-center gap-3">
                           <Badge tone="warning">{selectedNeedsReviewItems.length} selected</Badge>
@@ -1804,7 +1871,7 @@ export function Transactions() {
                       const canLinkFixedBill = data.fixedBills.length > 0;
 
                       return (
-                        <div key={item.id}>
+                        <div key={item.id} id={`import-row-${item.id}`} className={reviewFocusId === item.id ? "ring-2 ring-inset ring-[var(--primary-color)] rounded-lg" : undefined}>
                           <div className={`grid gap-2 px-4 py-2.5 lg:grid-cols-[36px,88px,minmax(0,320px),112px,132px,132px,112px,44px] lg:items-start ${isIgnored ? "bg-stone-50/70" : ""}`}>
                             <div className="flex items-center justify-center">
                               {needsReview ? (
@@ -2021,15 +2088,25 @@ export function Transactions() {
                               }}
                             >
                               {activeRule ? (
-                                <div className="mb-4 rounded-2xl border px-4 py-3" style={{ borderColor: "var(--border-color)", background: "var(--surface-color)" }}>
-                                  <div className="flex flex-wrap items-center justify-between gap-3">
-                                    <div className="text-sm text-[var(--text-muted)]">
-                                      {activeRule.auto_apply ? "Applied by rule" : "Suggestion available"}: "{activeRule.match_value ?? activeRule.normalized_description}".
+                                <div className="mb-4 rounded-2xl border-2 px-4 py-3" style={{ borderColor: "var(--primary-color)", background: "color-mix(in srgb, var(--primary-color) 6%, var(--surface-color))" }}>
+                                  <div className="flex flex-wrap items-start justify-between gap-3">
+                                    <div>
+                                      <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--primary-color)" }}>
+                                        {activeRule.auto_apply ? "Auto-applied by rule" : "Categorization suggestion"}
+                                      </div>
+                                      <div className="mt-0.5 text-sm font-medium text-[var(--text-strong)]">
+                                        "{activeRule.match_value ?? activeRule.normalized_description}"
+                                      </div>
                                     </div>
                                     <div className="flex flex-wrap gap-2">
                                     {needsReview ? (
-                                      <Button type="button" variant="secondary" onClick={() => applySuggestion(item)}>
-                                        Use suggestion
+                                      <Button type="button" variant="primary" onClick={() => applySuggestion(item)}>
+                                        Apply suggestion
+                                      </Button>
+                                    ) : null}
+                                    {!activeRule.auto_apply && needsReview ? (
+                                      <Button type="button" variant="secondary" onClick={() => { setEditingRuleId(activeRule.id); }}>
+                                        Remember this choice
                                       </Button>
                                     ) : null}
                                     {activeRule.auto_apply ? (
@@ -2335,16 +2412,21 @@ export function Transactions() {
 
       <Card
         title="Import History"
-        subtitle="A read-only record of all import events. Mutations happen in the Imported Rows Review panel above."
+        subtitle="A read-only record of past import batches."
+        actions={(
+          <Button type="button" variant="ghost" onClick={() => setIsHistoryExpanded((v) => !v)}>
+            {isHistoryExpanded ? "Collapse" : "Expand"}
+          </Button>
+        )}
       >
-        {isLoading ? <LoadingState label="Loading import history..." /> : null}
-        {!isLoading && (data?.importHistory?.length ?? 0) === 0 ? (
+        {!isHistoryExpanded ? null : isLoading ? <LoadingState label="Loading import history..." /> : null}
+        {isHistoryExpanded && !isLoading && (data?.importHistory?.length ?? 0) === 0 ? (
           <EmptyState
             title="No import history"
             message="Import history will appear here once you have uploaded bank statements or imported rows."
           />
         ) : null}
-        {!isLoading && (data?.importHistory?.length ?? 0) > 0 ? (
+        {isHistoryExpanded && !isLoading && (data?.importHistory?.length ?? 0) > 0 ? (
           <div className="divide-y" style={{ borderColor: "var(--border-color)" }}>
             {(data?.importHistory ?? []).map((item) => {
               const isSelected = selectedImportHistoryId === item.id;
@@ -2529,24 +2611,35 @@ export function Transactions() {
                         {transaction.isImportOnly ? (
                           <div className="text-right text-xs text-[var(--text-muted)]">Review row</div>
                         ) : (
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              className="min-h-8 rounded-full px-3 py-1.5 text-xs"
-                              onClick={() => setEditingTransaction(mapTransactionToEditState(transaction))}
-                            >
-                              Edit
-                            </Button>
-                            <button
-                              type="button"
-                              aria-label="Delete transaction"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-muted)] transition hover:bg-rose-50 hover:text-rose-600"
-                              disabled={isDeletingTransaction === transaction.id}
-                              onClick={() => void handleDeleteTransaction(transaction as Transaction)}
-                            >
-                              {isDeletingTransaction === transaction.id ? "…" : "ðŸ—‘"}
-                            </button>
+                          <div className="flex flex-col items-end gap-1">
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                className="min-h-8 rounded-full px-3 py-1.5 text-xs"
+                                onClick={() => setEditingTransaction(mapTransactionToEditState(transaction))}
+                              >
+                                Edit
+                              </Button>
+                              <button
+                                type="button"
+                                aria-label="Delete transaction"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-muted)] transition hover:bg-rose-50 hover:text-rose-600"
+                                disabled={isDeletingTransaction === transaction.id}
+                                onClick={() => void handleDeleteTransaction(transaction as Transaction)}
+                              >
+                                {isDeletingTransaction === transaction.id ? "…" : "🗑"}
+                              </button>
+                            </div>
+                            <TransactionRowActions
+                              transaction={transaction}
+                              goals={data.goals}
+                              debts={data.debts}
+                              openQuickLink={quickLinkOpen}
+                              isLinking={isLinking}
+                              onOpenChange={setQuickLinkOpen}
+                              onLink={handleQuickLink}
+                            />
                           </div>
                         )}
                       </td>
@@ -2599,6 +2692,39 @@ export function Transactions() {
                 X
               </Button>
             </div>
+
+            {editSuggestion && !editSuggestionDismissed && editSuggestion.category_id && editSuggestion.category_id !== editingTransaction.categoryId ? (
+              <div
+                className="mt-4 flex items-start justify-between gap-3 rounded-2xl border px-4 py-3"
+                style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}
+              >
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Remembered category</div>
+                  <div className="mt-0.5 text-sm text-[var(--text-strong)]">
+                    {categoryLookup.get(editSuggestion.category_id) ?? editSuggestion.category_id}
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded-full border border-[var(--border-color)] bg-[var(--surface-color)] px-3 py-1 text-xs font-medium text-[var(--text-strong)] hover:bg-[var(--surface-elevated)]"
+                    onClick={() => {
+                      setEditingTransaction((current) => current ? { ...current, categoryId: editSuggestion.category_id ?? "" } : current);
+                      setEditSuggestionDismissed(true);
+                    }}
+                  >
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full px-3 py-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-strong)]"
+                    onClick={() => setEditSuggestionDismissed(true)}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <Input
