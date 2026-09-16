@@ -244,7 +244,7 @@ export function Goals() {
     if (!editingGoalId && !form.bucketId && goalsData.data?.categories.length) {
       setForm((current) => ({
         ...current,
-        bucketId: current.bucketId || goalsData.data.categories[0].id,
+        bucketId: current.bucketId || goalsData.data?.categories[0]?.id || current.bucketId,
       }));
     }
   }, [editingGoalId, form.bucketId, goalsData.data?.categories]);
@@ -533,7 +533,7 @@ export function Goals() {
                     <div className="mt-3">
                       <div className="mb-1 flex justify-between text-xs text-[var(--text-muted)]">
                         <span>{progressPercent.toFixed(0)}% funded</span>
-                        {progress?.milestone_label ? <span>{progress.milestone_label}</span> : null}
+                        {null}
                       </div>
                       <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-elevated)]">
                         <div

@@ -27,7 +27,7 @@ export interface BulkReviewResult {
 }
 
 export function getTransactions(query: TransactionsQuery) {
-  return getJson<TransactionListResponse>("/transactions", query);
+  return getJson<TransactionListResponse>("/transactions", query as unknown as Record<string, string | number | null | undefined>);
 }
 
 export function createTransaction(payload: TransactionCreateRequest) {

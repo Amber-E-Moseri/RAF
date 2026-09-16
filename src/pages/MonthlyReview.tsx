@@ -173,7 +173,7 @@ export function MonthlyReview() {
     return {
       categories: categories.filter((category) => category.isActive !== false),
       goals: goalsResponse.items.filter((goal) => goal.active !== false),
-      debts: debtsResponse.items.filter((debt) => debt.active !== false),
+      debts: debtsResponse.items.filter((debt) => debt.isActive !== false),
     };
   }, []);
 

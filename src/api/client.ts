@@ -73,9 +73,10 @@ async function parseResponse<T>(response: Response): Promise<T> {
   }
 
   if (!response.ok) {
-    const message = typeof (data as ApiErrorPayload).error === "string"
-      ? (data as ApiErrorPayload).error
-      : (data as ApiErrorPayload).error?.message ?? "Request failed";
+    const errorField = (data as ApiErrorPayload).error;
+    const message = typeof errorField === "string"
+      ? errorField
+      : (errorField as { message: string } | undefined)?.message ?? "Request failed";
     throw new ApiError(response.status, message);
   }
 
