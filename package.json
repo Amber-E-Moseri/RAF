@@ -9,7 +9,7 @@
     "dev:api": "node index.js",
     "start": "node index.js",
     "seed:demo": "node scripts/seedDemoData.js",
-    "test": "node --test",
+    "test": "node --experimental-strip-types --test",
     "lint": "eslint .",
     "build": "vite build",
     "preview": "vite preview",

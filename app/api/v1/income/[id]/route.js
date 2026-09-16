@@ -1,4 +1,4 @@
-import { IncomeHttpError, deleteIncome, updateIncome } from '../../../../../lib/income/createIncome.js';
+import { IncomeHttpError, deleteIncome, getIncome, updateIncome } from '../../../../../lib/income/createIncome.js';
 
 function json(body, status) {
   return Response.json(body, { status });
@@ -10,6 +10,24 @@ function getHouseholdId(request, context) {
 
 function getDb(context) {
   return context?.db ?? globalThis.__RAF_DB__;
+}
+
+export async function GET(request, context = {}) {
+  try {
+    const result = await getIncome({
+      db: getDb(context),
+      householdId: getHouseholdId(request, context),
+      incomeId: context?.params?.id,
+    });
+
+    return json(result, 200);
+  } catch (error) {
+    if (error instanceof IncomeHttpError) {
+      return json({ error: error.message }, error.status);
+    }
+
+    return json({ error: 'Internal Server Error' }, 500);
+  }
 }
 
 export async function PATCH(request, context = {}) {

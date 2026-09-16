@@ -153,7 +153,8 @@ test('merchant rules, trajectory, and monthly review apply routes expose payload
     merchantRules: [{ id: 'rule_1', matchType: 'contains', matchValue: 'coffee', categoryId: 'cat_food', priority: 2 }],
     incomeEntries: [{ receivedDate: '2026-03-10', amount: '1000.00' }],
     transactions: [{ transactionDate: '2026-03-12', amount: '500.00', direction: 'debit' }],
-    surplusSplitRules: [{ slug: 'emergency_fund', splitPercent: '1.0000', sortOrder: 1, isActive: true }],
+    surplusSplitRules: [{ slug: 'emergency_fund', splitPercent: '1.0000', sortOrder: 1, isActive: true, destinationBucketSlug: 'emergency_fund' }],
+    allocationCategories: [{ id: 'cat_ef', slug: 'emergency_fund', label: 'Emergency Fund', allocationPercent: '1.0000', sortOrder: 1, isActive: true }],
   });
 
   const getResponse = await getMerchantRulesRoute(

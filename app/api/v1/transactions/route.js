@@ -22,6 +22,7 @@ export async function POST(request, context = {}) {
     const transaction = await createTransaction({
       db: getDb(context),
       householdId: getHouseholdId(request, context),
+      userId: context?.user?.id ?? context?.userId ?? null,
       input,
     });
 

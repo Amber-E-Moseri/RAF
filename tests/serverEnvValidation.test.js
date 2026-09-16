@@ -10,13 +10,28 @@ import {
   startIsolatedSqliteServer,
 } from './helpers/isolatedSqliteServer.js';
 
+const OS_CRITICAL = new Set([
+  'TEMP', 'TMP', 'TMPDIR',
+  'USERPROFILE', 'HOME', 'HOMEPATH', 'HOMEDRIVE',
+  'SYSTEMROOT', 'SystemRoot', 'WINDIR', 'windir',
+  'SYSTEMDRIVE', 'SystemDrive',
+  'PATH', 'Path', 'COMSPEC', 'ComSpec',
+]);
+
 function withIsolatedEnv(run) {
   const previous = { ...process.env };
   try {
+    for (const key of Object.keys(process.env)) {
+      if (!OS_CRITICAL.has(key)) {
+        delete process.env[key];
+      }
+    }
     return run();
   } finally {
     for (const key of Object.keys(process.env)) {
-      delete process.env[key];
+      if (!OS_CRITICAL.has(key)) {
+        delete process.env[key];
+      }
     }
     Object.assign(process.env, previous);
   }

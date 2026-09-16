@@ -29,9 +29,9 @@ function createDbDouble({
   fixedBills = [],
   goals = [],
   categories = [
-    { id: 'bucket_living', slug: 'living', label: 'Living', isActive: true, sortOrder: 1 },
-    { id: 'bucket_savings', slug: 'savings', label: 'Savings', isActive: true, sortOrder: 2 },
-    { id: 'bucket_debt_payoff', slug: 'debt_payoff', label: 'Debt Payoff', isActive: true, sortOrder: 3 },
+    { id: 'bucket_living', slug: 'living', label: 'Living', isActive: true, sortOrder: 1, allocationPercent: '0.7000' },
+    { id: 'bucket_savings', slug: 'savings', label: 'Savings', isActive: true, sortOrder: 2, allocationPercent: '0.2000' },
+    { id: 'bucket_debt_payoff', slug: 'debt_payoff', label: 'Debt Payoff', isActive: true, sortOrder: 3, allocationPercent: '0.1000' },
   ],
   importReviewRules = [],
 } = {}) {

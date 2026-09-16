@@ -84,7 +84,7 @@ function trajectoryFixture() {
       { id: 'debt_1', startingBalance: '1000.00', minimumPayment: '50.00', monthlyPayment: '150.00', name: 'Visa' },
     ],
     debtPayments: [
-      { debtId: 'debt_1', amount: '100.00' },
+      { debtId: 'debt_1', amount: '100.00', paymentDate: '2026-02-01' },
     ],
   };
 }

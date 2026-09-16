@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { monthRangeFromKey } from "../src/lib/period.ts";
+import { monthRangeFromKey } from "../lib/period.js";
 
 test("monthRangeFromKey returns the full calendar month", () => {
   assert.deepEqual(monthRangeFromKey("2026-03"), {
