@@ -46,18 +46,32 @@ RAF (Resource Allocation Framework) is a household financial allocation system b
 
 ### Technology Stack
 
-- **Frontend:** React 19 + Vite + Tailwind CSS
-- **Backend:** Node.js + Express
-- **Database:** SQLite (in-memory for tests; persistent for production)
-- **Persistence Adapter:** In-memory (Phase 8) and Postgres (Phase 7 certified)
-- **Financial Context:** Remi integration for AI-driven analysis
+- **Frontend:** React 18.3.1 + Vite 5.4.14 + Tailwind CSS
+- **Backend:** Node.js 20+ + Express 4.22.1
+- **Production Database:** PostgreSQL with Row-Level Security (RLS)
+- **Development/Test Database:** SQLite (in-memory default)
+- **Persistence Adapter:** Dual-adapter pattern (Postgres + RLS for production; SQLite for local/test)
+- **Financial Context:** Remi (Anthropic AI SDK) for read-only analysis and proposals
+- **Monitoring:** Sentry 10.73.0 + structured JSON request logging
+- **Auth:** JWT-based (production) / header-based workspace scoping (development)
+
+### Production Database Architecture
+
+**PostgreSQL with Row-Level Security is foundational, not optional.**
+
+- **Runtime Role:** `raf_app` (LOGIN, NOSUPERUSER, **NOBYPASSRLS**)
+- **RLS Policies:** All financial tables (households, accounts, transactions, debts, goals, etc.)
+- **Workspace Isolation:** Transaction-scoped `raf.workspace_id` session variable
+- **Migration Runner:** Separate privileged connection (neondb_owner or equivalent)
+- **RLS Helper:** `raf.current_workspace_id()` reads session config; enforces `household_id = current_workspace_id()`
 
 ### Layers
 
 - **UI (React):** Dashboard, Transactions, Plan, Outlook, Settings, Monthly Review
-- **API (Express):** RESTful endpoints with request/response validation
+- **API (Express):** RESTful endpoints with request/response validation; Sentry error monitoring
 - **Business Logic:** Plan engine, forecast engine, scenario engine, month lifecycle
-- **Data Access:** Transaction adapter (in-memory/Postgres)
+- **Data Access:** Dual-adapter (Postgres + RLS for production; SQLite for local/test)
+- **Tenant Isolation:** RLS policies (database) + resolveTrustedContext (application layer)
 
 ---
 
@@ -144,6 +158,20 @@ RAF (Resource Allocation Framework) is a household financial allocation system b
 - **Environment-Based:** Database path and sensitive config via `.env`
 - **No Client Secrets:** All credentials remain backend-only
 - **API Validation:** Request/response validation ensures data integrity
+
+### Remi / AI Authority
+
+**All Remi tools are read-only analysis and advisory proposals. No financial mutations occur.**
+
+- **Tool Handlers (11 total):** get_current_plan, get_available_resources, get_upcoming_obligations, get_goal_progress, get_debt_strategy, get_cashflow_forecast, compare_periods, explain_variance, get_transaction_summary, create_scenario, propose_allocation_change
+- **Data Source:** Financial context builders receive pre-computed authoritative values
+  - **Income context:** From canonical incomeEntries (never raw DB values)
+  - **Spending context:** From canonical transactions with direction='debit' authority
+  - **Debt context:** From resolved debt snapshots via resolveDebtBalanceAuthority
+  - **Goal context:** From pre-computed goal contributions (never reads goal.currentAmount)
+- **Mutation Prevention:** All proposals include `confirmation_required: true`; no backend mutations without explicit user approval
+- **Data Scrubbing:** Merchant names sanitized (4+ digit sequences removed to prevent account number leakage)
+- **Principle:** AI can explain financial state. It does not define financial truth.
 
 ---
 
