@@ -2,6 +2,11 @@
 
 RAF (Resource Allocation Framework) is a deposit-driven financial allocation app with a Vite + React frontend and a Node API backend.
 
+**Status:** Phase 8 Full-Year Lifecycle Certification Complete ✅  
+**Certification:** RAF READY WITH DOCUMENTED LIMITATIONS  
+**Test Results:** 1,569 passing / 0 failing / 26 skipped  
+**Documentation:** [RAF_FINAL_CERTIFICATION.md](docs/testing/RAF_FINAL_CERTIFICATION.md)
+
 ## Prerequisites
 
 - Node.js 20+
