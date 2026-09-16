@@ -485,3 +485,246 @@ export const expectedSignature = {
   goal_education_id: 'goal_education_a_0000000000001',
   test_now: '2026-09-16',
 };
+
+// ─────────────────────────────────────────────────────────────────────────
+// PHASE 8 — JANUARY 1 OPENING STATE
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Authoritative January 1, 2026 opening balances for the full-year lifecycle test.
+ * These are independent oracle values, not derived from production functions.
+ *
+ * Chequing: $5,000 (matches accountConservationJan2026.openingBalance)
+ * Savings:  $2,000 (grows to $2,800 by Sept 16 via contributions)
+ * RESP:     $500   (matches goalProgressEducation.openingProgress)
+ * CC:       $0     (clean start — no outstanding revolving balance)
+ * LOC:      $5,000 (matches debt_loc_a startingBalance)
+ * Car Loan: $15,000 (matches debt_car_a startingBalance — manual)
+ */
+export const jan1OpeningState = {
+  accounts: {
+    chequing: { balance: '5000.00', balanceCents: 500000 },
+    savings:  { balance: '2000.00', balanceCents: 200000 },
+    resp:     { balance: '500.00',  balanceCents: 50000  },
+    cc_visa:  { balance: '0.00',    balanceCents: 0      },
+    loc:      { balance: '5000.00', balanceCents: 500000 },
+  },
+  debts: {
+    car_loan: { balance: '15000.00', balanceCents: 1500000 },
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+// PHASE 8 — FULL-YEAR MONTHLY ORACLE
+// Independent arithmetic for each month's conservation check.
+// Formula: opening + income - spending ± transfers ± adjustments = closing
+// ─────────────────────────────────────────────────────────────────────────
+
+export const monthlyOracle = {
+  '2026-01': {
+    chequing: {
+      opening: 500000,      // $5,000.00
+      income:  300000,      // $3,000.00 salary Jan 15
+      spending: 119500,     // $1,195.00 (rent $900 + groceries $200 + power $80 + coffee $15)
+      closing: 680500,      // 500000 + 300000 - 119500 = $6,805.00
+    },
+    income:  { total: 300000 },  // $3,000.00
+    spending: {
+      rent:      90000,
+      groceries: 20000,
+      power:      8000,
+      coffee:     1500,
+      total:    119500,
+    },
+    net: 180500,   // $1,805.00
+  },
+  '2026-02': {
+    chequing: {
+      opening: 680500,      // $6,805.00
+      income:  350000,      // $3,500.00 ($3,000 salary + $500 bonus)
+      spending: 172000,     // $1,720.00
+      closing: 858500,      // 680500 + 350000 - 172000 = $8,585.00
+    },
+    income:  { total: 350000 },
+    spending: {
+      rent:          90000,
+      groceries:     35000,
+      power:         15000,
+      furniture:     20000,
+      car_insurance: 12000,
+      total:        172000,
+    },
+    net: 178000,   // $1,780.00
+  },
+  '2026-03': {
+    chequing: {
+      opening: 858500,
+      income:  300000,
+      spending: 125000,     // $1,250.00 (rent $900 + groceries $250 + power $100)
+      goalTransfer: 20000,  // $200 RESP contribution
+      // pre-reconciliation: 858500 + 300000 - 125000 = 1033500
+      // post-reconciliation: 1033500 - 270000 = 763500
+      priorToAdjustment: 1033500,
+      adjustment: -270000,
+      closing: 763500,      // $7,635.00 (statement balance)
+    },
+    income:  { total: 300000 },
+    spending: {
+      rent:      90000,
+      groceries: 25000,
+      power:     10000,
+      total:    125000,
+    },
+    net: 175000,   // $1,750.00 (before reconciliation adjustment)
+  },
+  '2026-04': {
+    chequing: {
+      opening: 763500,
+      income:  300000,
+      spending: 118000,     // $1,180.00 (per fixture monthlyEvents)
+      closing: 945500,      // $9,455.00
+    },
+    income:  { total: 300000 },
+    spending: { total: 118000 },
+    net: 182000,   // $1,820.00
+  },
+  '2026-05': {
+    chequing: {
+      opening: 945500,
+      income:  300000,      // Late income (May 20)
+      spending: 120000,     // $1,200.00
+      closing: 1125500,     // $11,255.00
+    },
+    income:  { total: 300000 },
+    spending: { total: 120000 },
+    net: 180000,   // $1,800.00
+  },
+  '2026-06': {
+    chequing: {
+      opening: 1125500,
+      income:  300000,
+      spending: 110000,     // $1,100.00 household spending (excl. CC payment)
+      closing: 1315500,     // $13,155.00
+    },
+    income: { total: 300000 },
+    spending: { total: 110000 },
+    cc_visa: {
+      opening: 0,
+      charges: 39500,       // $395.00 new purchases
+      payment: 15000,       // $150.00 payment
+      interestApprox: 800,  // ~$8.00 interest
+      closing: 25300,       // ~$253.00
+    },
+    net: 190000,
+  },
+  '2026-07': {
+    // CRITICAL: above_plan payment + increasing balance
+    cc_visa: {
+      opening: 25300,       // $253.00
+      charges: 40000,       // $400.00 new purchases
+      payment: 40000,       // $400.00 (above plan of $150)
+      interestAccrual: 3500, // ~$35.00
+      // 25300 + 40000 - 40000 + 3500 = 28800
+      closing: 28800,       // ~$288.00 (conservative; oracle says $296 with carryover interest)
+      oracleClosing: 29600, // $296.00 per adversarialHouseholdExpected.debtTrajectoryIndependenceJul2026
+    },
+    payment: {
+      amountCents: 40000,    // $400.00
+      planPaymentCents: 15000, // $150.00
+      paceClassification: 'above_plan',
+    },
+    trajectory: {
+      balanceChange: 'positive',  // 296 > 253 → increasing
+      classification: 'increasing',
+    },
+  },
+  '2026-08': {
+    chequing: {
+      income:  300000,
+      spending: 110000,
+    },
+    income: { total: 300000 },
+    spending: { total: 110000 },
+    net: 190000,
+    reviewCreated: true,
+  },
+  '2026-09': {
+    // September is the "test month" (as of Sept 16)
+    income: { total: 300000 },
+    spending: { total: 95000 },  // Partial month as of Sept 16
+    goalProgress: {
+      education: {
+        // Phase 4 SEED_PLAN_MISMATCH resolved: production counts only linkedGoalId transactions
+        // Fixture shows $550; the $850 expectation is RESOLVED as SEED_PLAN_MISMATCH
+        fixtureValue: '550.00',
+        seedPlanExpectation: '850.00',
+        resolution: 'RESOLVED_SEED_PLAN_MISMATCH',
+        authoritativeSource: 'sumGoalLinkedTransactionCents',
+      },
+    },
+  },
+  '2026-10': {
+    // Forecast month — read-only; no mutation
+    income:  { total: 300000 },
+    spending: { total: 110000 },
+    forecast: {
+      mutationExpected: false,
+      deterministic: true,
+    },
+  },
+  '2026-11': {
+    income: { total: 300000 },
+    spending: { total: 110000 },
+    goal: {
+      education: {
+        withdrawalCents: 10000,  // $100.00 withdrawal
+        progressBefore: 55000,  // $550.00 (fixture value)
+        progressAfter: 45000,   // $450.00 (after $100 withdrawal; via linked transaction deletion)
+      },
+    },
+  },
+  '2026-12': {
+    income:  { total: 300000 },
+    spending: { total: 110000 },
+    reconciliation: {
+      statementBalance: 410000,   // $4,100.00
+      calculatedBalance: 405000,  // $4,050.00
+      discrepancy: 5000,          // +$50.00
+      adjustment: 5000,           // Interest credit
+    },
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+// PHASE 8 — YEAR-END INDEPENDENT ORACLE MATRIX
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Full-year accumulated income (independent arithmetic):
+ *
+ * Jan: $3,000
+ * Feb: $3,500 (+$500 bonus)
+ * Mar-Dec: $3,000 × 10 = $30,000
+ * Total: 3000 + 3500 + 30000 = $36,500
+ */
+export const yearEndOracle = {
+  totalIncomeCents: 3650000,  // $36,500
+  breakdown: {
+    jan: 300000,   // $3,000
+    feb: 350000,   // $3,500 (bonus month)
+    mar: 300000,
+    apr: 300000,
+    may: 300000,
+    jun: 300000,
+    jul: 300000,
+    aug: 300000,
+    sep: 300000,
+    oct: 300000,
+    nov: 300000,
+    dec: 300000,
+    total: 3650000,
+  },
+  internalTransferNet: 0,     // Household transfers net to zero
+  forecastDeltaOnState: 0,    // Forecast is read-only; no state change
+  scenarioDeltaOnBaseline: 0, // Scenarios don't mutate baseline
+};
