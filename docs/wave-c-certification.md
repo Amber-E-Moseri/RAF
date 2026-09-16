@@ -3,7 +3,7 @@
 **Date:** 2026-09-16  
 **Status:** ✅ CERTIFIED  
 **Baseline:** Wave B @ 0ed69a5 (1510 pass, 0 fail, 26 skip)  
-**Current:** Wave C @ d751499 (1513 pass, 0 fail, 26 skip)  
+**Certified Implementation:** Wave C @ d55fe5a (1513 pass, 0 fail, 26 skip)  
 
 ---
 
@@ -115,7 +115,10 @@ Wave C successfully implements period-aware month lifecycle closure for RAF. All
 
 - **CF-01** — Categorization Memory Import E2E (data pending)
 - **CF-02** — Import History Completed-Batch E2E (data pending)
-- **CF-03** — Mobile Transaction Actions (CLOSED in Wave B)
+- **CF-03** — Mobile Transaction Actions
+- Status: CLOSED in Wave B
+- Wave C: No responsive regression observed during 390×844 mobile certification
+- Note: September 2026 contained no suitable existing transactions for live re-verification; verification relied on Wave B baseline with no new responsive defects detected
 
 ---
 
@@ -148,11 +151,12 @@ Age ≠ Correctness: ✅ Principle enforced throughout
 
 F15 MONTH LIFECYCLE
 State machine: ✅ OPEN → REVIEWING → CLOSED → REOPENED
-Snapshot: ✅ Immutable capture (income, allocations, buffer, goals, debts)
+Snapshot: ✅ Immutable capture (income, allocations, buffer, goals, debts, transaction review)
 Close readiness: ✅ Warnings & blockers displayed
-Buffer disposition: ✅ 4 types (roll_to_next, apply_to_goal, apply_to_debt, return_to_plan)
+Buffer disposition: ✅ 3 types (apply_to_goal, apply_to_debt, return_to_plan)
+  - roll_to_next_buffer removed (deferred feature, violates scope freeze)
 Reopen: ✅ Role-based permissions (Admin/Owner only)
-Idempotency: ✅ No double-application (51 tests confirm)
+Idempotency: ✅ No double-application (UNIQUE INDEX + 51 tests confirm)
 Audit trail: ✅ logAuditEvent integrated with workspace_id
 
 F16 PROFILE & HOUSEHOLD
@@ -176,12 +180,12 @@ Income mapping: ✅ Phase 7 fix (d751499) verified
 Read-only authority: ✅ Preserved
 
 FINANCIAL AUTHORITY
-Goal: ✅ currentAmount never mutated
-Debt: ✅ balance never decremented
-Plan: ✅ canonical backend values used
-Buffer: ✅ display-only flag
-Forecast: ✅ read-only
-Monthly review: ✅ metadata-only close
+Goal: ✅ currentAmount never mutated (transaction-derived only)
+Debt: ✅ balance never decremented (canonical backend authority preserved)
+Plan: ✅ canonical backend values used (allocation calculations backend-derived)
+Buffer: ✅ canonical Plan allocation concept; Wave C introduces no rollover engine; existing canonical monthly-surplus actions may fund goals/debts; roll_to_next_buffer removed and deferred
+Forecast: ✅ read-only (display only, not financial source)
+Monthly review: ✅ metadata/audit workflow (snapshots display-only, not financial authority)
 
 TENANT SECURITY
 Workspace isolation: ✅ RLS enforced on monthly_closes
