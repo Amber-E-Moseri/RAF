@@ -120,6 +120,37 @@ const aliases = [
     method: 'POST',
     file: path.join(apiRootDir, 'monthly-reviews', 'route.js'),
   },
+  // Wave C Month Lifecycle endpoints
+  {
+    path: '/monthly-reviews/lifecycle',
+    method: 'GET',
+    file: path.join(apiRootDir, 'monthly-reviews', 'lifecycle', 'route.js'),
+  },
+  {
+    path: '/monthly-reviews/lifecycle',
+    method: 'POST',
+    file: path.join(apiRootDir, 'monthly-reviews', 'lifecycle', 'route.js'),
+  },
+  {
+    path: '/monthly-reviews/close-readiness',
+    method: 'GET',
+    file: path.join(apiRootDir, 'monthly-reviews', 'close-readiness', 'route.js'),
+  },
+  {
+    path: '/monthly-reviews/close',
+    method: 'POST',
+    file: path.join(apiRootDir, 'monthly-reviews', 'close', 'route.js'),
+  },
+  {
+    path: '/monthly-reviews/reopen',
+    method: 'POST',
+    file: path.join(apiRootDir, 'monthly-reviews', 'reopen', 'route.js'),
+  },
+  {
+    path: '/monthly-reviews/buffer-disposition',
+    method: 'POST',
+    file: path.join(apiRootDir, 'monthly-reviews', 'buffer-disposition', 'route.js'),
+  },
 ];
 
 const apiRouter = await createApiRouter({

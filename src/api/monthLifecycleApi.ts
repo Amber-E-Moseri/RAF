@@ -50,7 +50,7 @@ export interface MonthCloseSnapshot {
 }
 
 export interface BufferDisposition {
-  type: "roll_to_next_buffer" | "apply_to_goal" | "apply_to_debt" | "return_to_plan";
+  type: "apply_to_goal" | "apply_to_debt" | "return_to_plan";
   amount: string;
   targetId?: string | null;
 }

@@ -732,12 +732,39 @@ export function MonthlyReview() {
 
               {/* Continue to next month */}
               <div className="flex flex-wrap gap-3">
-                <Button
-                  type="button"
-                  onClick={() => setActiveMonth(nextMonthPeriod(activeMonth ?? ""))}
-                >
-                  Continue to {formatMonthLabel(nextMonthPeriod(activeMonth ?? ""))}
-                </Button>
+                {(() => {
+                  const nextMonth = nextMonthPeriod(activeMonth ?? "");
+                  const nextMonthLabel = formatMonthLabel(nextMonth);
+                  // Check if next month is in the future by comparing YYYY-MM strings
+                  const now = new Date();
+                  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+                  const nextMonthIsFuture = nextMonth > currentMonthKey;
+
+                  if (nextMonthIsFuture) {
+                    const nextMonthDate = new Date(`${nextMonth}-01T00:00:00.000Z`);
+                    const nextMonthDateFormatted = nextMonthDate.toLocaleString("en-US", {
+                      month: "long",
+                      day: "numeric",
+                      timeZone: "UTC"
+                    });
+                    return (
+                      <div className="text-sm text-[var(--text-muted)]">
+                        {nextMonthLabel}
+                        <br />
+                        Available {nextMonthDateFormatted}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <Button
+                      type="button"
+                      onClick={() => setActiveMonth(nextMonth)}
+                    >
+                      Continue to {nextMonthLabel}
+                    </Button>
+                  );
+                })()}
                 {canReopen && (
                   <Button type="button" variant="secondary" onClick={() => { setShowReopenConfirm(true); setLifecycleActionError(null); }}>
                     Reopen {activeMonthLabel}

@@ -262,32 +262,6 @@ async function makDbWithBuffer(suffix, bufferAllocationAmount = '500.00', spentF
   return { db, hh };
 }
 
-test('C6.18 — zero buffer remaining → no disposition required (no-op)', async () => {
-  const { db, hh } = await makDbWithBuffer('_b18', '300.00', '300.00');
-  const result = await applyBufferDisposition({ db, householdId: hh, period: PERIOD, userId: 'u1', disposition: { type: 'roll_to_next_buffer' } });
-  assert.strictEqual(result.applied, false);
-});
-
-test('C6.19 — negative remaining → no transferable amount', async () => {
-  const { db, hh } = await makDbWithBuffer('_b19', '200.00', '400.00');
-  const result = await applyBufferDisposition({ db, householdId: hh, period: PERIOD, userId: 'u1', disposition: { type: 'roll_to_next_buffer' } });
-  assert.strictEqual(result.applied, false);
-});
-
-test('C6.20 — positive remaining → roll to next buffer creates carry-forward income', async () => {
-  const { db, hh } = await makDbWithBuffer('_b20', '500.00', '200.00');
-  const result = await applyBufferDisposition({ db, householdId: hh, period: PERIOD, userId: 'u1', disposition: { type: 'roll_to_next_buffer' } });
-  assert.strictEqual(result.applied, true);
-  assert.strictEqual(result.amount, '300.00');
-  assert.ok(result.nextPeriod, 'next period returned');
-  // Verify income entry created for next month
-  const nextPeriod = result.nextPeriod;
-  const incomeEntries = await db.transaction((tx) => tx.listIncomeEntries({ householdId: hh, from: nextPeriod, to: nextPeriod }));
-  const carryEntry = incomeEntries.find((e) => e.source === 'carry_forward');
-  assert.ok(carryEntry, 'carry-forward income entry created');
-  assert.strictEqual(carryEntry.amount, '300.00');
-});
-
 test('C6.21 — Goal disposition uses canonical goal transaction pathway', async () => {
   const { db, hh } = await makDbWithBuffer('_b21', '500.00', '200.00');
   let goalId;
@@ -365,37 +339,29 @@ test('C6.25 — cross-workspace goal rejected (db scoped correctly)', async () =
 
 test('C6.26 — disposition cannot exceed buffer remaining', async () => {
   const { db, hh } = await makDbWithBuffer('_b26', '500.00', '200.00');
+  let goalId;
+  await db.transaction(async (tx) => {
+    const g = await tx.insertGoal({ householdId: hh, name: 'Test Goal' });
+    goalId = g.id;
+  });
   const err = await applyBufferDisposition({
     db, householdId: hh, period: PERIOD, userId: 'u1',
-    disposition: { type: 'roll_to_next_buffer', amount: '9999.00' },
+    disposition: { type: 'apply_to_goal', amount: '9999.00', targetId: goalId },
   }).catch((e) => e);
   assert.ok(err instanceof MonthlyReviewHttpError);
   assert.strictEqual(err.status, 422);
 });
 
-test('C6.27 — retry roll_to_next_buffer does not duplicate carry-forward (idempotency)', async () => {
-  const { db, hh } = await makDbWithBuffer('_b27', '500.00', '200.00');
-  await applyBufferDisposition({ db, householdId: hh, period: PERIOD, userId: 'u1', disposition: { type: 'roll_to_next_buffer' } });
-  await applyBufferDisposition({ db, householdId: hh, period: PERIOD, userId: 'u1', disposition: { type: 'roll_to_next_buffer' } });
-  // Get next month's income entries — should have only one carry-forward entry
-  const nextPeriod = '2026-08-01';
-  const incomeEntries = await db.transaction((tx) => tx.listIncomeEntries({ householdId: hh, from: nextPeriod, to: nextPeriod }));
-  const carryEntries = incomeEntries.filter((e) => e.source === 'carry_forward');
-  assert.strictEqual(carryEntries.length, 1, 'Only one carry-forward entry created (idempotency)');
-});
-
 // ─── Section 4: Transition ───────────────────────────────────────────────────
 
-test('C8.28 — next period derived correctly across year boundary', async () => {
+test('C8.28 — return_to_plan is metadata-only', async () => {
   const { db, hh } = await makDbWithBuffer('_t28', '300.00', '100.00');
-  // Close December
-  const decDb = await makeDb(HH + '_dec28');
   const result = await applyBufferDisposition({
-    db: decDb, householdId: HH + '_dec28', period: PERIOD_DEC, userId: 'u1',
-    disposition: { type: 'roll_to_next_buffer' },
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    disposition: { type: 'return_to_plan' },
   });
-  // Buffer remaining = 0 so applied = false, but logic should still work
-  assert.ok(result !== null);
+  assert.strictEqual(result.applied, true);
+  assert.strictEqual(result.dispositionType, 'return_to_plan');
 });
 
 test('C8.29 — close December → lifecycle state transitions correctly', async () => {
@@ -417,28 +383,23 @@ test('C8.30 — active period does not change before close succeeds', async () =
   assert.strictEqual(householdAfter?.activeMonth, activeMonthBefore, 'activeMonth should not change during close');
 });
 
-test('C8.31 — carry-forward appears once (idempotency on close)', async () => {
+test('C8.31 — close is idempotent (prevents double-close)', async () => {
   const { db, hh } = await makDbWithBuffer('_t31', '500.00', '200.00');
-  await closeMonth({
+  const result1 = await closeMonth({
     db, householdId: hh, period: PERIOD, userId: 'u1',
-    bufferDispositionInput: { type: 'roll_to_next_buffer' },
   });
-  // Re-attempt close should fail (double-close protection), not double carry-forward
+  assert.strictEqual(result1.state, 'CLOSED');
+  // Re-attempt close should fail (double-close protection)
   const err = await closeMonth({ db, householdId: hh, period: PERIOD, userId: 'u1' }).catch((e) => e);
   assert.ok(err instanceof MonthlyReviewHttpError);
   assert.strictEqual(err.status, 409);
 });
 
-test('C8.32 — unrelated allocation categories do NOT roll automatically', async () => {
+test('C8.32 — buffer disposition is optional during close', async () => {
   const { db, hh } = await makDbWithBuffer('_t32', '500.00', '200.00');
-  const cats = await db.transaction((tx) => tx.listAllocationCategories({ householdId: hh }));
-  const nonBuffer = cats.filter((c) => !c.isBuffer && c.isActive !== false);
-  assert.ok(nonBuffer.length > 0, 'there are non-buffer categories');
-  await closeMonth({ db, householdId: hh, period: PERIOD, userId: 'u1' });
-  // Verify no carry-forward income entries for non-buffer categories
-  const nextPeriod = '2026-08-01';
-  const incomeEntries = await db.transaction((tx) => tx.listIncomeEntries({ householdId: hh, from: nextPeriod, to: nextPeriod }));
-  assert.strictEqual(incomeEntries.length, 0, 'No auto carry-forward for non-buffer categories');
+  const result = await closeMonth({ db, householdId: hh, period: PERIOD, userId: 'u1' });
+  assert.strictEqual(result.state, 'CLOSED');
+  assert.strictEqual(result.bufferDisposition, null, 'No disposition when not specified');
 });
 
 // ─── Section 5: Authority Preservation ──────────────────────────────────────
@@ -555,16 +516,15 @@ test('C.40 — duplicate reopen request is safe (409 on second)', async () => {
   assert.ok([LifecycleState.REVIEWING, LifecycleState.OPEN].includes(state.state));
 });
 
-test('C.41 — simultaneous buffer disposition does not duplicate carry-forward', async () => {
-  const { db, hh } = await makDbWithBuffer('_conc41', '500.00', '200.00');
-  await Promise.allSettled([
-    applyBufferDisposition({ db, householdId: hh, period: PERIOD, userId: 'u1', disposition: { type: 'roll_to_next_buffer' } }),
-    applyBufferDisposition({ db, householdId: hh, period: PERIOD, userId: 'u1', disposition: { type: 'roll_to_next_buffer' } }),
-  ]);
-  const nextPeriod = '2026-08-01';
-  const incomeEntries = await db.transaction((tx) => tx.listIncomeEntries({ householdId: hh, from: nextPeriod, to: nextPeriod }));
-  const carryEntries = incomeEntries.filter((e) => e.source === 'carry_forward');
-  assert.ok(carryEntries.length <= 1, 'At most one carry-forward entry (concurrent idempotency)');
+test('C.41 — rollover disposition is deferred (not supported in Wave C)', async () => {
+  const { db, hh } = await makDbWithBuffer('_def41', '500.00', '200.00');
+  const err = await applyBufferDisposition({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    disposition: { type: 'roll_to_next_buffer' },
+  }).catch((e) => e);
+  assert.ok(err instanceof MonthlyReviewHttpError);
+  assert.strictEqual(err.status, 400);
+  assert.ok(err.message.includes('disposition.type'), 'Disposition type rejected');
 });
 
 // ─── Section 7: Close Readiness ──────────────────────────────────────────────
