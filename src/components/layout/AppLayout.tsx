@@ -16,20 +16,24 @@ const desktopNavigation = [
     items: [
       { to: "/dashboard", label: "Home", icon: "home" },
       { to: "/transactions", label: "Transactions", icon: "list" },
+      { to: "/plan", label: "Plan", icon: "plan" },
+      { to: "/cash-flow", label: "Cash Flow", icon: "chart" },
     ],
   },
   {
-    label: "Planning",
+    label: "Manage",
     items: [
-      { to: "/plan", label: "Plan", icon: "plan" },
-      { to: "/outlook", label: "Outlook", icon: "chart" },
-      { to: "/monthly-review", label: "Monthly Review", icon: "calendar" },
+      { to: "/accounts", label: "Accounts", icon: "bank" },
+      { to: "/goals", label: "Goals", icon: "target" },
+      { to: "/debts", label: "Debts", icon: "debt" },
+      { to: "/reports", label: "Reports", icon: "report" },
     ],
   },
   {
     label: "System",
     items: [
       { to: "/remi", label: "Remi", icon: "remi" },
+      { to: "/profile", label: "Profile", icon: "profile" },
       { to: "/settings", label: "Settings", icon: "settings" },
     ],
   },
@@ -39,7 +43,7 @@ const mobileTabs = [
   { to: "/dashboard", label: "Home", icon: "home" },
   { to: "/transactions", label: "Transactions", icon: "list" },
   { to: "/plan", label: "Plan", icon: "plan" },
-  { to: "/outlook", label: "Outlook", icon: "chart" },
+  { to: "/debts", label: "Debts", icon: "debt" },
 ];
 
 // ── Icon components ─────────────────────────────────────────────────────────
@@ -116,6 +120,48 @@ function NavIcon({ type }: { type: string }) {
     return (
       <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
         <path d="M12 5v14M5 12h14" />
+      </svg>
+    );
+  }
+  if (type === "bank") {
+    return (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 4h16M4 9v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9" />
+        <path d="M8 9v5M12 9v5M16 9v5M3 4l9-2 9 2" />
+      </svg>
+    );
+  }
+  if (type === "target") {
+    return (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="6" />
+        <circle cx="12" cy="12" r="2" />
+      </svg>
+    );
+  }
+  if (type === "debt") {
+    return (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="3" width="20" height="14" rx="2" />
+        <path d="M2 17h20" />
+        <path d="M6 21h12" />
+      </svg>
+    );
+  }
+  if (type === "report") {
+    return (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1" />
+        <path d="M6 8h12M6 12h12M6 16h6" />
+      </svg>
+    );
+  }
+  if (type === "profile") {
+    return (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+        <circle cx="12" cy="7" r="4" />
       </svg>
     );
   }
@@ -503,7 +549,7 @@ export function AppLayout() {
               )}
             </div>
 
-            <NavLink to="/settings?tab=profile" className="topbar-avatar" title="Profile" aria-label="Profile">
+            <NavLink to="/profile" className="topbar-avatar" title="Profile" aria-label="Profile">
               {initials}
             </NavLink>
           </div>

@@ -43,7 +43,18 @@ function insightBarColor(index: number) {
   return colors[index % colors.length];
 }
 
-export function Insights() {
+export function Insights({
+  eyebrow: eyebrowProp,
+  title: titleProp,
+  description: descriptionProp,
+}: {
+  eyebrow?: string;
+  title?: string;
+  description?: string;
+} = {}) {
+  const eyebrow = eyebrowProp ?? "Insights";
+  const title = titleProp ?? "Insights";
+  const description = descriptionProp ?? "Year-to-date trends and analytics.";
   const { data, error, isLoading, reload } = useAsyncData<InsightsViewModel>(async () => {
     const household = await getHouseholdSettings();
     const yearStart = `${household.activeMonth.slice(0, 4)}-01-01`;
@@ -65,7 +76,7 @@ export function Insights() {
 
   if (isLoading) {
     return (
-      <PageShell eyebrow="Insights" title="Insights" description="Year-to-date trends and analytics.">
+      <PageShell eyebrow={eyebrow} title={title} description={description}>
         <LoadingState label="Loading insights..." />
       </PageShell>
     );
@@ -73,7 +84,7 @@ export function Insights() {
 
   if (error || !data) {
     return (
-      <PageShell eyebrow="Insights" title="Insights" description="Year-to-date trends and analytics.">
+      <PageShell eyebrow={eyebrow} title={title} description={description}>
         <ErrorState title="Failed to load insights" message={error ?? "Insights could not be loaded."} onRetry={() => void reload()} />
       </PageShell>
     );
@@ -107,9 +118,9 @@ export function Insights() {
 
   return (
     <PageShell
-      eyebrow="Insights"
-      title="Insights"
-      description="Year-to-date trends and analytics."
+      eyebrow={eyebrow}
+      title={title}
+      description={description}
     >
       {latestHealth ? (
         <FinancialHealthIndicator

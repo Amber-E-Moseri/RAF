@@ -7,19 +7,24 @@ import { RequireAuth } from "./components/layout/RequireAuth";
 import { AuthProvider } from "./context/AuthContext";
 import { PlanProvider } from "./context/PlanContext";
 import { AcceptInvitation } from "./pages/AcceptInvitation";
+import { Accounts } from "./pages/Accounts";
 import { AddIncome } from "./pages/AddIncome";
 import { Dashboard } from "./pages/Dashboard";
+import { Debts } from "./pages/Debts";
+import { Goals } from "./pages/Goals";
 import { Login } from "./pages/Login";
 import { Members } from "./pages/Members";
 import { MonthlyReview } from "./pages/MonthlyReview";
 import { NotFound } from "./pages/NotFound";
-import { Outlook } from "./pages/Outlook";
 import { Plan } from "./pages/Plan";
 import { PlanWizard } from "./pages/PlanWizard";
+import { Profile } from "./pages/Profile";
 import { Remi } from "./pages/Remi";
+import { Reports } from "./pages/Reports";
 import { Scenarios } from "./pages/Scenarios";
 import { Settings } from "./pages/Settings";
 import { Transactions } from "./pages/Transactions";
+import { CashFlow } from "./pages/CashFlow";
 
 export default function App() {
   return (
@@ -41,30 +46,33 @@ export default function App() {
                 >
                   <Route index element={<Navigate to="/dashboard" replace />} />
 
-                  {/* ── Primary navigation destinations ── */}
+                  {/* ── 11 Canonical destinations ── */}
                   <Route path="dashboard" element={<Dashboard />} />
                   <Route path="transactions" element={<Transactions />} />
                   <Route path="plan" element={<Plan />} />
-                  <Route path="outlook" element={<Outlook />} />
-                  <Route path="monthly-review" element={<MonthlyReview />} />
+                  <Route path="cash-flow" element={<CashFlow />} />
+                  <Route path="accounts" element={<Accounts />} />
+                  <Route path="goals" element={<Goals />} />
+                  <Route path="debts" element={<Debts />} />
+                  <Route path="reports" element={<Reports />} />
                   <Route path="remi" element={<Remi />} />
+                  <Route path="profile" element={<Profile />} />
                   <Route path="settings" element={<Settings />} />
 
-                  {/* ── Supporting routes (still accessible, not in primary nav) ── */}
+                  {/* ── Supporting routes ── */}
                   <Route path="income/new" element={<AddIncome />} />
                   <Route path="members" element={<Members />} />
+                  <Route path="monthly-review" element={<MonthlyReview />} />
                   <Route path="plan-wizard" element={<PlanWizard />} />
                   <Route path="scenarios" element={<Scenarios />} />
 
-                  {/* ── Compatibility redirects — old bookmarks continue to work ── */}
-                  <Route path="goals" element={<Navigate to="/plan?tab=goals" replace />} />
-                  <Route path="debts" element={<Navigate to="/plan?tab=debts" replace />} />
-                  <Route path="insights" element={<Navigate to="/outlook?tab=reports" replace />} />
-                  <Route path="cash-flow-forecast" element={<Navigate to="/outlook" replace />} />
+                  {/* ── Compatibility redirects ── */}
+                  <Route path="outlook" element={<Navigate to="/cash-flow" replace />} />
+                  <Route path="cash-flow-forecast" element={<Navigate to="/cash-flow" replace />} />
+                  <Route path="insights" element={<Navigate to="/reports" replace />} />
                   <Route path="allocation-preferences" element={<Navigate to="/plan" replace />} />
                   <Route path="appearance-settings" element={<Navigate to="/settings" replace />} />
                   <Route path="appearance" element={<Navigate to="/settings" replace />} />
-                  <Route path="profile" element={<Navigate to="/settings?tab=profile" replace />} />
 
                   <Route path="*" element={<NotFound />} />
                 </Route>
