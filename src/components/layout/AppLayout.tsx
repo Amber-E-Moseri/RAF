@@ -496,16 +496,43 @@ export function AppLayout() {
               <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)]">Revenue Allocation Formula</p>
             </div>
           </div>
-          <PeriodPicker
-            activeMonth={activeMonth}
-            activeMonthLabel={activeMonthLabel}
-            isCurrentMonth={isCurrentMonth}
-            monthOptions={monthOptions}
-            onPrev={prevMonth}
-            onNext={nextMonth}
-            onCurrent={jumpToCurrentMonth}
-            onSelect={setActiveMonth}
-          />
+          <div className="flex items-center gap-2">
+            <PeriodPicker
+              activeMonth={activeMonth}
+              activeMonthLabel={activeMonthLabel}
+              isCurrentMonth={isCurrentMonth}
+              monthOptions={monthOptions}
+              onPrev={prevMonth}
+              onNext={nextMonth}
+              onCurrent={jumpToCurrentMonth}
+              onSelect={setActiveMonth}
+            />
+            {/* Quick Add button for mobile */}
+            <div className="relative" ref={quickAddRef}>
+              <button
+                type="button"
+                className="topbar-iconbtn"
+                title="Quick add"
+                aria-label="Quick add"
+                aria-expanded={quickAddOpen}
+                onClick={() => setQuickAddOpen((o) => !o)}
+              >
+                <NavIcon type="plus" />
+              </button>
+              {quickAddOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-50"
+                    onClick={() => setQuickAddOpen(false)}
+                    aria-hidden="true"
+                  />
+                  <div className="relative z-[60]">
+                    <QuickAddMenu onClose={() => setQuickAddOpen(false)} />
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </header>
 
         {/* Desktop topbar */}
