@@ -417,7 +417,6 @@ export function Dashboard() {
           </div>
           <div className="raf-hero-actions hidden sm:flex">
             <Link to="/monthly-review" className="inline-flex min-h-[38px] items-center rounded-[11px] border border-[var(--border-subtle)] bg-white/70 px-[13px] text-[11.5px] font-semibold text-[var(--text-primary)] transition hover:bg-white/90">Monthly review</Link>
-            <button type="button" onClick={() => setShowIncomeModal(true)} className="inline-flex min-h-[38px] items-center rounded-[11px] bg-[var(--theme-primary)] px-[13px] text-[11.5px] font-semibold text-white transition hover:opacity-90">Add income</button>
           </div>
         </div>
         <div className="raf-hero-meta">
