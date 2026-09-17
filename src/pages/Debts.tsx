@@ -872,20 +872,16 @@ export function Debts() {
                   </div>
                 </section>
 
-                <section className="space-y-4 border-t border-[var(--border-color)] pt-6">
-                  <div>
-                    <h3 className="text-sm font-semibold text-[var(--text-strong)]">Status</h3>
-                  </div>
-                  <label className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-strong)]">
-                    <span className="flex min-h-[56px] items-center gap-3">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-[var(--border-color)] text-[var(--primary-color)]"
-                        checked={editForm.isActive}
-                        onChange={(event) => setEditForm((current) => ({ ...current, isActive: event.target.checked }))}
-                      />
-                      <span className="text-[13px] font-medium">Active debt</span>
-                    </span>
+                <section className="space-y-3 border-t border-[var(--border-color)] pt-6">
+                  <h3 className="text-sm font-semibold text-[var(--text-strong)]">Status</h3>
+                  <label className="flex items-center gap-3 rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-3">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-[var(--border-color)] text-[var(--primary-color)]"
+                      checked={editForm.isActive}
+                      onChange={(event) => setEditForm((current) => ({ ...current, isActive: event.target.checked }))}
+                    />
+                    <span className="text-[13px] font-medium text-[var(--text-strong)]">Active debt</span>
                   </label>
                 </section>
                 {editError ? <ErrorState title="Failed to update debt" message={editError} /> : null}
