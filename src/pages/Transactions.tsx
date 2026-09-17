@@ -345,6 +345,7 @@ export function Transactions() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showIncomeModal, setShowIncomeModal] = useState(false);
   const [showCreateTransactionForm, setShowCreateTransactionForm] = useState(false);
+  const [showImportForm, setShowImportForm] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<TransactionEditState | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editSuggestion, setEditSuggestion] = useState<TransactionSuggestion | null>(null);
@@ -1387,35 +1388,11 @@ export function Transactions() {
       description="Bank activity stays canonical. Categories, notes and splits explain what the money was for without duplicating the underlying transaction."
       actions={
         <div className="flex gap-2">
-          <Button type="button" onClick={() => setShowIncomeModal(true)}>
-            Add Income
+          <Button type="button" variant="secondary" onClick={() => setShowImportForm((current) => !current)}>
+            Import statement
           </Button>
-          {data?.transactions.items.length ? (
-            <Button
-              type="button"
-              onClick={() => setShowCreateTransactionForm((current) => !current)}
-            >
-              {showCreateTransactionForm ? "Hide Add Transaction" : "Add Transaction"}
-            </Button>
-          ) : null}
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={cursorHistory.length <= 1 || isLoading}
-            onClick={() => setCursorHistory((history) => history.slice(0, -1))}
-          >
-            Previous
-          </Button>
-          <Button
-            type="button"
-            disabled={isLoading || !data?.transactions.nextCursor}
-            onClick={() => {
-              if (data?.transactions.nextCursor) {
-                setCursorHistory((history) => [...history, data.transactions.nextCursor]);
-              }
-            }}
-          >
-            Next
+          <Button type="button" onClick={() => setShowCreateTransactionForm((current) => !current)}>
+            {showCreateTransactionForm ? "Hide Add Transaction" : "Add transaction"}
           </Button>
         </div>
       }
@@ -1618,6 +1595,7 @@ export function Transactions() {
       </section>
       ) : null}
 
+      {showImportForm ? (
       <Card
         title="Import Bank Statement"
         subtitle="Upload a PDF bank statement to create imported rows for review. Nothing becomes a completed RAF transaction until you approve it."
@@ -1689,6 +1667,7 @@ export function Transactions() {
           {importSuccess ? <SuccessNotice title="Import complete" message={importSuccess} /> : null}
         </div>
       </Card>
+      ) : null}
 
       <Card
         title="Imported Rows Review"
