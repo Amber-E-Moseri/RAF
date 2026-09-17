@@ -569,9 +569,12 @@ export function Debts() {
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-2">
               {data.items.map((debt) => {
                 const completion = percentPaidOff(debt.startingBalance, debt.currentBalance) ?? 0;
+                const statusColor = debt.status === "paid_off" ? "#10b981" : debt.paymentStatus === "missed_payment" ? "#ef4444" : debt.paymentStatus === "under_minimum" ? "#f59e0b" : "#3b82f6";
+                const statusLabel = debt.status === "paid_off" ? "Paid off" : debt.paymentStatus === "missed_payment" ? "Missed payment" : debt.paymentStatus === "under_minimum" ? "Under minimum" : "On track";
 
                 return (
-                  <Card key={debt.id}>
+                  <Card key={debt.id} className="relative overflow-hidden">
+                    <div className="absolute top-0 left-0 h-1 w-full" style={{ background: statusColor }} />
                     <div className="space-y-4">
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0 flex-1">
@@ -580,8 +583,8 @@ export function Debts() {
                             APR {debt.apr}% · Minimum ${debt.minimumPayment}
                           </p>
                         </div>
-                        <Badge tone={debt.status === "paid_off" ? "success" : "neutral"}>
-                          {debt.status === "paid_off" ? "Paid off" : "Not started"}
+                        <Badge tone={debt.status === "paid_off" ? "success" : debt.paymentStatus === "missed_payment" ? "danger" : debt.paymentStatus === "under_minimum" ? "warning" : "neutral"}>
+                          {statusLabel}
                         </Badge>
                       </div>
 
@@ -591,14 +594,19 @@ export function Debts() {
                       </div>
 
                       <div className="grid gap-3 grid-cols-1 sm:gap-4 sm:grid-cols-2">
-                        <div className="rounded-lg border border-[var(--border-color)] bg-[var(--surface-elevated)] p-3 sm:rounded-xl">
+                        <div className="rounded-lg border border-[var(--border-color)] bg-[var(--surface-elevated)] p-3 sm:rounded-xl" style={{ borderLeftWidth: "4px", borderLeftColor: statusColor }}>
                           <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Payment Pace</p>
                           <p className="mt-2 text-sm font-semibold text-[var(--text-strong)]">${debt.paymentsThisMonth ?? "0"} / ${debt.monthlyPayment} planned</p>
                           <p className="mt-1 text-xs text-[var(--text-muted)]">Compared with the current payment plan.</p>
                         </div>
-                        <div className="rounded-lg border border-[var(--border-color)] bg-[var(--surface-elevated)] p-3 sm:rounded-xl">
+                        <div className="rounded-lg border border-[var(--border-color)] bg-[var(--surface-elevated)] p-3 sm:rounded-xl" style={{ borderLeftWidth: "4px", borderLeftColor: completion > 50 ? "#10b981" : completion > 25 ? "#f59e0b" : "#ef4444" }}>
                           <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Balance Trajectory</p>
-                          <p className="mt-2 text-sm font-semibold text-[var(--text-strong)]">{completion.toFixed(0)}% paid down</p>
+                          <div className="mt-2 flex items-baseline gap-2">
+                            <p className="text-sm font-semibold text-[var(--text-strong)]">{completion.toFixed(0)}%</p>
+                            <p className="text-xs font-medium" style={{ color: completion > 50 ? "#10b981" : completion > 25 ? "#f59e0b" : "#ef4444" }}>
+                              {completion > 50 ? "Good progress" : completion > 25 ? "Some progress" : "Early stage"}
+                            </p>
+                          </div>
                           <p className="mt-1 text-xs text-[var(--text-muted)]">Balance is decreasing over the measured period.</p>
                         </div>
                       </div>
