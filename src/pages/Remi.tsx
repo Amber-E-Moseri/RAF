@@ -211,37 +211,49 @@ function ChatBubble({ msg, onCopy }: { msg: MessageItem; onCopy?: (text: string)
 // ─── Starter prompts ──────────────────────────────────────────────────────────
 
 const STARTER_PROMPTS = [
-  { label: "Can I afford $400 this weekend?", icon: "💳" },
-  { label: "How are my debts looking?", icon: "📉" },
-  { label: "Compare this month to last month", icon: "📊" },
-  { label: "What's my cash flow for the next 30 days?", icon: "🔭" },
-  { label: "Where am I on my goals?", icon: "🎯" },
-  { label: "Explain my personal spending this month", icon: "🔍" },
+  "How is my month going?",
+  "What needs my attention?",
+  "Explain my cash flow",
+  "Which goal is closest?",
 ];
 
 function StarterPrompts({ onSelect }: { onSelect: (p: string) => void }) {
   return (
-    <div className="flex flex-col gap-3 py-4">
-      <p className="text-center text-[12px] font-medium text-[var(--text-subtle)]">
-        Ask me anything — or pick a question below
-      </p>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+    <div className="flex flex-col gap-3">
+      {STARTER_PROMPTS.map((p) => (
+        <button
+          key={p}
+          type="button"
+          onClick={() => onSelect(p)}
+          className="w-full rounded-lg bg-[var(--theme-primary)] px-4 py-2.5 text-left text-sm font-medium text-white transition hover:opacity-90"
+        >
+          {p}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SuggestedQuestions({ onSelect }: { onSelect: (p: string) => void }) {
+  return (
+    <aside className="w-64 shrink-0 space-y-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-widest text-[var(--text-muted)]">Try asking</p>
+        <p className="mt-1 text-xs text-[var(--text-muted)]">Prototype responses use your local demo state.</p>
+      </div>
+      <div className="space-y-2">
         {STARTER_PROMPTS.map((p) => (
           <button
-            key={p.label}
+            key={p}
             type="button"
-            onClick={() => onSelect(p.label)}
-            className="flex flex-col items-start gap-1.5 rounded-[var(--r-lg)] border border-[var(--border-subtle)] bg-[var(--surface-card)] p-3 text-left transition hover:border-[var(--theme-primary)] hover:shadow-sm"
-            style={{ boxShadow: "var(--shadow-card)" }}
+            onClick={() => onSelect(p)}
+            className="block w-full text-left text-sm font-medium text-[var(--text-strong)] transition hover:text-[var(--theme-primary)]"
           >
-            <span className="text-[16px]">{p.icon}</span>
-            <span className="text-[12px] font-medium leading-snug text-[var(--text-primary)]">
-              {p.label}
-            </span>
+            {p}
           </button>
         ))}
       </div>
-    </div>
+    </aside>
   );
 }
 
@@ -481,7 +493,11 @@ export function Remi() {
   }
 
   return (
-    <PageShell eyebrow="AI Advisor" title="Your RAF guide.">
+    <PageShell
+      eyebrow="Remi"
+      title="Your RAF guide."
+      description="Ask about your plan, recent activity, goals or cash-flow context. This prototype uses local deterministic responses."
+    >
       {/* Dot animation */}
       <style>{`
         @keyframes remi-dot {
@@ -490,70 +506,12 @@ export function Remi() {
         }
       `}</style>
 
-      <div className="flex items-start gap-4" style={{ height: "calc(100vh - 9.5rem)" }}>
-        {/* ── Sidebar (desktop) ── */}
-        <div className="hidden h-full md:flex">
-          <ConversationSidebar
-            conversations={conversations}
-            activeId={conversationId}
-            onSelect={(id) => void loadConversation(id)}
-            onNew={startNew}
-            loading={convLoading}
-          />
-        </div>
-
+      <div className="flex gap-6" style={{ minHeight: "calc(100vh - 12rem)" }}>
         {/* ── Chat panel ── */}
         <div
-          className="flex h-full flex-1 flex-col rounded-[var(--r-xl)] border border-[var(--border-subtle)] bg-[var(--surface-card)]"
+          className="flex flex-1 flex-col rounded-[var(--r-xl)] border border-[var(--border-subtle)] bg-[var(--surface-card)]"
           style={{ boxShadow: "var(--shadow-card)" }}
         >
-          {/* Header */}
-          <div className="flex items-center gap-3 border-b border-[var(--border-subtle)] px-5 py-3.5">
-            {/* Mobile: conversations toggle */}
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-[var(--r-md)] text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)] md:hidden"
-              onClick={() => setShowSidebar((s) => !s)}
-              aria-label="Conversations"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-              </svg>
-            </button>
-
-            <RemiAvatar size="md" />
-
-            <div className="min-w-0 flex-1">
-              <p className="text-[14px] font-semibold text-[var(--text-primary)]">Remi</p>
-              <p className="text-[11px] text-[var(--text-subtle)]">
-                {isPaid ? "AI-powered · calls your plan data" : "Free tier · upgrade for full insights"}
-              </p>
-            </div>
-
-            <span
-              className="shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
-              style={
-                isPaid
-                  ? { background: "var(--badge-success-bg)", color: "var(--badge-success-text)" }
-                  : { background: "var(--badge-neutral-bg)", color: "var(--badge-neutral-text)" }
-              }
-            >
-              {isPaid ? "AI" : "Free"}
-            </span>
-          </div>
-
-          {/* Mobile sidebar drawer */}
-          {showSidebar && (
-            <div className="border-b border-[var(--border-subtle)] p-3 md:hidden">
-              <ConversationSidebar
-                conversations={conversations}
-                activeId={conversationId}
-                onSelect={(id) => void loadConversation(id)}
-                onNew={startNew}
-                loading={convLoading}
-              />
-            </div>
-          )}
 
           {/* Messages */}
           <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
@@ -606,6 +564,9 @@ export function Remi() {
             </p>
           </div>
         </div>
+
+        {/* ── Suggested questions sidebar ── */}
+        <SuggestedQuestions onSelect={(p) => void send(p)} />
       </div>
     </PageShell>
   );
