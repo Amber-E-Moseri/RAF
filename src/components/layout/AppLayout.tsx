@@ -421,12 +421,13 @@ export function AppLayout() {
 
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
   const quickAddRef = useRef<HTMLDivElement>(null);
 
   return (
     <div className="theme-shell app-grid">
       {/* ── Dark sidebar (desktop only) ── */}
-      <aside className="hidden md:flex sidebar-shell">
+      <aside className={`sidebar-shell${sidebarVisible ? " hidden md:flex" : " hidden"}`}>
         <div className="sidebar-brand">
           <img src={rafLogo} alt="RAF" className="brand-logo" />
           <div>
@@ -538,6 +539,18 @@ export function AppLayout() {
         {/* Desktop topbar */}
         <header className="topbar-desktop hidden md:flex">
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="topbar-iconbtn"
+              title={sidebarVisible ? "Hide sidebar" : "Show sidebar"}
+              onClick={() => setSidebarVisible(!sidebarVisible)}
+              aria-label={sidebarVisible ? "Hide sidebar" : "Show sidebar"}
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <rect x="3" y="3" width="18" height="18" rx="1.5" />
+                <line x1="9" y1="3" x2="9" y2="21" />
+              </svg>
+            </button>
             <TopbarMonthSwitch
               label={activeMonthLabel}
               isCurrentMonth={isCurrentMonth}
