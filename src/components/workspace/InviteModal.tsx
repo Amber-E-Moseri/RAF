@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { sendInvitation } from "../../api/collaborationApi";
+import { Button } from "../ui/Button";
 
 const ROLES = [
   { value: "admin", label: "Admin", description: "Can manage members, view everything" },
@@ -65,7 +66,7 @@ export function InviteModal({ workspaceId, onSent, onClose }: Props) {
               {ROLES.map((r) => (
                 <label
                   key={r.value}
-                  className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors ${role === r.value ? "border-[var(--brand-primary)] bg-[var(--brand-primary)]/5" : "border-[var(--border-subtle)]"}`}
+                  className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors ${role === r.value ? "border-[var(--theme-primary)] bg-[var(--theme-soft)]" : "border-[var(--border-subtle)]"}`}
                 >
                   <input
                     type="radio"
@@ -73,7 +74,7 @@ export function InviteModal({ workspaceId, onSent, onClose }: Props) {
                     value={r.value}
                     checked={role === r.value}
                     onChange={() => setRole(r.value)}
-                    className="mt-0.5 shrink-0 accent-[var(--brand-primary)]"
+                    className="mt-0.5 shrink-0 accent-[var(--theme-primary)]"
                   />
                   <div>
                     <span className="text-[13px] font-semibold text-[var(--text-primary)]">{r.label}</span>
@@ -89,21 +90,22 @@ export function InviteModal({ workspaceId, onSent, onClose }: Props) {
           ) : null}
 
           <div className="flex gap-2 pt-1">
-            <button
+            <Button
               type="button"
-              className="ui-button-ghost flex-1"
+              variant="secondary"
+              className="flex-1"
               onClick={onClose}
               disabled={busy}
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              className="ui-button-primary flex-1"
+              className="flex-1"
               disabled={busy || !email.trim()}
             >
               {busy ? "Sending…" : "Send invite"}
-            </button>
+            </Button>
           </div>
         </form>
       </div>

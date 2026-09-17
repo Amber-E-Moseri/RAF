@@ -6,6 +6,7 @@ import { ActivityFeed } from "../components/workspace/ActivityFeed";
 import { InviteModal } from "../components/workspace/InviteModal";
 import { MemberRow } from "../components/workspace/MemberRow";
 import { PageShell } from "../components/layout/PageShell";
+import { Button } from "../components/ui/Button";
 import { useAuth } from "../context/AuthContext";
 import { usePermission } from "../hooks/usePermission";
 import { useAsyncData } from "../hooks/useAsyncData";
@@ -51,20 +52,21 @@ function PendingInvitationRow({
         </p>
       </div>
       {canManage ? (
-        <button
+        <Button
           type="button"
-          className="ui-button-ghost text-[11px] text-[var(--text-secondary)]"
+          variant="ghost"
+          className="text-[11px]"
           disabled={busy}
           onClick={() => void handleRevoke()}
         >
           Revoke
-        </button>
+        </Button>
       ) : null}
     </div>
   );
 }
 
-export function Members() {
+export function Members({ bare }: { bare?: boolean } = {}) {
   const { session } = useAuth();
   const workspaceId = session?.workspaceId ?? session?.householdId ?? "";
   const canManage = usePermission("members:manage");
@@ -96,85 +98,106 @@ export function Members() {
     void activity.reload();
   }
 
+  const inviteButton = canManage && !isPersonalWorkspace ? (
+    <Button type="button" onClick={() => setShowInvite(true)}>
+      Invite someone
+    </Button>
+  ) : null;
+
+  const content = (
+    <div className="space-y-6">
+      {bare && inviteButton ? (
+        <div className="flex justify-end">{inviteButton}</div>
+      ) : null}
+
+      <div className="flex gap-1 border-b border-[var(--border-subtle)]">
+        {(["members", "activity"] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2 text-[13px] font-semibold capitalize transition-colors ${
+              activeTab === tab
+                ? "border-b-2 border-[var(--theme-primary)] text-[var(--theme-primary)]"
+                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "members" ? (
+        <div className="space-y-3">
+          {members.isLoading ? (
+            <div className="space-y-2">
+              {[1, 2].map((i) => (
+                <div key={i} className="h-16 animate-pulse rounded-lg bg-[var(--surface-muted)]" />
+              ))}
+            </div>
+          ) : (
+            memberList.map((m) => (
+              <MemberRow
+                key={m.userId}
+                member={m}
+                workspaceId={workspaceId}
+                isCurrentUser={m.userId === session?.userId}
+                isPersonalWorkspace={isPersonalWorkspace ?? false}
+                onUpdated={handleUpdated}
+              />
+            ))
+          )}
+
+          {pendingList.length > 0 ? (
+            <div className="pt-2">
+              <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-[var(--text-secondary)]">
+                Pending invitations
+              </h2>
+              <div className="space-y-2">
+                {pendingList.map((inv) => (
+                  <PendingInvitationRow
+                    key={inv.id}
+                    invitation={inv}
+                    canManage={canManage}
+                    onRevoked={() => void invitations.reload()}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {members.error ? (
+            <p className="text-[13px] text-[var(--status-danger)]">{members.error}</p>
+          ) : null}
+        </div>
+      ) : (
+        <ActivityFeed entries={activityList} isLoading={activity.isLoading} />
+      )}
+    </div>
+  );
+
+  if (bare) {
+    return (
+      <>
+        {content}
+        {showInvite ? (
+          <InviteModal
+            workspaceId={workspaceId}
+            onSent={handleInviteSent}
+            onClose={() => setShowInvite(false)}
+          />
+        ) : null}
+      </>
+    );
+  }
+
   return (
     <PageShell
       title={session?.workspaceName ?? session?.householdName ?? "Your household"}
       description={memberList.length > 0 ? `${memberList.length} steward${memberList.length === 1 ? "" : "s"}` : undefined}
-      actions={
-        canManage && !isPersonalWorkspace ? (
-          <button type="button" className="ui-button-primary" onClick={() => setShowInvite(true)}>
-            Invite someone
-          </button>
-        ) : undefined
-      }
+      actions={inviteButton}
     >
-      <div className="space-y-6">
-
-        <div className="flex gap-1 border-b border-[var(--border-subtle)]">
-          {(["members", "activity"] as const).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 text-[13px] font-semibold capitalize transition-colors ${
-                activeTab === tab
-                  ? "border-b-2 border-[var(--brand-primary)] text-[var(--brand-primary)]"
-                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === "members" ? (
-          <div className="space-y-3">
-            {members.isLoading ? (
-              <div className="space-y-2">
-                {[1, 2].map((i) => (
-                  <div key={i} className="h-16 animate-pulse rounded-lg bg-[var(--surface-raised)]" />
-                ))}
-              </div>
-            ) : (
-              memberList.map((m) => (
-                <MemberRow
-                  key={m.userId}
-                  member={m}
-                  workspaceId={workspaceId}
-                  isCurrentUser={m.userId === session?.userId}
-                  isPersonalWorkspace={isPersonalWorkspace ?? false}
-                  onUpdated={handleUpdated}
-                />
-              ))
-            )}
-
-            {pendingList.length > 0 ? (
-              <div className="pt-2">
-                <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-[var(--text-secondary)]">
-                  Pending invitations
-                </h2>
-                <div className="space-y-2">
-                  {pendingList.map((inv) => (
-                    <PendingInvitationRow
-                      key={inv.id}
-                      invitation={inv}
-                      canManage={canManage}
-                      onRevoked={() => void invitations.reload()}
-                    />
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {members.error ? (
-              <p className="text-[13px] text-[var(--text-danger,#ef4444)]">{members.error}</p>
-            ) : null}
-          </div>
-        ) : (
-          <ActivityFeed entries={activityList} isLoading={activity.isLoading} />
-        )}
-      </div>
-
+      {content}
       {showInvite ? (
         <InviteModal
           workspaceId={workspaceId}

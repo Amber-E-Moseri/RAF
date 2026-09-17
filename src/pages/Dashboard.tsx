@@ -607,7 +607,7 @@ export function Dashboard() {
           </Link>
         </div>
       ) : null}
-      <section className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+      <section className="grid grid-cols-2 gap-4 xl:grid-cols-3">
         <SummaryMetricCard
           title="Income this month"
           value={format(latestPeriodIncome)}

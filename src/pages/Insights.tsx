@@ -60,11 +60,14 @@ export function Insights({
     const yearStart = `${household.activeMonth.slice(0, 4)}-01-01`;
     const healthMonths = buildYearToDateMonths(household.activeMonth);
 
-    const [categories, dashboard, financialHealthHistory] = await Promise.all([
+    const healthResults = await Promise.allSettled(healthMonths.map((month) => getFinancialHealthReport(month)));
+    const [categories, dashboard] = await Promise.all([
       getAllocationCategories(),
       getDashboardReport({ from: yearStart, to: household.activeMonth }),
-      Promise.all(healthMonths.map((month) => getFinancialHealthReport(month))),
     ]);
+    const financialHealthHistory = healthResults
+      .filter((r): r is PromiseFulfilledResult<FinancialHealthReport> => r.status === "fulfilled")
+      .map((r) => r.value);
 
     return {
       categories,
@@ -93,8 +96,9 @@ export function Insights({
   const ytdProgressByBucketId = new Map((data.dashboard.ytd_bucket_progress ?? []).map((progress) => [progress.bucket_id, progress]));
   const healthHistory = data.financialHealthHistory ?? [];
   const latestHealth = healthHistory[healthHistory.length - 1] ?? null;
-  const openingHealth = healthHistory[0] ?? null;
-  const healthDelta = latestHealth && openingHealth ? latestHealth.healthScore - openingHealth.healthScore : 0;
+  // Only compute delta when we have at least two distinct months of real data
+  const openingHealth = healthHistory.length > 1 ? (healthHistory[0] ?? null) : null;
+  const healthDelta = latestHealth && openingHealth ? latestHealth.healthScore - openingHealth.healthScore : null;
   const ytdRows = data.categories
     .filter((category) => category.isActive !== false)
     .sort((left, right) => left.sortOrder - right.sortOrder || left.slug.localeCompare(right.slug))
@@ -141,16 +145,15 @@ export function Insights({
               <div className="rounded-[1.35rem] border border-[var(--border-color)] px-4 py-3" style={{ background: "var(--surface-plain)" }}>
                 <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Change this year</div>
                 <div className="mt-2 text-[22px] font-semibold tracking-tight text-[var(--text-strong)]">
-                  {healthDelta >= 0 ? "+" : ""}
-                  {healthDelta}
+                  {healthDelta == null ? "—" : `${healthDelta >= 0 ? "+" : ""}${healthDelta}`}
                 </div>
               </div>
             </div>
 
             <div className="space-y-2">
-              {healthHistory.map((entry) => (
+              {healthHistory.map((entry, index) => (
                 <div
-                  key={entry.reviewMonth ?? entry.activeMonthIncome}
+                  key={entry.reviewMonth ?? index}
                   className="rounded-[1.35rem] border border-[var(--border-color)] px-4 py-3"
                   style={{ background: "var(--surface-plain)" }}
                 >
@@ -183,11 +186,13 @@ export function Insights({
         )}
       </Card>
 
-      <Card title="Dashboard Insights" subtitle="Year-to-date allocation overview">
+      <Card title="YTD by Category" subtitle="Year-to-date spending and goal funding vs allocated — bars show utilization, not distribution">
         {ytdRows.length ? (
           <div className="space-y-3">
             {ytdRows.map((row, index) => {
-              const width = ytdTotalAllocated === 0 ? 0 : Math.max(0, Math.min(100, (row.allocated / ytdTotalAllocated) * 100));
+              const used = row.spent + row.goals;
+              const utilization = row.allocated === 0 ? 0 : Math.max(0, Math.min(100, (used / row.allocated) * 100));
+              const overBudget = row.allocated > 0 && used > row.allocated;
 
               return (
                 <div key={row.id} className="rounded-[1.35rem] border border-[var(--border-color)] px-4 py-3" style={{ background: "var(--surface-plain)" }}>
@@ -195,16 +200,23 @@ export function Insights({
                     <div className="min-w-0">
                       <div className="truncate text-[14px] font-semibold text-[var(--text-strong)]">{row.label}</div>
                       <div className="mt-1 text-[11px] text-[var(--text-muted)]">
-                        Spent <Money value={row.spent.toFixed(2)} /> | Goals <Money value={row.goals.toFixed(2)} />
+                        Spent <Money value={row.spent.toFixed(2)} /> · Goals <Money value={row.goals.toFixed(2)} />
+                        {overBudget ? <span className="ml-2 font-semibold text-[var(--status-danger)]">Over budget</span> : null}
                       </div>
                     </div>
                     <div className="text-right">
                       <div className="text-[11px] font-medium text-[var(--text-muted)]">YTD allocated</div>
-                      <div className="mt-1 text-[17px] font-semibold text-[var(--text-strong)]">{<Money value={row.allocated.toFixed(2)} />}</div>
+                      <div className="mt-1 text-[17px] font-semibold text-[var(--text-strong)]"><Money value={row.allocated.toFixed(2)} /></div>
                     </div>
                   </div>
                   <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--surface-elevated)]">
-                    <div className={`h-full rounded-full ${insightBarColor(index)}`} style={{ width: `${width}%` }} />
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${utilization}%`,
+                        background: overBudget ? "var(--status-danger)" : `var(--chart-${(index % 6) + 1})`,
+                      }}
+                    />
                   </div>
                 </div>
               );
@@ -212,7 +224,7 @@ export function Insights({
           </div>
         ) : (
           <EmptyState
-            title="No YTD insights yet"
+            title="No YTD data yet"
             message="Once this year has category activity, RAF will show year-to-date allocation analytics here."
           />
         )}

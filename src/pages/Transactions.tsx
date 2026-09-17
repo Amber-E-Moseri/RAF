@@ -383,6 +383,7 @@ export function Transactions() {
   const [isLinking, setIsLinking] = useState(false);
   const [reviewFocusId, setReviewFocusId] = useState<string | null>(null);
   const [mobileActionsId, setMobileActionsId] = useState<string | null>(null);
+  const [splitOnEditOpen, setSplitOnEditOpen] = useState(false);
   const cursor = cursorHistory[cursorHistory.length - 1];
 
   useEffect(() => {
@@ -990,6 +991,7 @@ export function Transactions() {
       });
       setSubmitSuccess("Transaction updated.");
       setEditingTransaction(null);
+      setSplitOnEditOpen(false);
       await reload();
     } catch (requestError) {
       setSubmitError(requestError instanceof Error ? requestError.message : "Transaction could not be updated.");
@@ -1685,7 +1687,7 @@ export function Transactions() {
       ) : null}
 
       <div id="transactions-table">
-      <Card title="Transactions Table" subtitle={`Showing transactions from ${formatIsoDate(fromDate)} to ${formatIsoDate(toDate)}.`}>
+      <Card title="Activity" subtitle={`${formatIsoDate(fromDate)} – ${formatIsoDate(toDate)}`}>
         {isLoading ? <LoadingState label="Loading transactions..." /> : null}
         {!isLoading && error ? <ErrorState title="Failed to fetch transactions" message={error} onRetry={() => void reload()} /> : null}
         {!isLoading && !error && data ? (
@@ -1736,12 +1738,12 @@ export function Transactions() {
             {visibleTransactions.length ? (
               <Table
                 headers={[
-                  <span className="inline-block w-20 text-[0.72rem] text-[var(--text-strong)]">Date</span>,
-                  <span className="text-[0.72rem] text-[var(--text-strong)]">{sortableHeader("Description", "description")}</span>,
-                  <span className="inline-block w-[120px] text-[0.68rem] text-[var(--text-muted)]">Category</span>,
-                  <span className="inline-block w-[110px] text-[0.68rem] text-[var(--text-muted)]">Type</span>,
-                  <span className="inline-block w-[88px] text-[0.74rem] font-bold text-[var(--text-strong)]">Amount</span>,
-                  <span className="inline-block w-[110px] text-[0.68rem] text-[var(--text-muted)]">Actions</span>,
+                  <span className="inline-block w-20 text-[8.5px] uppercase tracking-[0.06em] font-[900] text-[var(--text-muted)]">Date</span>,
+                  <span className="text-[8.5px] uppercase tracking-[0.06em] font-[900] text-[var(--text-muted)]">{sortableHeader("Description", "description")}</span>,
+                  <span className="inline-block w-[140px] text-[8.5px] uppercase tracking-[0.06em] font-[900] text-[var(--text-muted)]">Category / purpose</span>,
+                  <span className="inline-block w-[110px] text-[8.5px] uppercase tracking-[0.06em] font-[900] text-[var(--text-muted)]">Type</span>,
+                  <span className="inline-block w-[88px] text-[8.5px] uppercase tracking-[0.06em] font-[900] text-[var(--text-muted)] text-right">Amount</span>,
+                  <span className="inline-block w-[150px] text-[8.5px] uppercase tracking-[0.06em] font-[900] text-[var(--text-muted)]">Actions</span>,
                 ]}
                 thClassNames={[
                   undefined,
@@ -1779,8 +1781,8 @@ export function Transactions() {
 
                   return (
                     <tr key={transaction.id} className="transition hover:bg-[var(--surface-plain)]">
-                      <td className="w-20 px-4 py-3 text-sm text-[var(--text-muted)]">{formatIsoDate(transaction.transactionDate)}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-[var(--text-strong)]">
+                      <td className="w-20 px-[13px] py-[11px] text-[10.5px] text-[var(--text-muted)]">{formatIsoDate(transaction.transactionDate)}</td>
+                      <td className="px-[13px] py-[11px] text-[10.5px] font-[850] text-[var(--text-strong)]">
                         <div className="flex items-center gap-2">
                           <div className="min-w-0 flex-1 max-w-[420px] whitespace-normal break-words">{transaction.description}</div>
                           {!transaction.isImportOnly ? (
@@ -1795,30 +1797,52 @@ export function Transactions() {
                           ) : null}
                         </div>
                       </td>
-                      <td className="hidden sm:table-cell w-[120px] px-4 py-3 text-sm">
+                      <td className="hidden sm:table-cell w-[140px] px-[13px] py-[11px] text-[10.5px]">
                         {categoryLabel ? <Badge tone={categoryTone(categoryLabel)} className="px-2 py-0 text-[10px] font-medium leading-5">{categoryLabel}</Badge> : null}
+                        {transaction.linkedGoalId ? (
+                          <div className="mt-1"><span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-semibold text-emerald-700">Goal · {goalLookup.get(transaction.linkedGoalId) ?? "—"}</span></div>
+                        ) : null}
+                        {transaction.linkedDebtId ? (
+                          <div className="mt-1"><span className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-semibold text-amber-700">Debt · {debtLookup.get(transaction.linkedDebtId) ?? "—"}</span></div>
+                        ) : null}
                       </td>
-                      <td className="hidden sm:table-cell w-[100px] px-4 py-3 text-sm">
+                      <td className="hidden sm:table-cell w-[100px] px-[13px] py-[11px] text-[10.5px]">
                         <div className="text-[11px] text-[var(--text-muted)]">{typeSummary}</div>
                       </td>
-                      <td className={`w-[88px] px-4 py-3 text-right text-sm font-bold ${amountClassName(transaction.direction)}`}>
+                      <td className={`w-[88px] px-[13px] py-[11px] text-right text-[10.5px] font-[900] ${amountClassName(transaction.direction)}`}>
                         {<Money value={transaction.amount} />}
                       </td>
                       {/* Desktop actions column */}
-                      <td className="hidden sm:table-cell w-[110px] px-4 py-3 text-sm">
+                      <td className="hidden sm:table-cell w-[150px] px-[13px] py-[11px] text-[10.5px]">
                         {transaction.isImportOnly ? (
                           <div className="text-right text-xs text-[var(--text-muted)]">Review row</div>
                         ) : (
                           <div className="flex flex-col items-end gap-1">
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center justify-end gap-2">
                               <Button
                                 type="button"
                                 variant="secondary"
                                 className="min-h-8 rounded-full px-3 py-1.5 text-xs"
-                                onClick={() => setEditingTransaction(mapTransactionToEditState(transaction))}
+                                onClick={() => {
+                                  setSplitOnEditOpen(false);
+                                  setEditingTransaction(mapTransactionToEditState(transaction as Transaction));
+                                }}
                               >
                                 Edit
                               </Button>
+                              {transaction.direction === "debit" ? (
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  className="min-h-8 rounded-full px-3 py-1.5 text-xs"
+                                  onClick={() => {
+                                    setSplitOnEditOpen(true);
+                                    setEditingTransaction(mapTransactionToEditState(transaction as Transaction));
+                                  }}
+                                >
+                                  Split
+                                </Button>
+                              ) : null}
                               <button
                                 type="button"
                                 aria-label="Delete transaction"
@@ -1916,6 +1940,21 @@ export function Transactions() {
                   <span className="text-base">✏️</span>
                   Edit transaction
                 </button>
+                {/* Split */}
+                {mobileActionsTx.direction === "debit" ? (
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--surface-plain)] active:bg-[var(--surface-elevated)]"
+                    onClick={() => {
+                      setMobileActionsId(null);
+                      setSplitOnEditOpen(true);
+                      setEditingTransaction(mapTransactionToEditState(mobileActionsTx as Transaction));
+                    }}
+                  >
+                    <span className="text-base">✂️</span>
+                    Split transaction
+                  </button>
+                ) : null}
                 {/* Goal attribution */}
                 {txGoals.length > 0 ? (
                   <div>
@@ -2027,7 +2066,7 @@ export function Transactions() {
                 variant="ghost"
                 className="min-h-9 min-w-9 rounded-full px-0 text-[var(--text-muted)] hover:bg-[var(--surface-plain)] hover:text-[var(--text-strong)]"
                 aria-label="Close edit transaction"
-                onClick={() => setEditingTransaction(null)}
+                onClick={() => { setEditingTransaction(null); setSplitOnEditOpen(false); }}
               >
                 X
               </Button>
@@ -2154,6 +2193,7 @@ export function Transactions() {
             </div>
 
             <SplitTransactionEditor
+              defaultOpen={splitOnEditOpen}
               transaction={{
                 id: editingTransaction.id,
                 transactionDate: editingTransaction.transactionDate,
@@ -2178,7 +2218,7 @@ export function Transactions() {
             />
 
             <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
-              <Button type="button" variant="secondary" onClick={() => setEditingTransaction(null)}>
+              <Button type="button" variant="secondary" onClick={() => { setEditingTransaction(null); setSplitOnEditOpen(false); }}>
                 Cancel
               </Button>
               <Button type="button" disabled={isSavingEdit} onClick={() => void handleSaveEditedTransaction()}>

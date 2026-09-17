@@ -16,6 +16,7 @@ interface SplitTransactionEditorProps {
   parentCategoryLabel: string;
   onSaved: () => Promise<void> | void;
   onCleared: () => Promise<void> | void;
+  defaultOpen?: boolean;
 }
 
 interface SplitDraftRow {
@@ -185,8 +186,9 @@ export function SplitTransactionEditor({
   parentCategoryLabel,
   onSaved,
   onCleared,
+  defaultOpen = false,
 }: SplitTransactionEditorProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);

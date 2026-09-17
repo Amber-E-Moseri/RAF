@@ -43,11 +43,11 @@ export function Settings() {
         ))}
       </nav>
 
-      <div className="tab-content-wrapper">
-        {validTab === "household" && <Members />}
-        {validTab === "appearance" && <AppearanceSettings defaultTab="preferences" />}
-        {validTab === "financial" && <AppearanceSettings defaultTab="savings_floor" />}
-        {validTab === "import-rules" && <AppearanceSettings defaultTab="import_rules" />}
+      <div className="mt-2">
+        {validTab === "household" && <Members bare />}
+        {validTab === "appearance" && <AppearanceSettings tab="preferences" />}
+        {validTab === "financial" && <AppearanceSettings tab="savings_floor" />}
+        {validTab === "import-rules" && <AppearanceSettings tab="import_rules" />}
       </div>
     </PageShell>
   );

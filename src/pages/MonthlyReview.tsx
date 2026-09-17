@@ -550,9 +550,6 @@ export function MonthlyReview() {
       title="Understand what changed."
       description="Explore cash flow, spending and income without introducing a second source of truth."
     >
-      <div className="rounded-2xl border px-4 py-3 text-sm text-[var(--text-muted)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
-        At month end, review the surplus or deficit, confirm where any surplus should go, and save the month.
-      </div>
       {!isCurrentMonth ? (
         <div className="rounded-2xl border px-4 py-3 text-sm text-[var(--text-muted)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
           Viewing {activeMonthLabel} - this is a historical snapshot.{" "}
@@ -565,22 +562,30 @@ export function MonthlyReview() {
 
       {/* ── Wave C Month Lifecycle ─────────────────────────────────────────── */}
       {lifecycleLoading ? (
-        <div className="rounded-2xl border px-4 py-3 text-sm text-[var(--text-muted)]" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
-          Loading month lifecycle…
-        </div>
+        <LoadingState label="Loading month lifecycle…" />
       ) : lifecycleError ? (
         <ErrorState title="Lifecycle unavailable" message={lifecycleError} />
       ) : lifecycle ? (
-        <Card
-          title={`${activeMonthLabel} — ${lifecycle.state}`}
-          subtitle={
-            lifecycle.state === "CLOSED"
-              ? `Closed ${lifecycle.closedAt ? new Date(lifecycle.closedAt).toLocaleDateString() : ""} · version ${lifecycle.version ?? 1}`
-              : lifecycle.state === "REVIEWING"
-              ? "Review in progress. Close the month when ready."
-              : "Month is open. Begin the review when ready to close."
-          }
-        >
+        <section className="relative overflow-hidden rounded-[22px] border border-[var(--border-color)] bg-gradient-to-br from-[var(--surface-color)] via-[var(--surface-color)] to-[color-mix(in_srgb,var(--primary-color)_4%,var(--surface-color))] p-6 shadow-[0_14px_34px_rgba(17,24,39,.055)]">
+          <div className="pointer-events-none absolute -top-[135px] -right-[90px] h-[280px] w-[280px] rounded-full bg-[radial-gradient(circle,rgba(14,159,115,.08),transparent_70%)]" />
+          <div className="relative z-[1] flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-[10.5px] font-black uppercase tracking-[0.08em] text-[var(--text-muted)]">{activeMonthLabel}</p>
+              <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] text-[var(--text-strong)]">
+                {lifecycle.state === "CLOSED" ? "Month closed" : lifecycle.state === "REVIEWING" ? "Review in progress" : "Ready to review"}
+              </h2>
+              <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-[var(--text-muted)]">
+                {lifecycle.state === "CLOSED"
+                  ? `Closed ${lifecycle.closedAt ? new Date(lifecycle.closedAt).toLocaleDateString() : ""} · version ${lifecycle.version ?? 1}`
+                  : lifecycle.state === "REVIEWING"
+                    ? "Close the month when you've reviewed activity, surplus and obligations."
+                    : "Begin the review when you're ready to close this period."}
+              </p>
+            </div>
+            <Badge tone={lifecycle.state === "CLOSED" ? "success" : lifecycle.state === "REVIEWING" ? "warning" : "neutral"}>
+              {lifecycle.state.toLowerCase()}
+            </Badge>
+          </div>
           {lifecycleActionError ? <ErrorState title="Action failed" message={lifecycleActionError} /> : null}
 
           {/* OPEN state */}
@@ -809,52 +814,30 @@ export function MonthlyReview() {
               </div>
             </div>
           )}
-        </Card>
+        </section>
       ) : null}
       {/* ── End Wave C lifecycle ─────────────────────────────────────────────── */}
 
       {monthWorkflow.data ? (
-        <Card
-          title="Month Status"
-          subtitle={`${monthWorkflow.data.activeMonthStatus.label} is currently ${monthWorkflow.data.activeMonthStatus.status.replaceAll("_", " ")}.`}
-        >
-          <div className="grid gap-4 lg:grid-cols-[repeat(3,minmax(0,1fr))]">
-            <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
-              <p className="text-sm text-[var(--text-muted)]">Income total</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]"><Money value={monthWorkflow.data.closeSummary.incomeTotal} /></p>
-            </div>
-            <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
-              <p className="text-sm text-[var(--text-muted)]">Expense total</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]"><Money value={monthWorkflow.data.closeSummary.expenseTotal} /></p>
-            </div>
-            <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
-              <p className="text-sm text-[var(--text-muted)]">Debt payments</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]"><Money value={monthWorkflow.data.closeSummary.debtPaymentsTotal} /></p>
-            </div>
-            <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
-              <p className="text-sm text-[var(--text-muted)]">Protected and goal contributions</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]"><Money value={monthWorkflow.data.closeSummary.protectedContributionsTotal} /></p>
-            </div>
-            <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
-              <p className="text-sm text-[var(--text-muted)]">Remaining surplus or deficit</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]"><Money value={monthWorkflow.data.closeSummary.remainingSurplusOrDeficit} /></p>
-            </div>
-            <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
-              <p className="text-sm text-[var(--text-muted)]">Unresolved imported transactions</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text-strong)]">{monthWorkflow.data.closeSummary.unresolvedImportedTransactions}</p>
-            </div>
+        <Card title="Month snapshot" subtitle={`${monthWorkflow.data.activeMonthStatus.label} · ${monthWorkflow.data.activeMonthStatus.status.replaceAll("_", " ")}`}>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              { label: "Income total", value: <Money value={monthWorkflow.data.closeSummary.incomeTotal} /> },
+              { label: "Expense total", value: <Money value={monthWorkflow.data.closeSummary.expenseTotal} /> },
+              { label: "Debt payments", value: <Money value={monthWorkflow.data.closeSummary.debtPaymentsTotal} /> },
+              { label: "Protected & goals", value: <Money value={monthWorkflow.data.closeSummary.protectedContributionsTotal} /> },
+              { label: "Surplus / deficit", value: <Money value={monthWorkflow.data.closeSummary.remainingSurplusOrDeficit} /> },
+              { label: "Unresolved imports", value: String(monthWorkflow.data.closeSummary.unresolvedImportedTransactions) },
+            ].map((kpi) => (
+              <div key={kpi.label} className="rounded-xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-4">
+                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">{kpi.label}</p>
+                <p className="mt-2 text-[20px] font-black tracking-tight text-[var(--text-strong)]">{kpi.value}</p>
+              </div>
+            ))}
           </div>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Badge tone={monthWorkflow.data.activeMonthStatus.status === "closed" ? "success" : monthWorkflow.data.closeSummary.canClose ? "warning" : "danger"}>
-              {monthWorkflow.data.activeMonthStatus.status.replaceAll("_", " ")}
-            </Badge>
-            {monthWorkflow.data.activeMonthStatus.status === "closed" ? (
-              <span className="text-sm text-[var(--text-muted)]">Monthly review saved. You can reopen the month to make changes.</span>
-            ) : null}
-            <span className="text-sm text-[var(--text-muted)]">
-              Closing a month uses the current surplus suggestion and keeps carry-forward visible through the next month's reserved balances.
-            </span>
-          </div>
+          <p className="mt-4 text-xs text-[var(--text-muted)]">
+            Closing a month uses the current surplus suggestion and keeps carry-forward visible through the next month's reserved balances.
+          </p>
         </Card>
       ) : null}
       {!isPreviewLoading && !previewError && preview?.monthlySummary ? (

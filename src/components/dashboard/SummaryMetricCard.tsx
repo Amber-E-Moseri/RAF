@@ -26,13 +26,13 @@ export function SummaryMetricCard({
     <Card className="summary-metric-card min-h-[100px] overflow-hidden sm:min-h-[120px]">
       <div className="flex h-full flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--text-secondary)]">{title}</p>
+          <p className="text-[10px] font-[750] uppercase tracking-[0.08em] text-[var(--text-secondary)]">{title}</p>
           {badge ? <Badge tone={tone}>{badge}</Badge> : null}
         </div>
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
-            <p className="financial-value text-[22px] font-bold leading-none tracking-[-0.02em] text-[var(--text-primary)] sm:text-[30px]">{value}</p>
-            <p className="mt-1.5 text-[11px] font-medium text-[var(--text-secondary)] sm:mt-2 sm:text-[12px]">{subtitle}</p>
+            <p className="financial-value text-[25px] font-[900] leading-[1.05] tracking-[-0.045em] text-[var(--text-primary)]">{value}</p>
+            <p className="mt-[5px] text-[10px] font-medium text-[var(--text-secondary)]">{subtitle}</p>
             {action ? <div className="mt-3">{action}</div> : null}
           </div>
           {icon ? <div className="text-[var(--text-subtle)]">{icon}</div> : null}

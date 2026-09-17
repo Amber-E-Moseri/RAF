@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import type { WorkspaceMember } from "../../api/collaborationApi";
 import { removeMember, updateMemberRole, leaveWorkspace } from "../../api/collaborationApi";
+import { Button } from "../ui/Button";
 import { usePermission, useRole, roleMeetsMinimum } from "../../hooks/usePermission";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -12,10 +13,10 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const ROLE_COLORS: Record<string, string> = {
-  owner: "bg-[var(--brand-primary)] text-white",
+  owner: "bg-[var(--theme-primary)] text-white",
   admin: "bg-[var(--accent-blue,#3b82f6)] text-white",
-  member: "bg-[var(--surface-raised)] text-[var(--text-primary)]",
-  viewer: "bg-[var(--surface-raised)] text-[var(--text-secondary)]",
+  member: "bg-[var(--surface-muted)] text-[var(--text-primary)]",
+  viewer: "bg-[var(--surface-muted)] text-[var(--text-secondary)]",
 };
 
 const ASSIGNABLE_ROLES = ["admin", "member", "viewer"];
@@ -94,7 +95,7 @@ export function MemberRow({ member, workspaceId, isCurrentUser, isPersonalWorksp
 
   return (
     <div className="flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] px-4 py-3">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-raised)] text-[13px] font-semibold text-[var(--text-primary)]">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[13px] font-semibold text-[var(--text-primary)]">
         {initials(member)}
       </div>
 
@@ -128,25 +129,27 @@ export function MemberRow({ member, workspaceId, isCurrentUser, isPersonalWorksp
         )}
 
         {canRemove ? (
-          <button
+          <Button
             type="button"
-            className="ui-button-ghost text-[11px] text-[var(--text-danger,#ef4444)]"
+            variant="ghost"
+            className="text-[11px] text-rose-600 hover:text-rose-700 hover:bg-rose-50"
             disabled={busy}
             onClick={() => void handleRemove()}
           >
             Remove
-          </button>
+          </Button>
         ) : null}
 
         {canLeave ? (
-          <button
+          <Button
             type="button"
-            className="ui-button-ghost text-[11px] text-[var(--text-danger,#ef4444)]"
+            variant="ghost"
+            className="text-[11px] text-rose-600 hover:text-rose-700 hover:bg-rose-50"
             disabled={busy}
             onClick={() => void handleLeave()}
           >
             Leave
-          </button>
+          </Button>
         ) : null}
       </div>
 

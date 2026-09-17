@@ -685,24 +685,25 @@ button, input, textarea, select {
 }
 
 .topbar-month-pill {
-  border-radius: 10px;
-  border: 1px solid var(--border-subtle);
-  background: var(--surface-card);
+  border-radius: 12px;
+  border: 1.5px solid var(--primary-color);
+  background: linear-gradient(145deg, var(--surface-card) 0%, color-mix(in srgb, var(--primary-color) 6%, var(--surface-card)) 100%);
   color: var(--text-primary);
-  box-shadow: var(--shadow-sm);
-  padding: 8px 12px;
-  font-size: 12px;
-  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(14, 159, 115, 0.1), var(--shadow-sm);
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
   line-height: 1;
   white-space: nowrap;
 }
 
 .topbar-iconbtn {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   flex-shrink: 0;
-  border-radius: 10px;
-  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  border: 1.5px solid var(--border-subtle);
   background: var(--surface-card);
   color: var(--text-secondary);
   box-shadow: var(--shadow-sm);

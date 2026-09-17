@@ -151,22 +151,22 @@ export function Accounts() {
 
       {/* Summary KPIs */}
       {!isLoading && !error && accounts.length > 0 ? (
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="grid gap-4 grid-cols-3">
           <Card>
-            <p className="text-[10px] font-[850] uppercase tracking-[0.1em] text-[var(--text-muted)]">Assets</p>
-            <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]">
+            <p className="text-[10px] font-[750] uppercase text-[var(--text-muted)]">Assets</p>
+            <p className="mt-[5px] text-[25px] font-[900] leading-[1.05] tracking-[-0.045em] text-[var(--text-strong)]">
               <Money value={assets.toFixed(2)} />
             </p>
           </Card>
           <Card>
-            <p className="text-[10px] font-[850] uppercase tracking-[0.1em] text-[var(--text-muted)]">Liabilities</p>
-            <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]">
+            <p className="text-[10px] font-[750] uppercase text-[var(--text-muted)]">Liabilities</p>
+            <p className="mt-[5px] text-[25px] font-[900] leading-[1.05] tracking-[-0.045em] text-[var(--text-strong)]">
               <Money value={liabilities.toFixed(2)} />
             </p>
           </Card>
           <Card>
-            <p className="text-[10px] font-[850] uppercase tracking-[0.1em] text-[var(--text-muted)]">Net position</p>
-            <p className={`mt-2 text-[25px] font-black tracking-tight ${netPosition >= 0 ? "text-[var(--theme-accent)]" : "text-rose-600"}`}>
+            <p className="text-[10px] font-[750] uppercase text-[var(--text-muted)]">Net position</p>
+            <p className={`mt-[5px] text-[25px] font-[900] leading-[1.05] tracking-[-0.045em] ${netPosition >= 0 ? "text-[var(--theme-accent)]" : "text-rose-600"}`}>
               <Money value={netPosition.toFixed(2)} />
             </p>
           </Card>
@@ -219,32 +219,32 @@ export function Accounts() {
       {/* Account cards */}
       {!isLoading && !error ? (
         accounts.length > 0 ? (
-          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <section className="grid gap-[14px] md:grid-cols-3">
             {accounts.map((account) => (
               <div
                 key={account.id}
-                className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-color)] p-4 shadow-sm"
+                className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-color)] p-4 shadow-[var(--shadow-sm)]"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h3 className="text-[13px] font-[900] text-[var(--text-strong)]">{account.name}</h3>
-                    <p className="mt-1 text-[9.5px] text-[var(--text-muted)]">{accountTypeLabel(account.account_type)}</p>
+                    <h3 className="text-[12px] font-[900] text-[var(--text-strong)]">{account.name}</h3>
+                    <p className="mt-[3px] text-[9.5px] text-[var(--text-muted)]">{accountTypeLabel(account.account_type)}</p>
                   </div>
                   <Badge tone={accountTypeBadgeTone(account.account_type)}>
                     {accountTypeLabel(account.account_type)}
                   </Badge>
                 </div>
-                <p className={`mt-4 text-[22px] font-[900] tracking-tight ${Number(account.current_balance) < 0 ? "text-rose-600" : "text-[var(--text-strong)]"}`}>
+                <p className={`mt-[15px] text-[22px] font-[900] tracking-[-0.04em] ${Number(account.current_balance) < 0 ? "text-rose-600" : "text-[var(--text-strong)]"}`}>
                   <Money value={account.current_balance} />
                 </p>
-                <p className="mt-1 text-[9.5px] text-[var(--text-muted)]">
-                  {account.currency} · Balance as of {account.balance_as_of}
+                <p className="mt-[5px] text-[9.5px] text-[var(--text-muted)]">
+                  Balance as of {account.balance_as_of}
                 </p>
-                <div className="mt-4 flex gap-2">
+                <div className="mt-[14px] flex gap-[7px]">
                   <Button
                     type="button"
                     variant="secondary"
-                    className="flex-1 rounded-full px-3 py-1.5 text-xs min-h-8"
+                    className="rounded-[8px] px-[9px] py-[6px] text-[10px] font-[900] min-h-0"
                     onClick={() => {
                       setReconcileId(account.id);
                       setReconcileBalance(Math.abs(Number(account.current_balance)).toFixed(2));
@@ -253,6 +253,19 @@ export function Accounts() {
                     }}
                   >
                     Reconcile
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="rounded-[8px] px-[9px] py-[6px] text-[10px] font-[900] min-h-0"
+                    onClick={() => {
+                      setReconcileId(account.id);
+                      setReconcileBalance(Math.abs(Number(account.current_balance)).toFixed(2));
+                      setReconcileNote("");
+                      setReconcileError(null);
+                    }}
+                  >
+                    Edit
                   </Button>
                 </div>
               </div>

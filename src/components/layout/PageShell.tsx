@@ -27,7 +27,9 @@ export function PageShell({ eyebrow, title, description, actions, children }: Pa
         </div>
         {actions ? <div className="mt-[12px] grid grid-cols-2 gap-2 w-full">{actions}</div> : null}
       </header>
-      {children}
+      <div className="space-y-4">
+        {children}
+      </div>
     </div>
   );
 }

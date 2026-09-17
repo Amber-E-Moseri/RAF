@@ -468,7 +468,7 @@ export function Goals() {
   return (
     <PageShell
       eyebrow="Goals"
-      title="Goals"
+      title="Fund what matters next."
       description="Track progress, target dates and milestones without silently redirecting your money."
       actions={
         <Button type="button" onClick={() => { resetForm(); setShowCreateForm(true); }}>
@@ -489,24 +489,24 @@ export function Goals() {
 
       {!goalsData.isLoading && !goalsData.error && goalsData.data ? (
         <>
-          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <section className="grid gap-4 grid-cols-3">
             <Card>
-              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Goal targets</p>
-              <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]"><Money value={String(activeGoals.reduce((sum, g) => sum + Number(g.target_amount || "0"), 0).toFixed(2))} /></p>
+              <p className="text-[10px] font-[750] uppercase text-[var(--text-muted)]">Goal targets</p>
+              <p className="mt-[5px] text-[25px] font-[900] leading-[1.05] tracking-[-0.045em] text-[var(--text-strong)]"><Money value={String(activeGoals.reduce((sum, g) => sum + Number(g.target_amount || "0"), 0).toFixed(2))} /></p>
+              <p className="mt-[5px] text-[10px] text-[var(--text-muted)]">Includes transaction-linked funding</p>
             </Card>
             <Card>
-              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Funded</p>
-              <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]"><Money value={String(activeGoals.reduce((sum, g) => sum + Number(progressLookup.get(g.id)?.current_amount || "0"), 0).toFixed(2))} /></p>
+              <p className="text-[10px] font-[750] uppercase text-[var(--text-muted)]">Funded</p>
+              <p className="mt-[5px] text-[25px] font-[900] leading-[1.05] tracking-[-0.045em] text-[var(--text-strong)]"><Money value={String(activeGoals.reduce((sum, g) => sum + Number(progressLookup.get(g.id)?.current_amount || "0"), 0).toFixed(2))} /></p>
+              <p className="mt-[5px] text-[10px] text-[var(--text-muted)]">Includes transaction-linked funding</p>
             </Card>
             <Card>
-              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Still needed</p>
-              <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]">
-                <Money value={String(activeGoals.reduce((sum, g) => sum + Math.max(0, Number(progressLookup.get(g.id)?.remaining_amount || "0")), 0).toFixed(2))} />
-              </p>
+              <p className="text-[10px] font-[750] uppercase text-[var(--text-muted)]">Active goals</p>
+              <p className="mt-[5px] text-[25px] font-[900] leading-[1.05] tracking-[-0.045em] text-[var(--text-strong)]">{activeGoals.length}</p>
             </Card>
           </section>
 
-          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <section className="grid gap-[14px] md:grid-cols-3">
             {activeGoals.length ? (
               activeGoals.map((goal) => {
                 const progress = progressLookup.get(goal.id) ?? null;
@@ -514,14 +514,15 @@ export function Goals() {
                 const isReached = (progress?.progress_percent ?? 0) >= 100;
                 const isCelebrating = celebratingGoalIds[goal.id] === true;
                 const showCelebrationMessage = goalCelebrationMessages[goal.id] === true;
-                const avgMonthly = goalPaceLookup.get(goal.id) ?? 0;
                 const cardRemaining = Math.max(0, Number(progress?.remaining_amount ?? "0"));
-                const projectedMonths = avgMonthly > 0 && cardRemaining > 0 ? Math.ceil(cardRemaining / avgMonthly) : null;
+                const recentFunding = recentActivityByGoalId.get(goal.id)?.slice(0, 3) ?? [];
+                const milestones = getGoalMilestones(progress);
+                const nextMilestone = milestones.find((m) => !m.completed);
 
                 return (
                   <div
                     key={goal.id}
-                    className={`relative overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[var(--surface-color)] p-4 shadow-sm ${isReached ? "goal-reached-card" : ""}`}
+                    className={`relative overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[var(--surface-color)] p-4 shadow-[var(--shadow-sm)] ${isReached ? "goal-reached-card" : ""}`}
                   >
                     {isCelebrating ? (
                       <div className="goal-celebration" aria-hidden="true">
@@ -544,56 +545,63 @@ export function Goals() {
                     ) : null}
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <h3 className="font-semibold text-[var(--text-strong)]">{goal.name}</h3>
-                        <p className="mt-1 text-xs text-[var(--text-muted)]">
-                          {goalBucketLabel(goal, progress, categoryLookup)}
-                          {goal.target_date ? ` · ${goal.target_date}` : ""}
+                        <h3 className="text-[12px] font-[900] text-[var(--text-strong)]">{goal.name}</h3>
+                        <p className="mt-[3px] text-[9.5px] text-[var(--text-muted)]">
+                          Target {goal.target_date ?? "not set"} · milestones optional
                         </p>
                       </div>
                       <Badge tone={goalStatusTone(progress)}>{goalStatusLabel(progress)}</Badge>
                     </div>
-                    <p className="mt-3 text-[25px] font-black tracking-tight text-[var(--text-strong)]">
+                    <p className="mt-[15px] text-[22px] font-[900] tracking-[-0.04em] text-[var(--text-strong)]">
                       <Money value={progress?.current_amount ?? "0.00"} />
-                      <span className="text-sm font-normal text-[var(--text-muted)]"> / <Money value={goal.target_amount} /></span>
+                      <span className="text-[12px] font-normal text-[var(--text-muted)]"> / <Money value={goal.target_amount} /></span>
                     </p>
-                    <div className="mt-3">
-                      <div className="mb-1 flex justify-between text-xs text-[var(--text-muted)]">
-                        <span>{progressPercent.toFixed(0)}% funded</span>
-                        {cardRemaining > 0 ? <span><Money value={String(cardRemaining.toFixed(2))} /> left</span> : null}
-                      </div>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-elevated)]">
+                    <div className="mt-[5px]">
+                      <div className="h-[7px] overflow-hidden rounded-full bg-[#eef1ef]">
                         <div
-                          className="h-full rounded-full transition-[width] duration-200"
-                          style={{ width: `${progressPercent}%`, background: goalProgressFill() }}
+                          className="h-full rounded-full"
+                          style={{ width: `${progressPercent}%`, background: "linear-gradient(90deg, #22b783, var(--primary-color))" }}
                         />
                       </div>
-                      {projectedMonths !== null ? (
-                        <p className="mt-2 text-xs text-[var(--text-muted)]">~{projectedMonths} mo if this period's pace holds</p>
-                      ) : null}
+                      <p className="mt-[7px] text-[9.5px] text-[var(--text-muted)]">
+                        {progressPercent.toFixed(0)}% funded
+                        {nextMilestone ? ` · ${nextMilestone.label} to next milestone` : ""}
+                      </p>
                     </div>
-                    {goal.notes ? (
-                      <p className="mt-3 text-xs italic text-[var(--text-muted)]">{goal.notes}</p>
+                    {recentFunding.length > 0 ? (
+                      <div className="mt-[13px] border-t border-[var(--border-color)] pt-[10px]">
+                        <p className="text-[8.5px] font-[900] uppercase tracking-[0.07em] text-[var(--text-muted)]">Recent funding</p>
+                        {recentFunding.map((tx) => (
+                          <div key={tx.id} className="flex items-center justify-between gap-3 py-[7px] text-[9.5px]">
+                            <span className="text-[var(--text-muted)]">{tx.date.slice(5)} · {tx.description}</span>
+                            <b className="text-[var(--text-strong)]">+<Money value={tx.amount} /></b>
+                          </div>
+                        ))}
+                      </div>
                     ) : null}
-                    <div className="mt-3 flex gap-2">
-                      <Button type="button" variant="secondary" className="min-h-8 flex-1 rounded-full px-3 py-1.5 text-xs" onClick={() => setSelectedGoalId(goal.id)}>
-                        View details
+                    <div className="mt-[14px] flex gap-[7px]">
+                      <Button type="button" className="rounded-[8px] px-[9px] py-[6px] text-[10px] font-[900] min-h-0" onClick={() => setSelectedGoalId(goal.id)}>
+                        Add funding
                       </Button>
-                      <Button type="button" variant="secondary" className="min-h-8 flex-1 rounded-full px-3 py-1.5 text-xs" onClick={() => startEdit(goal)}>
-                        Edit
+                      <Button type="button" variant="secondary" className="rounded-[8px] px-[9px] py-[6px] text-[10px] font-[900] min-h-0" onClick={() => setSelectedGoalId(goal.id)}>
+                        Link transaction
+                      </Button>
+                      <Button type="button" variant="secondary" className="rounded-[8px] px-[9px] py-[6px] text-[10px] font-[900] min-h-0" onClick={() => startEdit(goal)}>
+                        {goal.active !== false ? "Pause" : "Resume"}
                       </Button>
                     </div>
                   </div>
                 );
               })
             ) : goalsData.data.categories.length ? (
-              <div className="md:col-span-2 xl:col-span-3">
+              <div className="md:col-span-3">
                 <EmptyState
                   title="No goals yet"
                   message="Create a goal to track progress toward a savings target."
                 />
               </div>
             ) : (
-              <div className="md:col-span-2 xl:col-span-3">
+              <div className="md:col-span-3">
                 <EmptyState
                   title="Set up allocation first"
                   message="Goals are linked to categories, so add at least one active category before creating a goal."

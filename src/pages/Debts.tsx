@@ -16,7 +16,7 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
 import { MoneyInput } from "../components/ui/MoneyInput";
 import { useAsyncData } from "../hooks/useAsyncData";
-import { formatIsoDate, percentPaidOff } from "../lib/format";
+import { formatIsoDate } from "../lib/format";
 import { Money } from "../components/ui/Money";
 import type { DebtPaymentPaceAcknowledgement, Transaction } from "../lib/types";
 import { normalizeMoneyInput, validateApr, validateNonNegativeMoney, validatePositiveMoney, validateRequiredText } from "../lib/validation";
@@ -552,15 +552,15 @@ export function Debts() {
           <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Card>
               <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Total debt</p>
-              <p className="mt-2 text-[20px] font-black tracking-tight text-[var(--text-strong)] sm:text-[25px]">{<Money value={data.summary.totalRemaining} />}</p>
+              <p className="mt-2 text-[20px] font-black tracking-tight text-[var(--text-strong)] sm:text-[25px]"><Money value={data.summary.totalRemaining} /></p>
             </Card>
             <Card>
               <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Planned monthly payments</p>
-              <p className="mt-2 text-[20px] font-black tracking-tight text-[var(--text-strong)] sm:text-[25px]">{<Money value={String(data.items.reduce((sum, d) => sum + Number(d.monthlyPayment || "0"), 0).toFixed(2))} />}</p>
+              <p className="mt-2 text-[20px] font-black tracking-tight text-[var(--text-strong)] sm:text-[25px]"><Money value={String(data.items.reduce((sum, d) => sum + Number(d.monthlyPayment || "0"), 0).toFixed(2))} /></p>
             </Card>
             <Card className="sm:col-span-2 lg:col-span-1">
               <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Balances decreasing</p>
-              <p className="mt-2 text-[20px] font-black tracking-tight text-[var(--text-strong)] sm:text-[25px]">{data.items.filter(d => d.status === "paying_down" || d.status === "paid_off").length}/{data.items.length}</p>
+              <p className="mt-2 text-[20px] font-black tracking-tight text-[var(--text-strong)] sm:text-[25px]">{data.items.filter(d => d.balanceTrajectory?.isDecreasing || d.status === "paid_off").length}/{data.items.length}</p>
               <p className="mt-1 text-xs text-[var(--text-muted)]">Independent of payment pace</p>
             </Card>
           </section>
@@ -568,54 +568,79 @@ export function Debts() {
           {data.items.length ? (
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-2">
               {data.items.map((debt) => {
-                const completion = percentPaidOff(debt.startingBalance, debt.currentBalance) ?? 0;
-                const statusColor = debt.status === "paid_off" ? "#10b981" : debt.paymentStatus === "missed_payment" ? "#ef4444" : debt.paymentStatus === "under_minimum" ? "#f59e0b" : "#3b82f6";
-                const statusLabel = debt.status === "paid_off" ? "Paid off" : debt.paymentStatus === "missed_payment" ? "Missed payment" : debt.paymentStatus === "under_minimum" ? "Under minimum" : "On track";
+                const trajectory = debt.balanceTrajectory;
+                const trajectoryLabel = trajectory?.trajectory === "increasing" ? "increasing" : trajectory?.trajectory === "decreasing" ? "decreasing" : "stable";
+                const trajectoryDelta = trajectory ? (trajectory.absoluteChange / 100).toFixed(2) : null;
+                const trajectoryCopy = trajectory?.trajectory === "increasing"
+                  ? "Balance is rising despite payments. New charges, interest or fees may be offsetting progress."
+                  : trajectory?.trajectory === "decreasing"
+                    ? "Balance is decreasing over the measured period."
+                    : "Balance is broadly stable over the measured period.";
+                const linkedTxs = transactionsByDebtId.get(debt.id) ?? [];
 
                 return (
-                  <Card key={debt.id} className="relative overflow-hidden">
-                    <div className="absolute top-0 left-0 h-1 w-full" style={{ background: statusColor }} />
+                  <Card key={debt.id}>
                     <div className="space-y-4">
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0 flex-1">
                           <p className="text-lg font-bold text-[var(--text-strong)]">{debt.name}</p>
                           <p className="mt-1 text-sm text-[var(--text-muted)]">
-                            APR {debt.apr}% · Minimum ${debt.minimumPayment}
+                            APR {debt.apr}% · Minimum <Money value={debt.minimumPayment} />
                           </p>
                         </div>
-                        <Badge tone={debt.status === "paid_off" ? "success" : debt.paymentStatus === "missed_payment" ? "danger" : debt.paymentStatus === "under_minimum" ? "warning" : "neutral"}>
-                          {statusLabel}
+                        <Badge tone={paymentStatusTone(debt.status === "paid_off" ? "paid_off" : debt.paymentStatus)}>
+                          {paymentStatusLabel(debt.status === "paid_off" ? "paid_off" : debt.paymentStatus)}
                         </Badge>
                       </div>
 
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Current balance</p>
-                        <p className="mt-2 text-[20px] font-black text-[var(--text-strong)]">{<Money value={debt.currentBalance} />}</p>
+                      <p className="text-[22px] font-black tracking-tight text-[var(--text-strong)]"><Money value={debt.currentBalance} /></p>
+
+                      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
+                        <div className="rounded-xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-3">
+                          <p className="text-[8.5px] font-black uppercase tracking-[0.07em] text-[var(--text-muted)]">Payment pace</p>
+                          <p className="mt-2 text-xs font-semibold text-[var(--text-strong)]"><Money value={debt.paymentsThisMonth ?? "0"} /> / <Money value={debt.monthlyPayment} /> planned</p>
+                          <p className="mt-1 text-[9px] leading-snug text-[var(--text-muted)]">
+                            {debt.paymentPace?.pace === "above_plan" ? "Payments are above plan for this period." : debt.paymentPace?.pace === "no_payment" ? "No payment recorded yet." : "Compared with the current payment plan."}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-3">
+                          <p className="text-[8.5px] font-black uppercase tracking-[0.07em] text-[var(--text-muted)]">Balance trajectory</p>
+                          <p className="mt-2 text-xs font-semibold text-[var(--text-strong)]">
+                            {trajectoryLabel}{trajectoryDelta && Number(trajectoryDelta) !== 0 ? ` · ${Number(trajectoryDelta) > 0 ? "+" : ""}` : ""}
+                            {trajectoryDelta && Number(trajectoryDelta) !== 0 ? <Money value={trajectoryDelta} /> : null}
+                          </p>
+                          <p className="mt-1 text-[9px] leading-snug text-[var(--text-muted)]">{trajectoryCopy}</p>
+                        </div>
                       </div>
 
-                      <div className="grid gap-3 grid-cols-1 sm:gap-4 sm:grid-cols-2">
-                        <div className="rounded-lg border border-[var(--border-color)] bg-[var(--surface-elevated)] p-3 sm:rounded-xl" style={{ borderLeftWidth: "4px", borderLeftColor: statusColor }}>
-                          <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Payment Pace</p>
-                          <p className="mt-2 text-sm font-semibold text-[var(--text-strong)]">${debt.paymentsThisMonth ?? "0"} / ${debt.monthlyPayment} planned</p>
-                          <p className="mt-1 text-xs text-[var(--text-muted)]">Compared with the current payment plan.</p>
+                      <PaymentPaceInsight
+                        debt={debt}
+                        acknowledged={debt.insightAcknowledged}
+                        pendingAction={paceAction?.debtId === debt.id ? paceAction.action : null}
+                        onUpdatePlan={() => void handlePaceAction(debt, "update_plan")}
+                        onKeepPlan={() => void handlePaceAction(debt, "keep_plan")}
+                        onAcknowledgeOnetime={() => void handlePaceAction(debt, "acknowledge_onetime")}
+                      />
+
+                      {linkedTxs.length > 0 ? (
+                        <div className="border-t border-[var(--border-color)] pt-3">
+                          <p className="text-[8.5px] font-black uppercase tracking-[0.07em] text-[var(--text-muted)]">Linked payments</p>
+                          {linkedTxs.slice(0, 3).map((tx) => (
+                            <div key={tx.id} className="flex items-center justify-between gap-3 py-[7px] text-[9.5px]">
+                              <span className="text-[var(--text-muted)]">{formatIsoDate(tx.transactionDate)} · {tx.description}</span>
+                              <span className="font-semibold text-[var(--text-strong)]"><Money value={tx.amount} /></span>
+                            </div>
+                          ))}
                         </div>
-                        <div className="rounded-lg border border-[var(--border-color)] bg-[var(--surface-elevated)] p-3 sm:rounded-xl" style={{ borderLeftWidth: "4px", borderLeftColor: completion > 50 ? "#10b981" : completion > 25 ? "#f59e0b" : "#ef4444" }}>
-                          <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Balance Trajectory</p>
-                          <div className="mt-2 flex items-baseline gap-2">
-                            <p className="text-sm font-semibold text-[var(--text-strong)]">{completion.toFixed(0)}%</p>
-                            <p className="text-xs font-medium" style={{ color: completion > 50 ? "#10b981" : completion > 25 ? "#f59e0b" : "#ef4444" }}>
-                              {completion > 50 ? "Good progress" : completion > 25 ? "Some progress" : "Early stage"}
-                            </p>
-                          </div>
-                          <p className="mt-1 text-xs text-[var(--text-muted)]">Balance is decreasing over the measured period.</p>
-                        </div>
-                      </div>
+                      ) : null}
+
+                      <p className="text-[9.5px] text-[var(--text-muted)]">Payoff projection assumes no additional borrowing unless an explicit spending assumption is introduced.</p>
 
                       <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:flex-wrap">
                         <Button type="button" variant="secondary" className="text-xs" onClick={() => openEditModal(debt)}>
                           Record payment
                         </Button>
-                        <Button type="button" variant="secondary" className="text-xs" onClick={() => openEditModal(debt)}>
+                        <Button type="button" variant="secondary" className="text-xs" onClick={() => toggleSection(debt.id, "transactions")}>
                           Link transaction
                         </Button>
                         <Button type="button" variant="secondary" className="text-xs" onClick={() => openEditModal(debt)}>
