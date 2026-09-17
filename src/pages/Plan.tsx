@@ -1,7 +1,4 @@
-import { Link, useSearchParams } from "react-router-dom";
-
-import { getDebts } from "../api/debtsApi";
-import { getGoals } from "../api/goalsApi";
+import { Link } from "react-router-dom";
 import { BufferStatusCard } from "../components/plan/BufferStatusCard";
 import { PlanExecutionCard } from "../components/plan/PlanExecutionCard";
 import { ErrorState } from "../components/feedback/ErrorState";
@@ -14,15 +11,7 @@ import { Money } from "../components/ui/Money";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { AllocationPreferences } from "./AllocationPreferences";
 
-type PlanTab = "allocations" | "goals" | "debts";
-
-const TABS: Array<{ id: PlanTab; label: string }> = [
-  { id: "allocations", label: "Allocations" },
-  { id: "goals", label: "Goals" },
-  { id: "debts", label: "Debts" },
-];
-
-// ── Compact Goals summary for Plan tab ───────────────────────────────────────
+// ── Compact Goals summary (kept for reference but not displayed) ───────────────────────────────────────
 
 function GoalsSummary() {
   const { data, isLoading, error } = useAsyncData(() => getGoals(), []);
@@ -171,45 +160,14 @@ function DebtsSummary() {
 // ── Plan page ────────────────────────────────────────────────────────────────
 
 export function Plan() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = (searchParams.get("tab") as PlanTab | null) ?? "allocations";
-
-  function setTab(tab: PlanTab) {
-    setSearchParams({ tab }, { replace: true });
-  }
-
-  const validTab = TABS.some((t) => t.id === activeTab) ? activeTab : "allocations";
-
   return (
     <PageShell
       eyebrow="Plan"
       title="Allocation without noise."
       description="Adjust allocation preferences, track goal progress, and manage debts — without turning RAF into a traditional budgeting app."
     >
-      <nav className="page-tabs" aria-label="Plan sections">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={`page-tab${validTab === tab.id ? " page-tab-active" : ""}`}
-            onClick={() => setTab(tab.id)}
-            aria-current={validTab === tab.id ? "page" : undefined}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </nav>
-
-      <div className="tab-content-wrapper">
-        {validTab === "allocations" && (
-          <>
-            <AllocationPreferences />
-            <PlanExecutionCard />
-          </>
-        )}
-        {validTab === "goals" && <GoalsSummary />}
-        {validTab === "debts" && <DebtsSummary />}
-      </div>
+      <AllocationPreferences />
+      <PlanExecutionCard />
 
       <BufferStatusCard />
     </PageShell>
