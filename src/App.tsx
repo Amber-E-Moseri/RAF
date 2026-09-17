@@ -9,6 +9,7 @@ import { PlanProvider } from "./context/PlanContext";
 import { AcceptInvitation } from "./pages/AcceptInvitation";
 import { Accounts } from "./pages/Accounts";
 import { AddIncome } from "./pages/AddIncome";
+import { AllocationPreferences } from "./pages/AllocationPreferences";
 import { Dashboard } from "./pages/Dashboard";
 import { Debts } from "./pages/Debts";
 import { Goals } from "./pages/Goals";
@@ -63,6 +64,7 @@ export default function App() {
                   <Route path="income/new" element={<AddIncome />} />
                   <Route path="members" element={<Members />} />
                   <Route path="monthly-review" element={<MonthlyReview />} />
+                  <Route path="plan/preferences" element={<AllocationPreferences />} />
                   <Route path="plan-wizard" element={<PlanWizard />} />
                   <Route path="scenarios" element={<Scenarios />} />
 
@@ -70,7 +72,7 @@ export default function App() {
                   <Route path="outlook" element={<Navigate to="/cash-flow" replace />} />
                   <Route path="cash-flow-forecast" element={<Navigate to="/cash-flow" replace />} />
                   <Route path="insights" element={<Navigate to="/reports" replace />} />
-                  <Route path="allocation-preferences" element={<Navigate to="/plan" replace />} />
+                  <Route path="allocation-preferences" element={<Navigate to="/plan/preferences" replace />} />
                   <Route path="appearance-settings" element={<Navigate to="/settings" replace />} />
                   <Route path="appearance" element={<Navigate to="/settings" replace />} />
 

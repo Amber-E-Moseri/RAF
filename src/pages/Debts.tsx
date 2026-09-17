@@ -549,15 +549,19 @@ export function Debts() {
 
       {!isLoading && !error && data ? (
         <>
-          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <Card title="Total starting" subtitle="Original starting balances">
-              <p className="text-3xl font-semibold text-[var(--text-strong)]">{<Money value={data.summary.totalStarting} />}</p>
+          <section className="grid gap-3 md:grid-cols-3">
+            <Card>
+              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Total debt</p>
+              <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]">{<Money value={data.summary.totalRemaining} />}</p>
             </Card>
-            <Card title="Remaining balance" subtitle="Current balance after recorded activity">
-              <p className="text-3xl font-semibold text-[var(--text-strong)]">{<Money value={data.summary.totalRemaining} />}</p>
+            <Card>
+              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Planned monthly payments</p>
+              <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]">{<Money value={String(data.items.reduce((sum, d) => sum + Number(d.monthlyPayment || "0"), 0).toFixed(2))} />}</p>
             </Card>
-            <Card title="Paid all time" subtitle="Historical payoff recorded in RAF">
-              <p className="text-3xl font-semibold text-[var(--text-strong)]">{<Money value={data.summary.totalPaidAllTime} />}</p>
+            <Card>
+              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Balances decreasing</p>
+              <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]">{data.items.filter(d => d.status === "paying_down" || d.status === "paid_off").length}/{data.items.length}</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">Independent of payment pace</p>
             </Card>
           </section>
 
@@ -565,236 +569,50 @@ export function Debts() {
             <section className="grid gap-4 xl:grid-cols-2">
               {data.items.map((debt) => {
                 const completion = percentPaidOff(debt.startingBalance, debt.currentBalance) ?? 0;
-                const estimateMessage = payoffEstimateMessage(debt);
-                const actualVsPlannedMessage = actualVsPlannedPaymentMessage(debt.monthlyPayment, debt.paymentsThisMonth ?? "0.00");
 
                 return (
-                  <Card key={debt.id} title={debt.name} subtitle={`APR ${debt.apr}%`}>
+                  <Card key={debt.id}>
                     <div className="space-y-4">
-                      <div className="flex justify-end">
-                        <Badge tone={debt.status === "paid_off" ? "success" : "neutral"}>{debt.status === "paid_off" ? "Paid off" : "Open"}</Badge>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-lg font-bold text-[var(--text-strong)]">{debt.name}</p>
+                          <p className="mt-1 text-sm text-[var(--text-muted)]">
+                            APR {debt.apr}% · Minimum ${debt.minimumPayment}
+                          </p>
+                        </div>
+                        <Badge tone={debt.status === "paid_off" ? "success" : "neutral"}>
+                          {debt.status === "paid_off" ? "Paid off" : "Not started"}
+                        </Badge>
                       </div>
-                      <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-3">
-                        <div>
-                          <p className="text-[var(--text-muted)]">Starting balance</p>
-                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.startingBalance} />}</p>
-                        </div>
-                        <div>
-                          <p className="text-[var(--text-muted)]">Current balance</p>
-                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.currentBalance} />}</p>
-                        </div>
-                        <div>
-                          <p className="text-[var(--text-muted)]">Opening this month</p>
-                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.openingBalance ?? debt.currentBalance} />}</p>
-                        </div>
-                        <div>
-                          <p className="text-[var(--text-muted)]">Minimum payment</p>
-                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.minimumPayment} />}</p>
-                        </div>
-                        <div>
-                          <p className="text-[var(--text-muted)]">Planned payment</p>
-                          <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.monthlyPayment} />}</p>
-                        </div>
-                      </div>
-
-                      <PaymentPaceInsight
-                        debt={debt}
-                        acknowledged={debt.insightAcknowledged}
-                        pendingAction={paceAction?.debtId === debt.id ? paceAction.action : null}
-                        onUpdatePlan={() => void handlePaceAction(debt, "update_plan")}
-                        onKeepPlan={() => void handlePaceAction(debt, "keep_plan")}
-                        onAcknowledgeOnetime={() => void handlePaceAction(debt, "acknowledge_onetime")}
-                      />
-                      {actionError && paceAction?.debtId === debt.id ? (
-                        <p className="text-sm text-red-600">{actionError}</p>
-                      ) : null}
-
-                      <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)]">
-                        <button
-                          type="button"
-                          onClick={() => toggleSection(debt.id, "month")}
-                          className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
-                        >
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">This month</p>
-                            <p className="mt-1 text-sm text-[var(--text-muted)]">Actual debt activity from linked payments and posted charges.</p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <Badge tone={paymentStatusTone(debt.paymentStatus)}>{paymentStatusLabel(debt.paymentStatus)}</Badge>
-                            <span className="text-sm text-[var(--text-muted)]">{isSectionExpanded(debt.id, "month") ? "Hide" : "Show"}</span>
-                          </div>
-                        </button>
-                        {isSectionExpanded(debt.id, "month") ? (
-                          <div className="border-t border-[var(--border-color)] px-4 py-4">
-                            <div className="grid grid-cols-2 gap-4 text-sm">
-                              <div>
-                                <p className="text-[var(--text-muted)]">Payments this month</p>
-                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.paymentsThisMonth ?? "0.00"} />}</p>
-                              </div>
-                              <div>
-                                <p className="text-[var(--text-muted)]">Interest charged</p>
-                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.interestChargedThisMonth ?? "0.00"} />}</p>
-                              </div>
-                              <div>
-                                <p className="text-[var(--text-muted)]">Fees this month</p>
-                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.feesThisMonth ?? "0.00"} />}</p>
-                              </div>
-                              <div>
-                                <p className="text-[var(--text-muted)]">Principal reduction</p>
-                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.principalReductionThisMonth ?? "0.00"} />}</p>
-                              </div>
-                              <div>
-                                <p className="text-[var(--text-muted)]">Next statement</p>
-                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{debt.nextStatementDate ? formatIsoDate(debt.nextStatementDate) : "—"}</p>
-                              </div>
-                              <div>
-                                <p className="text-[var(--text-muted)]">Next payment due</p>
-                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{debt.nextPaymentDueDate ? formatIsoDate(debt.nextPaymentDueDate) : "Set payment due day"}</p>
-                              </div>
-                            </div>
-                            {debt.paymentObligation ? (
-                              <p className="mt-3 text-sm text-[var(--text-muted)]">
-                                Obligation this cycle: {<Money value={debt.paymentObligation.totalPaidToDate} />} paid of {<Money value={debt.paymentObligation.minimumDue} />} minimum
-                                {debt.paymentObligation.dueDate ? `, due ${formatIsoDate(debt.paymentObligation.dueDate)}` : ""}
-                                {" "}({debt.paymentObligation.status.replace(/_/g, " ")}).
-                              </p>
-                            ) : null}
-                            {debt.paymentStatus === "missed_payment" ? (
-                              <p className="mt-3 text-sm text-[var(--text-muted)]">No payment recorded this month.</p>
-                            ) : null}
-                            {debt.paymentStatus === "under_minimum" ? (
-                              <p className="mt-3 text-sm text-[var(--text-muted)]">Payment this month was below minimum.</p>
-                            ) : null}
-                            {debt.paymentStatus === "at_risk" ? (
-                              <p className="mt-3 text-sm text-[var(--text-muted)]">Payment is too low to meaningfully reduce principal.</p>
-                            ) : null}
-                            {actualVsPlannedMessage && debt.paymentStatus !== "missed_payment" && debt.paymentStatus !== "under_minimum" ? (
-                              <p className="mt-3 text-sm text-[var(--text-muted)]">{actualVsPlannedMessage}</p>
-                            ) : null}
-                            {debt.autoPostInterest && Number(debt.interestChargedThisMonth ?? "0") === 0 ? (
-                              <p className="mt-3 text-sm text-[var(--text-muted)]">Interest will post on the next statement cycle.</p>
-                            ) : null}
-                            {Number(debt.feesThisMonth ?? "0") > 0 ? (
-                              <p className="mt-3 text-sm text-[var(--text-muted)]">Late fee applied due to missed payment.</p>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)]">
-                        <button
-                          type="button"
-                          onClick={() => toggleSection(debt.id, "payoff")}
-                          className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
-                        >
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Planned payoff</p>
-                            <p className="mt-1 text-sm text-[var(--text-muted)]">Forecast based on the planned monthly payment, separate from actual month activity.</p>
-                          </div>
-                          <span className="text-sm text-[var(--text-muted)]">{isSectionExpanded(debt.id, "payoff") ? "Hide" : "Show"}</span>
-                        </button>
-                        {isSectionExpanded(debt.id, "payoff") ? (
-                          <div className="border-t border-[var(--border-color)] px-4 py-4">
-                            <div className="grid grid-cols-2 gap-4 text-sm">
-                              <div>
-                                <p className="text-[var(--text-muted)]">Current balance</p>
-                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.currentBalance} />}</p>
-                              </div>
-                              <div>
-                                <p className="text-[var(--text-muted)]">Estimated payoff</p>
-                                <p className="mt-1 font-semibold text-[var(--text-strong)]">
-                                  {debt.estimatedPayoffDate ? formatIsoDate(debt.estimatedPayoffDate) : "—"}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="text-[var(--text-muted)]">Months remaining</p>
-                                <p className="mt-1 font-semibold text-[var(--text-strong)]">
-                                  {debt.monthsRemaining == null ? "—" : debt.monthsRemaining}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="text-[var(--text-muted)]">Interest remaining</p>
-                                <p className="mt-1 font-semibold text-[var(--text-strong)]">
-                                  {debt.totalInterestRemaining == null ? "—" : <Money value={debt.totalInterestRemaining} />}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="text-[var(--text-muted)]">Starting balance</p>
-                                <p className="mt-1 font-semibold text-[var(--text-strong)]">{<Money value={debt.startingBalance} />}</p>
-                              </div>
-                            </div>
-                            {estimateMessage ? (
-                              <p className="mt-3 text-sm text-[var(--text-muted)]">{estimateMessage}</p>
-                            ) : null}
-                            {Number(debt.monthlyPayment ?? "0") > 0 && debt.estimatedPayoffDate ? (
-                              <p className="mt-3 text-sm italic text-[var(--text-muted)]">Forecast assumes {<Money value={debt.monthlyPayment} />}/month.</p>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      {(() => {
-                        const debtTxns = transactionsByDebtId.get(debt.id) ?? [];
-                        return (
-                          <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)]">
-                            <button
-                              type="button"
-                              onClick={() => toggleSection(debt.id, "transactions")}
-                              className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
-                            >
-                              <div>
-                                <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Linked transactions</p>
-                                <p className="mt-1 text-sm text-[var(--text-muted)]">Payments and charges linked to this debt this period.</p>
-                              </div>
-                              <span className="text-sm text-[var(--text-muted)]">
-                                {isSectionExpanded(debt.id, "transactions") ? "Hide" : `Show${debtTxns.length ? ` (${debtTxns.length})` : ""}`}
-                              </span>
-                            </button>
-                            {isSectionExpanded(debt.id, "transactions") ? (
-                              <div className="border-t border-[var(--border-color)] px-4 py-4">
-                                {debtTxns.length ? (
-                                  <div className="space-y-2">
-                                    {debtTxns.map((t) => (
-                                      <div key={t.id} className="flex items-start justify-between gap-3 border-b border-[var(--border-color)] pb-2 last:border-b-0 last:pb-0">
-                                        <div className="min-w-0">
-                                          <p className="text-sm font-medium text-[var(--text-strong)]">{t.description}</p>
-                                          <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.transactionDate}</p>
-                                        </div>
-                                        <p className={`shrink-0 text-sm font-semibold ${t.direction === "credit" ? "text-emerald-700" : "text-rose-700"}`}>
-                                          {t.direction === "credit" ? "+" : "-"}<Money value={t.amount} />
-                                        </p>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <p className="text-sm text-[var(--text-muted)]">No transactions linked to this debt this period.</p>
-                                )}
-                              </div>
-                            ) : null}
-                          </div>
-                        );
-                      })()}
 
                       <div>
-                        <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                          <span className="text-[var(--text-muted)]">Debt payoff progress</span>
-                          <span className="font-semibold text-[var(--text-strong)]">{completion.toFixed(0)}%</span>
-                        </div>
-                        <div className="progress-track h-3 overflow-hidden rounded-full">
-                          <div className="h-full rounded-full bg-raf-moss transition-all" style={{ width: `${completion}%` }} />
-                        </div>
-                        <p className="mt-2 text-[12px] italic text-[var(--text-muted)]">
-                          Based on starting balance minus current balance, capped between 0% and 100%.
-                        </p>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Current balance</p>
+                        <p className="mt-2 text-[20px] font-black text-[var(--text-strong)]">{<Money value={debt.currentBalance} />}</p>
                       </div>
-                      <div className="flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(debt)}
-                          className="rounded-full border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-2 text-sm font-medium text-[var(--text-strong)] transition hover:bg-[var(--surface-color)]"
-                        >
-                          Edit debt
-                        </button>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="rounded-xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Payment Pace</p>
+                          <p className="mt-2 text-sm font-semibold text-[var(--text-strong)]">${debt.paymentsThisMonth ?? "0"} / ${debt.monthlyPayment} planned</p>
+                          <p className="mt-1 text-xs text-[var(--text-muted)]">Compared with the current payment plan.</p>
+                        </div>
+                        <div className="rounded-xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Balance Trajectory</p>
+                          <p className="mt-2 text-sm font-semibold text-[var(--text-strong)]">{completion.toFixed(0)}% paid down</p>
+                          <p className="mt-1 text-xs text-[var(--text-muted)]">Balance is decreasing over the measured period.</p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 pt-2">
+                        <Button type="button" variant="secondary" className="text-xs" onClick={() => openEditModal(debt)}>
+                          Record payment
+                        </Button>
+                        <Button type="button" variant="secondary" className="text-xs" onClick={() => openEditModal(debt)}>
+                          Link transaction
+                        </Button>
+                        <Button type="button" variant="secondary" className="text-xs" onClick={() => openEditModal(debt)}>
+                          Edit
+                        </Button>
                       </div>
                     </div>
                   </Card>
