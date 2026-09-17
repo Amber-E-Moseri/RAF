@@ -605,10 +605,10 @@ export function Debts() {
 
                       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
                         <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-4">
-                          <div className="space-y-3">
+                          <div className="space-y-2">
                             <div>
                               <p className="text-[7.5px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">Payment pace</p>
-                              <p className="mt-3 text-base font-black text-[var(--text-strong)]"><Money value={debt.paymentsThisMonth ?? "0"} /> <span className="text-xs font-semibold text-[var(--text-muted)]">/ <Money value={debt.monthlyPayment} /></span></p>
+                              <p className="mt-2 text-base font-black text-[var(--text-strong)]"><Money value={debt.paymentsThisMonth ?? "0"} /> <span className="text-xs font-semibold text-[var(--text-muted)]">/ <Money value={debt.monthlyPayment} /></span></p>
                             </div>
                             <p className="text-[8.5px] leading-relaxed text-[var(--text-muted)]">
                               {debt.paymentPace?.pace === "above_plan" ? "Payments are above plan" : debt.paymentPace?.pace === "no_payment" ? "No payment recorded yet" : "On track with plan"}
@@ -616,10 +616,10 @@ export function Debts() {
                           </div>
                         </div>
                         <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-4">
-                          <div className="space-y-3">
+                          <div className="space-y-2">
                             <div>
                               <p className="text-[7.5px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">Balance trajectory</p>
-                              <p className="mt-3 text-base font-black text-[var(--text-strong)]">
+                              <p className="mt-2 text-base font-black text-[var(--text-strong)]">
                                 {trajectoryLabel}{trajectoryDelta && Number(trajectoryDelta) !== 0 ? ` · ${Number(trajectoryDelta) > 0 ? "+" : ""}` : ""}
                                 {trajectoryDelta && Number(trajectoryDelta) !== 0 ? <Money value={trajectoryDelta} /> : null}
                               </p>
@@ -654,7 +654,7 @@ export function Debts() {
                     </div>
 
                     <div className="flex gap-3 pt-5 border-t border-[var(--border-color)]">
-                      <Button type="button" variant="secondary" onClick={() => openEditModal(debt)}>
+                      <Button type="button" onClick={() => openEditModal(debt)}>
                         Record payment
                       </Button>
                       <Button type="button" variant="secondary" onClick={() => toggleSection(debt.id, "transactions")}>
