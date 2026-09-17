@@ -653,7 +653,7 @@ export function Debts() {
                       <p className="text-[8px] leading-relaxed text-[var(--text-muted)]">Payoff projection assumes no additional borrowing unless an explicit spending assumption is introduced.</p>
                     </div>
 
-                    <div className="flex gap-2 pt-5 border-t border-[var(--border-color)]">
+                    <div className="flex gap-3 pt-5 border-t border-[var(--border-color)]">
                       <Button type="button" variant="secondary" onClick={() => openEditModal(debt)}>
                         Record payment
                       </Button>
