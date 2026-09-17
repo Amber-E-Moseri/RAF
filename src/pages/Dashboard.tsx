@@ -411,7 +411,7 @@ export function Dashboard() {
       <div className="raf-hero">
         <div className="raf-hero-top">
           <div>
-            <div className="raf-hero-label">Net surplus</div>
+            <div className="raf-hero-label">Available to allocate</div>
             <div className="raf-hero-value"><Money value={latestSurplus} /></div>
             <div className="raf-hero-note">Income remaining after this month's recorded spending. Applied to categories when you close the month in Monthly Review.</div>
           </div>
