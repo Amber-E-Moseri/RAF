@@ -263,6 +263,19 @@ button, input, textarea, select {
     background: rgba(255, 255, 255, 0.1);
   }
 
+  /* Mobile header context — light background */
+  .mobile-top .period-trigger {
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 13px;
+    padding: 0;
+  }
+
+  .mobile-top .period-trigger:hover {
+    background: transparent;
+  }
+
   /* Period dropdown — pops to light (readable) */
   .period-menu {
     position: absolute;
