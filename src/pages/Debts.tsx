@@ -840,7 +840,7 @@ export function Debts() {
                     <p className="mt-1 text-sm italic text-[var(--text-muted)]">Automation settings control how RAF posts cycle activity.</p>
                   </div>
                   <div className="text-sm font-medium text-[var(--text-muted)]">Auto-post fees based on account activity</div>
-                  <div className="grid gap-3 md:grid-cols-3">
+                  <div className="grid gap-3 md:grid-cols-2">
                     <label className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-strong)]">
                       <span className="flex min-h-[72px] items-start gap-3">
                         <input
@@ -869,18 +869,24 @@ export function Debts() {
                         </span>
                       </span>
                     </label>
-                    <label className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-strong)]">
-                      <span className="flex min-h-[72px] items-start gap-3">
-                        <input
-                          type="checkbox"
-                          className="mt-1 h-4 w-4 rounded border-[var(--border-color)] text-[var(--primary-color)]"
-                          checked={editForm.isActive}
-                          onChange={(event) => setEditForm((current) => ({ ...current, isActive: event.target.checked }))}
-                        />
-                        <span>Active debt</span>
-                      </span>
-                    </label>
                   </div>
+                </section>
+
+                <section className="space-y-4 border-t border-[var(--border-color)] pt-6">
+                  <div>
+                    <h3 className="text-sm font-semibold text-[var(--text-strong)]">Status</h3>
+                  </div>
+                  <label className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-strong)]">
+                    <span className="flex min-h-[56px] items-center gap-3">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-[var(--border-color)] text-[var(--primary-color)]"
+                        checked={editForm.isActive}
+                        onChange={(event) => setEditForm((current) => ({ ...current, isActive: event.target.checked }))}
+                      />
+                      <span className="text-[13px] font-medium">Active debt</span>
+                    </span>
+                  </label>
                 </section>
                 {editError ? <ErrorState title="Failed to update debt" message={editError} /> : null}
               </div>
