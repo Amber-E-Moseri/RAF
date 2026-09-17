@@ -236,7 +236,7 @@ function StarterPrompts({ onSelect }: { onSelect: (p: string) => void }) {
 
 function SuggestedQuestions({ onSelect }: { onSelect: (p: string) => void }) {
   return (
-    <aside className="w-64 shrink-0 space-y-4">
+    <aside className="hidden w-64 shrink-0 space-y-4 lg:block">
       <div>
         <p className="text-xs font-semibold uppercase tracking-widest text-[var(--text-muted)]">Try asking</p>
         <p className="mt-1 text-xs text-[var(--text-muted)]">Prototype responses use your local demo state.</p>
@@ -509,12 +509,12 @@ export function Remi() {
       <div className="flex gap-6" style={{ minHeight: "calc(100vh - 12rem)" }}>
         {/* ── Chat panel ── */}
         <div
-          className="flex flex-1 flex-col rounded-[var(--r-xl)] border border-[var(--border-subtle)] bg-[var(--surface-card)]"
+          className="flex flex-1 flex-col rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] md:rounded-[var(--r-xl)]"
           style={{ boxShadow: "var(--shadow-card)" }}
         >
 
           {/* Messages */}
-          <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
+          <div className="flex-1 space-y-4 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5">
             {messages.map((m) => (
               <ChatBubble key={m.id} msg={m} />
             ))}
@@ -528,7 +528,7 @@ export function Remi() {
           </div>
 
           {/* Input bar */}
-          <div className="border-t border-[var(--border-subtle)] px-4 py-3.5">
+          <div className="border-t border-[var(--border-subtle)] px-3 py-3 sm:px-4 sm:py-3.5">
             <form
               onSubmit={(e) => { e.preventDefault(); void send(input); }}
               className="flex items-end gap-2.5"

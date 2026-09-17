@@ -549,24 +549,24 @@ export function Debts() {
 
       {!isLoading && !error && data ? (
         <>
-          <section className="grid gap-3 md:grid-cols-3">
+          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Card>
               <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Total debt</p>
-              <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]">{<Money value={data.summary.totalRemaining} />}</p>
+              <p className="mt-2 text-[20px] font-black tracking-tight text-[var(--text-strong)] sm:text-[25px]">{<Money value={data.summary.totalRemaining} />}</p>
             </Card>
             <Card>
               <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Planned monthly payments</p>
-              <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]">{<Money value={String(data.items.reduce((sum, d) => sum + Number(d.monthlyPayment || "0"), 0).toFixed(2))} />}</p>
+              <p className="mt-2 text-[20px] font-black tracking-tight text-[var(--text-strong)] sm:text-[25px]">{<Money value={String(data.items.reduce((sum, d) => sum + Number(d.monthlyPayment || "0"), 0).toFixed(2))} />}</p>
             </Card>
-            <Card>
+            <Card className="sm:col-span-2 lg:col-span-1">
               <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Balances decreasing</p>
-              <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]">{data.items.filter(d => d.status === "paying_down" || d.status === "paid_off").length}/{data.items.length}</p>
+              <p className="mt-2 text-[20px] font-black tracking-tight text-[var(--text-strong)] sm:text-[25px]">{data.items.filter(d => d.status === "paying_down" || d.status === "paid_off").length}/{data.items.length}</p>
               <p className="mt-1 text-xs text-[var(--text-muted)]">Independent of payment pace</p>
             </Card>
           </section>
 
           {data.items.length ? (
-            <section className="grid gap-4 xl:grid-cols-2">
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-2">
               {data.items.map((debt) => {
                 const completion = percentPaidOff(debt.startingBalance, debt.currentBalance) ?? 0;
 
@@ -590,20 +590,20 @@ export function Debts() {
                         <p className="mt-2 text-[20px] font-black text-[var(--text-strong)]">{<Money value={debt.currentBalance} />}</p>
                       </div>
 
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div className="rounded-xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-3">
+                      <div className="grid gap-3 grid-cols-1 sm:gap-4 sm:grid-cols-2">
+                        <div className="rounded-lg border border-[var(--border-color)] bg-[var(--surface-elevated)] p-3 sm:rounded-xl">
                           <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Payment Pace</p>
                           <p className="mt-2 text-sm font-semibold text-[var(--text-strong)]">${debt.paymentsThisMonth ?? "0"} / ${debt.monthlyPayment} planned</p>
                           <p className="mt-1 text-xs text-[var(--text-muted)]">Compared with the current payment plan.</p>
                         </div>
-                        <div className="rounded-xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-3">
+                        <div className="rounded-lg border border-[var(--border-color)] bg-[var(--surface-elevated)] p-3 sm:rounded-xl">
                           <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Balance Trajectory</p>
                           <p className="mt-2 text-sm font-semibold text-[var(--text-strong)]">{completion.toFixed(0)}% paid down</p>
                           <p className="mt-1 text-xs text-[var(--text-muted)]">Balance is decreasing over the measured period.</p>
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap gap-2 pt-2">
+                      <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:flex-wrap">
                         <Button type="button" variant="secondary" className="text-xs" onClick={() => openEditModal(debt)}>
                           Record payment
                         </Button>

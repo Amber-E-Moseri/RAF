@@ -66,26 +66,26 @@ function CurrentAllocationSummary() {
 
   return (
     <div className="space-y-4">
-      <section className="grid gap-3 md:grid-cols-3">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Card>
           <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Income allocated</p>
-          <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]">
+          <p className="mt-2 text-[20px] font-black tracking-tight text-[var(--text-strong)] sm:text-[25px]">
             {totalAllocatedPercent.toFixed(0)}%
           </p>
           <p className="mt-1 text-xs text-[var(--text-muted)]">Based on current percentages</p>
         </Card>
         <Card>
           <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Buffer share</p>
-          <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]">
+          <p className="mt-2 text-[20px] font-black tracking-tight text-[var(--text-strong)] sm:text-[25px]">
             {activeCategories.find((c) => c.slug === "buffer")
               ? formatPercentWithDigits(activeCategories.find((c) => c.slug === "buffer")!.allocationPercent, 0)
               : "0%"}
           </p>
           <p className="mt-1 text-xs text-[var(--text-muted)]">Rounding remainder routes here</p>
         </Card>
-        <Card>
+        <Card className="sm:col-span-2 lg:col-span-1">
           <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Categories</p>
-          <p className="mt-2 text-[25px] font-black tracking-tight text-[var(--text-strong)]">{activeCategories.length}</p>
+          <p className="mt-2 text-[20px] font-black tracking-tight text-[var(--text-strong)] sm:text-[25px]">{activeCategories.length}</p>
           <p className="mt-1 text-xs text-[var(--text-muted)]">100% total required</p>
         </Card>
       </section>
@@ -104,7 +104,7 @@ function CurrentAllocationSummary() {
               return (
                 <div
                   key={category.id}
-                  className="flex items-center gap-4 rounded-xl border border-[var(--border-color)] px-4 py-3"
+                  className="flex flex-col gap-3 rounded-lg border border-[var(--border-color)] px-3 py-3 sm:flex-row sm:items-center sm:gap-4 sm:px-4 md:rounded-xl"
                   style={{ background: "var(--surface-plain)" }}
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -117,7 +117,7 @@ function CurrentAllocationSummary() {
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-6">
+                  <div className="flex items-center justify-between gap-3 sm:gap-6">
                     <div className="text-right">
                       <p className="text-[11px] font-medium uppercase tracking-[0.05em] text-[var(--text-muted)]">
                         Share
