@@ -1,11 +1,11 @@
 # RAF Debt Activity — Audit Reconciliation Gate Report
 
-**Date:** 2026-09-17 — Updated 2026-09-18 (PostgreSQL readiness closure)
+**Date:** 2026-09-17 — Updated 2026-09-18 (Phase 2C–2E implementation complete)
 **Branch:** main
-**Scope:** Pre-implementation audit + P0 remediation for Unified Debt Activity + Balance Trajectory
-**Verdict:** READY FOR DEBT ACTIVITY IMPLEMENTATION
+**Scope:** Pre-implementation audit + P0 remediation + Unified Debt Activity implementation phases 1–2E
+**Verdict:** PHASE 2 IMPLEMENTATION COMPLETE
 
-> **Both P0 blockers resolved and PostgreSQL path proven against the live non-production database.**
+> **All P0 blockers resolved. Phases 1–2E shipped. 241 tests pass. Migration applied to live DB.**
 
 ---
 
@@ -253,14 +253,56 @@ Tests 3.3 and 3.5 in `adversarialDebtIntegrity.test.js` were updated to verify t
 
 ---
 
+## IMPLEMENTATION SUMMARY — PHASES 1–2E
+
+### Phase 1: PostgreSQL Readiness Gate (2026-09-18)
+- Migration `20260917000000_fix_debt_adjustment_type_constraint.sql` applied — adds `'reconciliation'` to CHECK constraint, retains `'manual'` for backward compat
+- `apiAdjustmentTypeSchema` restricted to `['correction', 'interest', 'fee']`
+- Integration test 1 pass, 0 fail against live Neon DB
+
+### Phase 2A: Activity Read Model
+- `lib/debts/debtActivity.js` — pure normalization functions over existing authoritative records
+- `normalizeDebtPayment`, `normalizeDebtAdjustment`, `deriveDebtActivity`
+- `deriveEconomicDebtActivity`, `deriveDebtMonthlyActivitySummary`, `deriveEconomicMonthlyActivitySummary`
+
+### Phase 2B: Payment Matching & Reconciliation Persistence
+- `lib/debts/debtPaymentMatching.js` — EXACT_MATCH / POSSIBLE_MATCH / UNMATCHED
+- `lib/debts/debtPaymentReconciliation.js` — confirm/reject/list with idempotency, workspace isolation, self-reconciliation guard
+- `lib/server/inMemoryDb.js` — in-memory reconciliation store
+- `app/api/v1/debts/[id]/payment-reconciliations/route.js` — GET + POST (confirm/reject)
+
+### Phase 2C–2D: Activity API + PostgreSQL Reconciliation Repository
+- `app/api/v1/debts/[id]/activity/route.js` — GET with `?view=economic|raw&month=YYYY-MM-DD`
+- `listDebtActivity()` in `lib/debts/debts.js` — pure read, no balance mutations
+- `lib/repositories/postgres/debtsRepository.js` — adds `insertDebtPaymentReconciliation`, `getDebtPaymentReconciliation`, `listDebtPaymentReconciliations`
+- Migration `20260918000000_debt_payment_reconciliations.sql` applied to live DB — `raf.debt_payment_reconciliations` table with RLS, unordered-pair unique index
+
+### Phase 2E: Test Matrix
+| Suite | Tests | Pass |
+|-------|-------|------|
+| `tests/debtActivity.test.js` | 28 | 28 |
+| `tests/debtPaymentMatching.test.js` | 26 | 26 |
+| `tests/debtPaymentReconciliation.test.js` | 18 | 18 |
+| `tests/debtActivityTenancy.test.js` | 4 | 4 |
+| `tests/debtActivityInvariant.test.js` | 6 | 6 |
+| `tests/phase2cCertification.test.js` | 16 | 16 |
+| All pre-existing debt suites | 143 | 143 |
+| **Total** | **241** | **241** |
+
+---
+
 ## FINAL VERDICT
 
-**READY FOR DEBT ACTIVITY IMPLEMENTATION**
+**PHASE 2 IMPLEMENTATION COMPLETE**
 
-All P0 blockers are resolved and the PostgreSQL constraint path is proven against the live database:
+All P0 blockers are resolved. Unified Debt Activity is implemented as a normalized READ MODEL over existing authoritative records with no second financial ledger. 241 tests pass.
 
-1. **Migration applied** (`db/migrations/20260917000000_fix_debt_adjustment_type_constraint.sql`): `'reconciliation'` is now in the CHECK constraint. Recorded in `raf.schema_migrations`.
+1. **Constraint migration applied** — `'reconciliation'` in CHECK constraint, `'manual'` retained for backward compat, `'late_fee'` intentionally excluded (generated-only)
 
-2. **Application validation tightened** (`lib/debts/debts.js`): public API accepts only `['correction', 'interest', 'fee']`. `late_fee` and `reconciliation` return HTTP 400.
+2. **Application validation tightened** — public API restricted to `['correction', 'interest', 'fee']`; `late_fee` and `reconciliation` return HTTP 400
 
-3. **PostgreSQL integration test** (`tests/debtAdjustmentConstraint.test.js`): 1 pass, 0 fail against live non-production Neon DB. Proves constraint enforcement, valid type persistence (A–D), invalid type rejection (E), and full unlink regression (Phase 5).
+3. **PostgreSQL integration test** (`tests/debtAdjustmentConstraint.test.js`) — 1 pass against live Neon DB
+
+4. **Reconciliation table** (`raf.debt_payment_reconciliations`) — applied to live DB with RLS, unordered-pair UNIQUE constraint, workspace-scoped policy
+
+5. **241 tests pass** — normalization, matching, reconciliation, tenancy isolation, financial invariants, gate parity
