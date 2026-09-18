@@ -223,9 +223,11 @@ describe('3. Adjustment types all handled correctly', () => {
     assert.equal(snap.currentBalance, '1030.00');
   });
 
-  test('3.3 — late_fee adjustment adds to balance', async () => {
-    const snap = await snapWithAdj(db, '39.00', 'late_fee');
-    assert.equal(snap.currentBalance, '1039.00');
+  test('3.3 — late_fee is rejected by service (generated-only, not user-creatable)', async () => {
+    await assert.rejects(
+      () => snapWithAdj(db, '39.00', 'late_fee'),
+      (err) => { assert.equal(err.status, 400); return true; },
+    );
   });
 
   test('3.4 — negative correction reduces balance', async () => {
@@ -233,9 +235,11 @@ describe('3. Adjustment types all handled correctly', () => {
     assert.equal(snap.currentBalance, '600.00');
   });
 
-  test('3.5 — positive reconciliation adds to balance', async () => {
-    const snap = await snapWithAdj(db, '100.00', 'reconciliation');
-    assert.equal(snap.currentBalance, '1100.00');
+  test('3.5 — reconciliation is rejected by service (system-only, not user-creatable)', async () => {
+    await assert.rejects(
+      () => snapWithAdj(db, '100.00', 'reconciliation'),
+      (err) => { assert.equal(err.status, 400); return true; },
+    );
   });
 
   test('3.6 — payment + adjustment: net balance correct', async () => {
