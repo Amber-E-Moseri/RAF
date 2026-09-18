@@ -796,3 +796,81 @@ export interface ImportHistoryListResponse {
 export interface ImportHistoryDetailResponse extends ImportHistoryItem {
   rows: ImportHistoryRow[];
 }
+
+export type DebtActivityType = "payment" | "interest" | "fee" | "adjustment" | "balance_reconciliation";
+export type DebtActivitySource = "manual" | "import" | "buffer" | "monthly_review" | "system" | "reconciliation" | "unknown";
+
+export interface DebtActivityItem {
+  id: string;
+  debtId: string;
+  workspaceId: string | null;
+  type: DebtActivityType;
+  amountCents: number;
+  effectiveDate: string;
+  source: DebtActivitySource;
+  transactionId: string | null;
+  importBatchId: string | null;
+  provenance: { recordType: "debt_payment" | "debt_adjustment"; recordId: string };
+}
+
+export type DebtMatchClassification = "EXACT_MATCH" | "POSSIBLE_MATCH";
+
+export interface DebtMatchCandidate {
+  importActivity: DebtActivityItem;
+  classification: DebtMatchClassification;
+  dateDifferenceDays: number;
+  reasons: string[];
+}
+
+export interface DebtPaymentMatch {
+  manualActivity: DebtActivityItem;
+  candidates: DebtMatchCandidate[];
+  ambiguous: boolean;
+}
+
+export interface DebtPaymentMatchResult {
+  matches: DebtPaymentMatch[];
+  unmatched: {
+    manual: DebtActivityItem[];
+    imported: DebtActivityItem[];
+  };
+}
+
+export interface DebtReconciliation {
+  id: string;
+  workspaceId: string;
+  householdId?: string;
+  primaryPaymentId: string;
+  duplicatePaymentId: string;
+  status: "confirmed" | "rejected";
+  matchType: DebtMatchClassification;
+  confirmedAt: string | null;
+  confirmedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DebtActivityFull {
+  view: "economic" | "raw";
+  activities: DebtActivityItem[];
+  reconciliations?: DebtReconciliation[];
+  matches?: DebtPaymentMatchResult;
+}
+
+export interface DebtActivityMonthlySummary {
+  view: "economic" | "raw";
+  month: string;
+  paymentsCents: number;
+  interestCents: number;
+  feesCents: number;
+  adjustmentsCents: number;
+  reconciliationCents: number;
+  activityCount: number;
+  payments: string;
+  interest: string;
+  fees: string;
+  adjustments: string;
+  activities: DebtActivityItem[];
+}
+
+export type DebtActivity = DebtActivityFull | DebtActivityMonthlySummary;

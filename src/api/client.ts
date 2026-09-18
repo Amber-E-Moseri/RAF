@@ -190,9 +190,10 @@ export async function patchJson<T>(
 
 export async function deleteJson<T>(
   path: string,
+  params?: Record<string, string | number | null | undefined>,
   options?: RequestOptions,
 ): Promise<T> {
-  const response = await performRequest(buildUrl(path, undefined, options), {
+  const response = await performRequest(buildUrl(path, params, options), {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",

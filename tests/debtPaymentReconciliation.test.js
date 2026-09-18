@@ -4,6 +4,7 @@ import { createInMemoryDb } from '../lib/server/inMemoryDb.js';
 import {
   confirmDebtPaymentReconciliation,
   rejectDebtPaymentReconciliation,
+  unlinkDebtPaymentReconciliation,
   listDebtPaymentReconciliations,
   ReconciliationError,
 } from '../lib/debts/debtPaymentReconciliation.js';
@@ -341,6 +342,191 @@ describe('Debt Payment Reconciliation — Phase 2B', () => {
       const db = await setupDbWithDebtAndPayments();
       const list = await listDebtPaymentReconciliations({ db, householdId: WORKSPACE, debtId: DEBT_ID });
       assert.equal(list.length, 0);
+    });
+  });
+
+  describe('Unlink / Reversal', () => {
+    test('confirmed reconciliation can be unlinked and pair returns to undecided', async () => {
+      const db = await setupDbWithDebtAndPayments();
+
+      const rec = await confirmDebtPaymentReconciliation({
+        db, householdId: WORKSPACE, debtId: DEBT_ID,
+        primaryPaymentId: 'dp-manual-1', duplicatePaymentId: 'dp-import-1',
+        matchType: 'POSSIBLE_MATCH', userId: USER_ID,
+      });
+      assert.equal(rec.status, 'confirmed');
+
+      const unlinked = await unlinkDebtPaymentReconciliation({
+        db, householdId: WORKSPACE, debtId: DEBT_ID,
+        primaryPaymentId: 'dp-manual-1', duplicatePaymentId: 'dp-import-1',
+        userId: USER_ID,
+      });
+      assert.ok(unlinked.id);
+
+      const remaining = await listDebtPaymentReconciliations({ db, householdId: WORKSPACE, debtId: DEBT_ID });
+      assert.equal(remaining.length, 0);
+    });
+
+    test('both payments still exist after unlink', async () => {
+      const db = await setupDbWithDebtAndPayments();
+
+      await confirmDebtPaymentReconciliation({
+        db, householdId: WORKSPACE, debtId: DEBT_ID,
+        primaryPaymentId: 'dp-manual-1', duplicatePaymentId: 'dp-import-1',
+        matchType: 'POSSIBLE_MATCH',
+      });
+
+      await unlinkDebtPaymentReconciliation({
+        db, householdId: WORKSPACE, debtId: DEBT_ID,
+        primaryPaymentId: 'dp-manual-1', duplicatePaymentId: 'dp-import-1',
+      });
+
+      const payments = await db.transaction((tx) => tx.listDebtPayments({ householdId: WORKSPACE, debtId: DEBT_ID }));
+      assert.ok(payments.find((p) => p.id === 'dp-manual-1'));
+      assert.ok(payments.find((p) => p.id === 'dp-import-1'));
+    });
+
+    test('payment amounts are unchanged after unlink', async () => {
+      const db = await setupDbWithDebtAndPayments();
+
+      await confirmDebtPaymentReconciliation({
+        db, householdId: WORKSPACE, debtId: DEBT_ID,
+        primaryPaymentId: 'dp-manual-1', duplicatePaymentId: 'dp-import-1',
+        matchType: 'POSSIBLE_MATCH',
+      });
+
+      await unlinkDebtPaymentReconciliation({
+        db, householdId: WORKSPACE, debtId: DEBT_ID,
+        primaryPaymentId: 'dp-manual-1', duplicatePaymentId: 'dp-import-1',
+      });
+
+      const payments = await db.transaction((tx) => tx.listDebtPayments({ householdId: WORKSPACE, debtId: DEBT_ID }));
+      assert.equal(payments.find((p) => p.id === 'dp-manual-1')?.amount, '300.00');
+      assert.equal(payments.find((p) => p.id === 'dp-import-1')?.amount, '300.00');
+    });
+
+    test('economic activity counts both payments again after unlink', async () => {
+      const db = await setupDbWithDebtAndPayments();
+
+      const rec = await confirmDebtPaymentReconciliation({
+        db, householdId: WORKSPACE, debtId: DEBT_ID,
+        primaryPaymentId: 'dp-manual-1', duplicatePaymentId: 'dp-import-1',
+        matchType: 'POSSIBLE_MATCH',
+      });
+
+      const payments = await db.transaction((tx) => tx.listDebtPayments({ householdId: WORKSPACE, debtId: DEBT_ID }));
+      const txMap = new Map([['txn-import-1', { id: 'txn-import-1', source: 'import' }]]);
+      const rawActivities = deriveDebtActivity({ payments, transactionsByIdMap: txMap });
+
+      const economicBefore = deriveEconomicDebtActivity({ activities: rawActivities, reconciliations: [rec] });
+      assert.equal(economicBefore.length, 1);
+
+      await unlinkDebtPaymentReconciliation({
+        db, householdId: WORKSPACE, debtId: DEBT_ID,
+        primaryPaymentId: 'dp-manual-1', duplicatePaymentId: 'dp-import-1',
+      });
+
+      const reconciliationsAfter = await listDebtPaymentReconciliations({ db, householdId: WORKSPACE, debtId: DEBT_ID });
+      const economicAfter = deriveEconomicDebtActivity({ activities: rawActivities, reconciliations: reconciliationsAfter });
+      assert.equal(economicAfter.length, 2);
+    });
+
+    test('pair ordering (B,A) unlinks a reconciliation stored as (A,B)', async () => {
+      const db = await setupDbWithDebtAndPayments();
+
+      await confirmDebtPaymentReconciliation({
+        db, householdId: WORKSPACE, debtId: DEBT_ID,
+        primaryPaymentId: 'dp-manual-1', duplicatePaymentId: 'dp-import-1',
+        matchType: 'POSSIBLE_MATCH',
+      });
+
+      const unlinked = await unlinkDebtPaymentReconciliation({
+        db, householdId: WORKSPACE, debtId: DEBT_ID,
+        primaryPaymentId: 'dp-import-1', duplicatePaymentId: 'dp-manual-1',
+      });
+      assert.ok(unlinked);
+
+      const remaining = await listDebtPaymentReconciliations({ db, householdId: WORKSPACE, debtId: DEBT_ID });
+      assert.equal(remaining.length, 0);
+    });
+
+    test('unlinking nonexistent reconciliation throws 404', async () => {
+      const db = await setupDbWithDebtAndPayments();
+
+      await assert.rejects(
+        () => unlinkDebtPaymentReconciliation({
+          db, householdId: WORKSPACE, debtId: DEBT_ID,
+          primaryPaymentId: 'dp-manual-1', duplicatePaymentId: 'dp-import-1',
+        }),
+        (err) => {
+          assert.ok(err instanceof ReconciliationError);
+          assert.equal(err.status, 404);
+          return true;
+        },
+      );
+    });
+
+    test('cross-workspace unlink is blocked — payment not found in foreign workspace', async () => {
+      const db = await setupDbWithDebtAndPayments();
+
+      await confirmDebtPaymentReconciliation({
+        db, householdId: WORKSPACE, debtId: DEBT_ID,
+        primaryPaymentId: 'dp-manual-1', duplicatePaymentId: 'dp-import-1',
+        matchType: 'POSSIBLE_MATCH',
+      });
+
+      await assert.rejects(
+        () => unlinkDebtPaymentReconciliation({
+          db, householdId: 'ws-different-99', debtId: DEBT_ID,
+          primaryPaymentId: 'dp-manual-1', duplicatePaymentId: 'dp-import-1',
+        }),
+        (err) => {
+          assert.ok(err instanceof ReconciliationError);
+          return true;
+        },
+      );
+
+      const remaining = await listDebtPaymentReconciliations({ db, householdId: WORKSPACE, debtId: DEBT_ID });
+      assert.equal(remaining.length, 1);
+    });
+
+    test('confirmed and rejected status remain distinct after unlink of confirmed', async () => {
+      const db = await setupDbWithDebtAndPayments([
+        { id: 'dp-manual-2', amount: '150.00', paymentDate: '2026-04-01', transactionId: null },
+        { id: 'dp-import-2', amount: '150.00', paymentDate: '2026-04-01', transactionId: 'txn-import-2' },
+      ]);
+
+      await confirmDebtPaymentReconciliation({
+        db, householdId: WORKSPACE, debtId: DEBT_ID,
+        primaryPaymentId: 'dp-manual-1', duplicatePaymentId: 'dp-import-1',
+        matchType: 'POSSIBLE_MATCH',
+      });
+
+      await rejectDebtPaymentReconciliation({
+        db, householdId: WORKSPACE, debtId: DEBT_ID,
+        primaryPaymentId: 'dp-manual-2', duplicatePaymentId: 'dp-import-2',
+        matchType: 'POSSIBLE_MATCH',
+      });
+
+      await unlinkDebtPaymentReconciliation({
+        db, householdId: WORKSPACE, debtId: DEBT_ID,
+        primaryPaymentId: 'dp-manual-1', duplicatePaymentId: 'dp-import-1',
+      });
+
+      const remaining = await listDebtPaymentReconciliations({ db, householdId: WORKSPACE, debtId: DEBT_ID });
+      assert.equal(remaining.length, 1);
+      assert.equal(remaining[0].status, 'rejected');
+    });
+
+    test('unlink self-reference is rejected', async () => {
+      const db = await setupDbWithDebtAndPayments();
+      await assert.rejects(
+        () => unlinkDebtPaymentReconciliation({
+          db, householdId: WORKSPACE, debtId: DEBT_ID,
+          primaryPaymentId: 'dp-manual-1', duplicatePaymentId: 'dp-manual-1',
+        }),
+        (err) => { assert.match(err.message, /cannot unlink a payment from itself/); return true; },
+      );
     });
   });
 

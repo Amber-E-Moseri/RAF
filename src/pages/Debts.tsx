@@ -1,7 +1,10 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { acknowledgePaceInsight, createDebt, getDebts, updateDebt } from "../api/debtsApi";
 import { getTransactions } from "../api/transactionsApi";
+import { DebtActivityFeed } from "../components/debt/DebtActivityFeed";
+import { ReconciliationPanel } from "../components/debt/ReconciliationPanel";
+import type { DebtActivityFull } from "../lib/types";
 import { PaymentPaceInsight } from "../components/debt/PaymentPaceInsight";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingSpinner } from "../components/feedback/LoadingSpinner";
@@ -149,26 +152,33 @@ export function Debts() {
   const [editFieldErrors, setEditFieldErrors] = useState<Record<string, string | null>>({});
   const [editError, setEditError] = useState<string | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [expandedSections, setExpandedSections] = useState<Record<string, { month: boolean; payoff: boolean; transactions: boolean }>>({});
+  const [expandedSections, setExpandedSections] = useState<Record<string, { month: boolean; payoff: boolean; transactions: boolean; activity: boolean; matching: boolean }>>({});
+  const [activityDataByDebt, setActivityDataByDebt] = useState<Record<string, DebtActivityFull>>({});
   const [showCreateDebtForm, setShowCreateDebtForm] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [paceAction, setPaceAction] = useState<{ debtId: string; action: DebtPaymentPaceAcknowledgement["action"] } | null>(null);
 
-  function isSectionExpanded(debtId: string, section: "month" | "payoff" | "transactions") {
+  function isSectionExpanded(debtId: string, section: "month" | "payoff" | "transactions" | "activity" | "matching") {
     return expandedSections[debtId]?.[section] ?? false;
   }
 
-  function toggleSection(debtId: string, section: "month" | "payoff" | "transactions") {
+  function toggleSection(debtId: string, section: "month" | "payoff" | "transactions" | "activity" | "matching") {
     setExpandedSections((current) => ({
       ...current,
       [debtId]: {
         month: current[debtId]?.month ?? false,
         payoff: current[debtId]?.payoff ?? false,
         transactions: current[debtId]?.transactions ?? false,
+        activity: current[debtId]?.activity ?? false,
+        matching: current[debtId]?.matching ?? false,
         [section]: !(current[debtId]?.[section] ?? false),
       },
     }));
   }
+
+  const handleMatchesAvailable = useCallback((debtId: string, data: DebtActivityFull) => {
+    setActivityDataByDebt((current) => ({ ...current, [debtId]: data }));
+  }, []);
 
   async function handlePaceAction(
     debt: NonNullable<typeof data>["items"][number],
@@ -650,15 +660,47 @@ export function Debts() {
                         </div>
                       ) : null}
 
+                      {isSectionExpanded(debt.id, "activity") ? (
+                        <div className="border-t border-[var(--border-color)] pt-4">
+                          <DebtActivityFeed
+                            debtId={debt.id}
+                            onMatchesAvailable={(data) => handleMatchesAvailable(debt.id, data)}
+                          />
+                        </div>
+                      ) : null}
+
+                      {isSectionExpanded(debt.id, "matching") ? (
+                        <div className="border-t border-[var(--border-color)] pt-4">
+                          <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)] mb-3">Payment matching</p>
+                          <ReconciliationPanel
+                            debtId={debt.id}
+                            activityData={activityDataByDebt[debt.id] ?? null}
+                            onMutated={() => {
+                              setActivityDataByDebt((current) => {
+                                const next = { ...current };
+                                delete next[debt.id];
+                                return next;
+                              });
+                            }}
+                          />
+                        </div>
+                      ) : null}
+
                       <p className="text-[8px] leading-relaxed text-[var(--text-muted)]">Payoff projection assumes no additional borrowing unless an explicit spending assumption is introduced.</p>
                     </div>
 
-                    <div className="flex gap-3 pt-5 border-t border-[var(--border-color)]">
+                    <div className="flex flex-wrap gap-3 pt-5 border-t border-[var(--border-color)]">
                       <Button type="button" onClick={() => openEditModal(debt)}>
                         Record payment
                       </Button>
                       <Button type="button" variant="secondary" onClick={() => toggleSection(debt.id, "transactions")}>
                         Link transaction
+                      </Button>
+                      <Button type="button" variant="secondary" onClick={() => toggleSection(debt.id, "activity")}>
+                        {isSectionExpanded(debt.id, "activity") ? "Hide activity" : "Activity"}
+                      </Button>
+                      <Button type="button" variant="secondary" onClick={() => toggleSection(debt.id, "matching")}>
+                        {isSectionExpanded(debt.id, "matching") ? "Hide matching" : "Matching"}
                       </Button>
                       <Button type="button" variant="secondary" onClick={() => openEditModal(debt)}>
                         Edit
