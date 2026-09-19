@@ -29,6 +29,7 @@ import { buildDebtsRepository } from '../lib/repositories/postgres/debtsReposito
 import { buildGoalsRepository } from '../lib/repositories/postgres/goalsRepository.js';
 import { buildFixedBillsRepository } from '../lib/repositories/postgres/fixedBillsRepository.js';
 import { buildImportsRepository } from '../lib/repositories/postgres/importsRepository.js';
+import { buildInvitationsRepository } from '../lib/repositories/postgres/invitationsRepository.js';
 
 const SCHEMA = 'raf';
 const WORKSPACE_ID = 'aaaaaaaa-0000-4000-8000-000000000001';
@@ -496,4 +497,87 @@ test('deleteImportReviewRule dispatches directly', async () => {
   await assertDirectDispatch(proxy, gate, 'deleteImportReviewRule', [{ householdId: WORKSPACE_ID, ruleId: 'r1' }]);
   assert.ok(!gate.wasInvoked(), 'deleteImportReviewRule must not invoke compat');
   assert.ok(client.calls.some((c) => /import_review_rules/i.test(c.sql)), 'client.query called with import_review_rules SQL');
+});
+
+// ---------------------------------------------------------------------------
+// Invitations (Track A)
+// ---------------------------------------------------------------------------
+
+const INV_WS = 'cccccccc-0000-4000-8000-cccccccccccc';
+const INV_USER = 'dddddddd-0000-4000-8000-dddddddddddd';
+const INV_ID = 'eeeeeeee-0000-4000-8000-eeeeeeeeeeee';
+const INV_TOKEN = 'tok-dispatch-test';
+const INV_EXPIRES = '2099-12-31T00:00:00.000Z';
+
+test('createWorkspaceInvitation dispatches directly', async () => {
+  const client = makeMockClient();
+  const repos = buildInvitationsRepository(client, SCHEMA);
+  const gate = makeThrowingLegacyGate();
+  const proxy = buildHybridProxy({ ...repos }, gate.getLegacyTx);
+  await assertDirectDispatch(proxy, gate, 'createWorkspaceInvitation', [{
+    workspaceId: INV_WS, invitedBy: INV_USER, email: 'dispatch@example.com',
+    role: 'member', token: INV_TOKEN, expiresAt: INV_EXPIRES,
+  }]);
+  assert.ok(!gate.wasInvoked(), 'createWorkspaceInvitation must not invoke compat');
+  assert.ok(client.calls.some((c) => /workspace_invitations/i.test(c.sql)), 'client.query called with workspace_invitations SQL');
+});
+
+test('getWorkspaceInvitationByToken dispatches directly', async () => {
+  const client = makeMockClient();
+  const repos = buildInvitationsRepository(client, SCHEMA);
+  const gate = makeThrowingLegacyGate();
+  const proxy = buildHybridProxy({ ...repos }, gate.getLegacyTx);
+  await assertDirectDispatch(proxy, gate, 'getWorkspaceInvitationByToken', [{ token: INV_TOKEN }]);
+  assert.ok(!gate.wasInvoked(), 'getWorkspaceInvitationByToken must not invoke compat');
+  assert.ok(client.calls.some((c) => /resolve_invitation_by_token/i.test(c.sql)), 'client.query called with resolve_invitation_by_token');
+});
+
+test('getWorkspaceInvitationById dispatches directly', async () => {
+  const client = makeMockClient();
+  const repos = buildInvitationsRepository(client, SCHEMA);
+  const gate = makeThrowingLegacyGate();
+  const proxy = buildHybridProxy({ ...repos }, gate.getLegacyTx);
+  await assertDirectDispatch(proxy, gate, 'getWorkspaceInvitationById', [{ invitationId: INV_ID }]);
+  assert.ok(!gate.wasInvoked(), 'getWorkspaceInvitationById must not invoke compat');
+  assert.ok(client.calls.some((c) => /workspace_invitations/i.test(c.sql)), 'client.query called with workspace_invitations SQL');
+});
+
+test('listWorkspaceInvitations dispatches directly', async () => {
+  const client = makeMockClient();
+  const repos = buildInvitationsRepository(client, SCHEMA);
+  const gate = makeThrowingLegacyGate();
+  const proxy = buildHybridProxy({ ...repos }, gate.getLegacyTx);
+  await assertDirectDispatch(proxy, gate, 'listWorkspaceInvitations', [{ workspaceId: INV_WS, status: 'pending' }]);
+  assert.ok(!gate.wasInvoked(), 'listWorkspaceInvitations must not invoke compat');
+  assert.ok(client.calls.some((c) => /workspace_invitations/i.test(c.sql)), 'client.query called with workspace_invitations SQL');
+});
+
+test('updateWorkspaceInvitation dispatches directly', async () => {
+  const client = makeMockClient();
+  const repos = buildInvitationsRepository(client, SCHEMA);
+  const gate = makeThrowingLegacyGate();
+  const proxy = buildHybridProxy({ ...repos }, gate.getLegacyTx);
+  await assertDirectDispatch(proxy, gate, 'updateWorkspaceInvitation', [{ invitationId: INV_ID, patch: { status: 'accepted' } }]);
+  assert.ok(!gate.wasInvoked(), 'updateWorkspaceInvitation must not invoke compat');
+  assert.ok(client.calls.some((c) => /workspace_invitations/i.test(c.sql)), 'client.query called with workspace_invitations SQL');
+});
+
+test('acceptWorkspaceInvitation dispatches directly', async () => {
+  const client = makeMockClient();
+  const repos = buildInvitationsRepository(client, SCHEMA);
+  const gate = makeThrowingLegacyGate();
+  const proxy = buildHybridProxy({ ...repos }, gate.getLegacyTx);
+  await assertDirectDispatch(proxy, gate, 'acceptWorkspaceInvitation', [{ tokenHash: INV_TOKEN, userId: INV_USER, userEmail: 'dispatch@example.com' }]);
+  assert.ok(!gate.wasInvoked(), 'acceptWorkspaceInvitation must not invoke compat');
+  assert.ok(client.calls.some((c) => /accept_workspace_invitation/i.test(c.sql)), 'client.query called with accept_workspace_invitation');
+});
+
+test('declineWorkspaceInvitation dispatches directly', async () => {
+  const client = makeMockClient();
+  const repos = buildInvitationsRepository(client, SCHEMA);
+  const gate = makeThrowingLegacyGate();
+  const proxy = buildHybridProxy({ ...repos }, gate.getLegacyTx);
+  await assertDirectDispatch(proxy, gate, 'declineWorkspaceInvitation', [{ tokenHash: INV_TOKEN }]);
+  assert.ok(!gate.wasInvoked(), 'declineWorkspaceInvitation must not invoke compat');
+  assert.ok(client.calls.some((c) => /decline_workspace_invitation/i.test(c.sql)), 'client.query called with decline_workspace_invitation');
 });
