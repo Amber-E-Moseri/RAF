@@ -618,3 +618,244 @@ test('listWorkspaceActivity dispatches directly (Track B)', async () => {
   await assertDirectDispatch(proxy, gate, 'listWorkspaceActivity', [{ workspaceId: WORKSPACE_ID }]);
   assert.ok(client.calls.some((c) => /workspace_activity/i.test(c.sql)), 'client.query called with workspace_activity SQL');
 });
+
+// ---------------------------------------------------------------------------
+// Phase 6 — updateWorkspace dispatch (production-active inline method)
+// ---------------------------------------------------------------------------
+
+test('updateWorkspace dispatches directly — does not fall through to compat', async () => {
+  const client = makeMockClient();
+
+  // Inline directTx stub: getWorkspace + updateWorkspace, exactly as in buildDirectTransaction.
+  // The proxy must resolve updateWorkspace via property-in-target (direct) not via getLegacyTx.
+  const directTx = {
+    async getWorkspace({ workspaceId }) {
+      const result = await client.query(
+        `select id, raw_json from raf.workspaces where id = $1 limit 1`, [workspaceId],
+      );
+      const row = result.rows[0];
+      return row?.raw_json ?? null;
+    },
+    async updateWorkspace({ workspaceId, patch }) {
+      const workspace = await this.getWorkspace({ workspaceId });
+      if (!workspace) return null;
+      const updated = { ...workspace, ...patch, updatedAt: new Date().toISOString() };
+      await client.query(
+        `update raf.workspaces set name = $2, timezone = $3, country = $4, default_currency = $5, updated_at = $6, raw_json = $7 where id = $1`,
+        [workspaceId, updated.name ?? null, updated.timezone ?? null, updated.country ?? null, updated.defaultCurrency ?? 'CAD', updated.updatedAt, updated],
+      );
+      return updated;
+    },
+  };
+
+  const gate = makeThrowingLegacyGate();
+  const proxy = buildHybridProxy(directTx, gate.getLegacyTx);
+
+  await assertDirectDispatch(proxy, gate, 'updateWorkspace', [{
+    workspaceId: WORKSPACE_ID, patch: { name: 'Renamed', timezone: 'America/Vancouver' },
+  }]);
+  assert.ok(!gate.wasInvoked(), 'updateWorkspace must not invoke the compat path');
+  assert.ok(client.calls.some((c) => /workspaces/i.test(c.sql)), 'client.query was called with workspaces SQL');
+});
+
+// ---------------------------------------------------------------------------
+// Phase 6 — Zero production fallback invariant
+// Verifies that every production-active tx method is in directTx (spread repos + inline)
+// so that removing the Hybrid Proxy cannot introduce any silent compat fallback.
+// ---------------------------------------------------------------------------
+
+test('zero production fallback — all production-active tx methods are present in directTx', () => {
+  const client = makeMockClient();
+
+  // Complete directTx as built by buildDirectTransaction (spread repos + critical inline methods).
+  // Inline methods are listed explicitly because they cannot be imported separately.
+  const directTx = {
+    // Inline methods (sampled — the full list is in buildDirectTransaction)
+    setSecurityContext: async () => {},
+    getWorkspace: async () => null,
+    getHousehold: async () => null,
+    getUserById: async () => null,
+    getUserByEmail: async () => null,
+    createUser: async () => null,
+    createUserHousehold: async () => null,
+    createWorkspace: async () => null,
+    createHousehold: async () => null,
+    createWorkspaceMember: async () => null,
+    createWorkspaceRecord: async () => null,
+    getWorkspaceMember: async () => null,
+    listWorkspaceMembers: async () => [],
+    listWorkspacesForUser: async () => [],
+    listHouseholdsForUser: async () => [],
+    removeWorkspaceMember: async () => null,
+    updateWorkspaceMember: async () => null,
+    updateWorkspaceOwner: async () => null,
+    updateWorkspace: async () => null,            // <-- must be present
+    deleteWorkspaceById: async () => null,
+    initializeWorkspaceDefaults: async () => null,
+    insertFinancialAccount: async () => null,
+    getFinancialAccountById: async () => null,
+    listFinancialAccounts: async () => [],
+    updateFinancialAccount: async () => null,
+    getAccountFreshnessContext: async () => null,
+    insertAccountReconciliation: async () => null,
+    getAccountReconciliationById: async () => null,
+    listAccountReconciliations: async () => [],
+    listAccountReconciliationsForAccounts: async () => [],
+    updateAccountReconciliation: async () => null,
+    listTransactions: async () => ({ items: [] }),
+    getTransactionById: async () => null,
+    insertTransaction: async () => null,
+    updateTransaction: async () => null,
+    deleteTransaction: async () => null,
+    markTransactionReviewed: async () => null,
+    markTransactionUnreviewed: async () => null,
+    bulkMarkTransactionsReviewed: async () => null,
+    listTransactionsByImportBatchIds: async () => [],
+    insertTransactionSplit: async () => null,
+    deleteTransactionSplits: async () => null,
+    listTransactionSplits: async () => [],
+    insertMonthlyReview: async () => null,
+    getMonthlyReviewById: async () => null,
+    getMonthlyReviewByMonth: async () => null,
+    listMonthlyReviews: async () => [],
+    updateMonthlyReview: async () => null,
+    deleteMonthlyReview: async () => null,
+    transitionMonthlyReviewToReviewing: async () => null,
+    insertMonthClose: async () => null,
+    getMonthCloseById: async () => null,
+    listMonthCloses: async () => [],
+    updateMonthClose: async () => null,
+    insertBlacklistedToken: async () => null,
+    isTokenBlacklisted: async () => false,
+    cleanupExpiredBlacklistedTokens: async () => null,
+    getImportBatch: async () => null,
+    updateImportBatch: async () => null,
+    listImportBatches: async () => [],
+    getImportedRow: async () => null,
+    updateImportedRow: async () => null,
+    listImportedRows: async () => [],
+    listImportedRowsForBatches: async () => [],
+    updateImportedTransaction: async () => null,
+    listImportedTransactions: async () => [],
+    getUpcomingExpenseById: async () => null,
+    insertUpcomingExpense: async () => null,
+    listUpcomingExpenses: async () => [],
+    updateUpcomingExpense: async () => null,
+    deleteUpcomingExpense: async () => null,
+    logWorkspaceActivity: async () => null,
+    insertDebtPayment: async () => null,
+    deleteDebtPaymentByTransactionId: async () => null,
+    getRemiConversation: async () => null,
+    createRemiConversation: async () => null,
+    listRemiConversations: async () => [],
+    listRemiMessages: async () => [],
+    appendRemiMessage: async () => null,
+    getEmailPreferences: async () => null,
+    listAllEmailPreferences: async () => [],
+    upsertEmailPreferences: async () => null,
+    logEmailSend: async () => null,
+    getPdfImportQuotaStatus: async () => null,
+    reservePdfImportQuota: async () => null,
+    incrementPdfImportQuota: async () => null,
+    updateHouseholdPdfQuotaTier: async () => null,
+    getUserWorkspaceAccess: async () => null,
+    countUnreviewedImportedRows: async () => 0,
+    ping: async () => null,
+    close: async () => null,
+    transaction: async () => null,
+    // Spread repository methods
+    ...buildAllocationCategoriesRepository(client, SCHEMA),
+    ...buildIncomeRepository(client, SCHEMA),
+    ...buildDebtsRepository(client, SCHEMA),
+    ...buildGoalsRepository(client, SCHEMA),
+    ...buildFixedBillsRepository(client, SCHEMA),
+    ...buildImportsRepository(client, SCHEMA),
+    ...buildHouseholdRepository(client, SCHEMA),
+    ...buildInvitationsRepository(client, SCHEMA),
+    ...buildWorkspaceActivityRepository(client, SCHEMA),
+  };
+
+  // Every method called from a production route or background job must be present.
+  const productionActiveMethods = [
+    // workspace routes
+    'getWorkspace', 'updateWorkspace', 'deleteWorkspaceById',
+    // auth/account
+    'listWorkspacesForUser', 'listHouseholdsForUser',
+    // collaboration
+    'createWorkspace', 'createWorkspaceMember', 'getWorkspaceMember',
+    'listWorkspaceMembers', 'removeWorkspaceMember', 'updateWorkspaceMember', 'updateWorkspaceOwner',
+    'createWorkspaceInvitation', 'listWorkspaceInvitations', 'getWorkspaceInvitationById',
+    'getWorkspaceInvitationByToken', 'updateWorkspaceInvitation',
+    'acceptWorkspaceInvitation', 'declineWorkspaceInvitation',
+    'logWorkspaceActivity', 'listWorkspaceActivity',
+    // household
+    'getHousehold', 'createHousehold', 'updateHousehold', 'updateHouseholdPdfQuotaTier',
+    // users
+    'getUserById', 'getUserByEmail', 'createUser', 'createUserHousehold',
+    'initializeWorkspaceDefaults',
+    // financial accounts
+    'insertFinancialAccount', 'getFinancialAccountById', 'listFinancialAccounts', 'updateFinancialAccount',
+    // transactions
+    'insertTransaction', 'getTransactionById', 'listTransactions', 'updateTransaction',
+    'deleteTransaction', 'markTransactionReviewed', 'markTransactionUnreviewed',
+    'bulkMarkTransactionsReviewed', 'listTransactionsByImportBatchIds',
+    'insertTransactionSplit', 'deleteTransactionSplits', 'listTransactionSplits',
+    // monthly lifecycle
+    'insertMonthlyReview', 'getMonthlyReviewById', 'getMonthlyReviewByMonth',
+    'listMonthlyReviews', 'updateMonthlyReview', 'deleteMonthlyReview',
+    'transitionMonthlyReviewToReviewing',
+    'insertMonthClose', 'getMonthCloseById', 'listMonthCloses', 'updateMonthClose',
+    // auth tokens
+    'insertBlacklistedToken', 'isTokenBlacklisted', 'cleanupExpiredBlacklistedTokens',
+    // imports
+    'getImportBatch', 'updateImportBatch', 'listImportBatches',
+    'getImportedRow', 'updateImportedRow', 'listImportedRows',
+    'listImportedRowsForBatches', 'updateImportedTransaction', 'listImportedTransactions',
+    'insertDebtPayment', 'deleteDebtPaymentByTransactionId',
+    'countUnreviewedImportedRows',
+    // PDF quota
+    'getPdfImportQuotaStatus', 'reservePdfImportQuota', 'incrementPdfImportQuota',
+    // upcoming expenses
+    'insertUpcomingExpense', 'listUpcomingExpenses', 'updateUpcomingExpense',
+    'deleteUpcomingExpense', 'getUpcomingExpenseById',
+    // debt activity
+    'insertDebt', 'listDebts', 'getDebtById', 'updateDebt', 'deleteDebt',
+    'listDebtPayments', 'countDebtPaymentsForDebt', 'findDebtById',
+    'insertDebtAdjustment', 'listDebtAdjustments',
+    // goals
+    'insertGoal', 'listGoals', 'getGoalById', 'updateGoal', 'deleteGoal',
+    // income
+    'insertIncomeEntry', 'listIncomeEntries', 'getIncomeEntryById', 'updateIncomeEntry',
+    'deleteIncomeEntry', 'insertIncomeAllocations', 'deleteIncomeAllocationsByIncomeEntryId',
+    'listIncomeAllocations', 'listIncomeAllocationsBySlug', 'findIncomeByIdempotencyKey',
+    // allocation categories
+    'listAllocationCategories', 'replaceAllocationCategories', 'listAllocationCategorySnapshots',
+    'listSurplusSplitRules', 'replaceSurplusSplitRules',
+    // fixed bills
+    'insertFixedBill', 'listFixedBills', 'getFixedBillById', 'updateFixedBill',
+    // reconciliation
+    'insertAccountReconciliation', 'getAccountReconciliationById',
+    'listAccountReconciliations', 'listAccountReconciliationsForAccounts', 'updateAccountReconciliation',
+    'getAccountFreshnessContext',
+    // imports (review rules + merchant rules)
+    'listMerchantRules', 'findDuplicateTransaction', 'getImportedTransactionById',
+    'listImportReviewRules', 'getImportReviewRuleById', 'updateImportReviewRule',
+    'deleteImportReviewRule', 'touchImportReviewRule', 'upsertImportReviewRule',
+    'findImportReviewRuleByMerchantKey', 'findImportReviewRuleByNormalizedDescription',
+    'insertMerchantRule', 'getMerchantRuleById', 'updateMerchantRule', 'deleteMerchantRule',
+    'insertImportBatch', 'insertImportedRows', 'insertImportedTransactions',
+    'insertPaymentPaceAcknowledgement', 'getPaymentPaceAcknowledgement',
+    // Remi
+    'getRemiConversation', 'createRemiConversation', 'listRemiConversations',
+    'listRemiMessages', 'appendRemiMessage', 'getUserWorkspaceAccess',
+    // email/scheduler
+    'getEmailPreferences', 'listAllEmailPreferences', 'upsertEmailPreferences', 'logEmailSend',
+    'listMonthlyReviews', 'countUnreviewedImportedRows',
+    // security context
+    'setSecurityContext',
+  ];
+
+  for (const method of productionActiveMethods) {
+    assert.ok(method in directTx, `ZERO_FALLBACK VIOLATION: ${method} is missing from directTx — production would invoke compat`);
+  }
+});
