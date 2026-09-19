@@ -28,6 +28,7 @@ import { buildIncomeRepository } from '../lib/repositories/postgres/incomeReposi
 import { buildDebtsRepository } from '../lib/repositories/postgres/debtsRepository.js';
 import { buildGoalsRepository } from '../lib/repositories/postgres/goalsRepository.js';
 import { buildFixedBillsRepository } from '../lib/repositories/postgres/fixedBillsRepository.js';
+import { buildImportsRepository } from '../lib/repositories/postgres/importsRepository.js';
 
 const SCHEMA = 'raf';
 const WORKSPACE_ID = 'aaaaaaaa-0000-4000-8000-000000000001';
@@ -442,4 +443,57 @@ test('no migrated method name triggers the compat gate when all repos are spread
   for (const name of expectedDirect) {
     assert.ok(name in directTx, `Method ${name} must be present in the directTx object (property-in-target check)`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Phase 3C — Import Completion (5 new direct methods)
+// ---------------------------------------------------------------------------
+
+test('getImportedTransactionById dispatches directly', async () => {
+  const client = makeMockClient();
+  const repos = buildImportsRepository(client, SCHEMA);
+  const gate = makeThrowingLegacyGate();
+  const proxy = buildHybridProxy({ ...repos }, gate.getLegacyTx);
+  await assertDirectDispatch(proxy, gate, 'getImportedTransactionById', [{ householdId: WORKSPACE_ID, importedTransactionId: 'tx1' }]);
+  assert.ok(!gate.wasInvoked(), 'getImportedTransactionById must not invoke compat');
+  assert.ok(client.calls.some((c) => /imported_transactions/i.test(c.sql)), 'client.query called with imported_transactions SQL');
+});
+
+test('findDuplicateTransaction dispatches directly', async () => {
+  const client = makeMockClient();
+  const repos = buildImportsRepository(client, SCHEMA);
+  const gate = makeThrowingLegacyGate();
+  const proxy = buildHybridProxy({ ...repos }, gate.getLegacyTx);
+  await assertDirectDispatch(proxy, gate, 'findDuplicateTransaction', [{ householdId: WORKSPACE_ID, parsedDate: DATE, parsedAmount: '45.00', normalizedMerchant: 'starbucks' }]);
+  assert.ok(!gate.wasInvoked(), 'findDuplicateTransaction must not invoke compat');
+  assert.ok(client.calls.some((c) => /transactions/i.test(c.sql)), 'client.query called with transactions SQL');
+});
+
+test('listMerchantRules dispatches directly', async () => {
+  const client = makeMockClient();
+  const repos = buildImportsRepository(client, SCHEMA);
+  const gate = makeThrowingLegacyGate();
+  const proxy = buildHybridProxy({ ...repos }, gate.getLegacyTx);
+  await assertDirectDispatch(proxy, gate, 'listMerchantRules', [{ householdId: WORKSPACE_ID }]);
+  assert.ok(!gate.wasInvoked(), 'listMerchantRules must not invoke compat');
+  assert.ok(client.calls.some((c) => /merchant_rules/i.test(c.sql)), 'client.query called with merchant_rules SQL');
+});
+
+test('updateImportReviewRule dispatches directly', async () => {
+  const client = makeMockClient();
+  const repos = buildImportsRepository(client, SCHEMA);
+  const gate = makeThrowingLegacyGate();
+  const proxy = buildHybridProxy({ ...repos }, gate.getLegacyTx);
+  await assertDirectDispatch(proxy, gate, 'updateImportReviewRule', [{ householdId: WORKSPACE_ID, ruleId: 'r1', patch: { categoryId: 'c1' } }]);
+  assert.ok(!gate.wasInvoked(), 'updateImportReviewRule must not invoke compat');
+});
+
+test('deleteImportReviewRule dispatches directly', async () => {
+  const client = makeMockClient();
+  const repos = buildImportsRepository(client, SCHEMA);
+  const gate = makeThrowingLegacyGate();
+  const proxy = buildHybridProxy({ ...repos }, gate.getLegacyTx);
+  await assertDirectDispatch(proxy, gate, 'deleteImportReviewRule', [{ householdId: WORKSPACE_ID, ruleId: 'r1' }]);
+  assert.ok(!gate.wasInvoked(), 'deleteImportReviewRule must not invoke compat');
+  assert.ok(client.calls.some((c) => /import_review_rules/i.test(c.sql)), 'client.query called with import_review_rules SQL');
 });
