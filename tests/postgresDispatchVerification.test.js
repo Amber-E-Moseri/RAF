@@ -29,6 +29,7 @@ import { buildDebtsRepository } from '../lib/repositories/postgres/debtsReposito
 import { buildGoalsRepository } from '../lib/repositories/postgres/goalsRepository.js';
 import { buildFixedBillsRepository } from '../lib/repositories/postgres/fixedBillsRepository.js';
 import { buildImportsRepository } from '../lib/repositories/postgres/importsRepository.js';
+import { buildHouseholdRepository } from '../lib/repositories/postgres/householdRepository.js';
 import { buildInvitationsRepository } from '../lib/repositories/postgres/invitationsRepository.js';
 
 const SCHEMA = 'raf';
@@ -426,6 +427,7 @@ test('no migrated method name triggers the compat gate when all repos are spread
     ...buildDebtsRepository(client, SCHEMA),
     ...buildGoalsRepository(client, SCHEMA),
     ...buildFixedBillsRepository(client, SCHEMA),
+    ...buildHouseholdRepository(client, SCHEMA),
   };
 
   const expectedDirect = [
@@ -439,6 +441,7 @@ test('no migrated method name triggers the compat gate when all repos are spread
     'listDebtAdjustments',
     'listGoals', 'insertGoal', 'getGoalById', 'updateGoal', 'deleteGoal',
     'listFixedBills', 'insertFixedBill', 'getFixedBillById', 'updateFixedBill',
+    'updateHousehold',
   ];
 
   for (const name of expectedDirect) {
@@ -580,4 +583,21 @@ test('declineWorkspaceInvitation dispatches directly', async () => {
   await assertDirectDispatch(proxy, gate, 'declineWorkspaceInvitation', [{ tokenHash: INV_TOKEN }]);
   assert.ok(!gate.wasInvoked(), 'declineWorkspaceInvitation must not invoke compat');
   assert.ok(client.calls.some((c) => /decline_workspace_invitation/i.test(c.sql)), 'client.query called with decline_workspace_invitation');
+});
+
+// ---------------------------------------------------------------------------
+// Track D — Household Settings Direct SQL
+// ---------------------------------------------------------------------------
+
+test('updateHousehold dispatches directly', async () => {
+  const client = makeMockClient();
+  const repos = buildHouseholdRepository(client, SCHEMA);
+  const gate = makeThrowingLegacyGate();
+  const proxy = buildHybridProxy({ ...repos }, gate.getLegacyTx);
+  await assertDirectDispatch(proxy, gate, 'updateHousehold', [{
+    householdId: WORKSPACE_ID,
+    patch: { timezone: 'America/Vancouver' },
+  }]);
+  assert.ok(!gate.wasInvoked(), 'updateHousehold must not invoke compat');
+  assert.ok(client.calls.some((c) => /households/i.test(c.sql)), 'client.query called with households SQL');
 });
