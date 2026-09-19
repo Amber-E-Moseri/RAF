@@ -11,6 +11,7 @@ export async function GET(_request, context = {}) {
       db,
       workspaceId,
       requestingRole: context.workspace?.role ?? context.role,
+      userId: context.userId,
     });
     return json({ items }, 200);
   } catch (error) {

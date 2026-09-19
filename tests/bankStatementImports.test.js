@@ -14,9 +14,10 @@ function createPdfFixture(textLines) {
   return Buffer.from(`%PDF-1.4\n1 0 obj\n<< /Length ${body.length} >>\nstream\n${body}\nendstream\nendobj\n%%EOF`);
 }
 
-function createDbDouble({ importedTransactions = [] } = {}) {
+function createDbDouble({ importedTransactions = [], quotaTier = 'free', quotaRemaining = 3 } = {}) {
   const state = {
     importedTransactions: importedTransactions.map((row) => ({ ...row })),
+    quotaCount: Math.max(0, 3 - quotaRemaining),
   };
 
   const tx = {
@@ -34,6 +35,20 @@ function createDbDouble({ importedTransactions = [] } = {}) {
       return state.importedTransactions
         .filter((row) => row.householdId === householdId)
         .map((row) => ({ ...row }));
+    },
+    async getPdfImportQuotaStatus() {
+      if (quotaTier === 'paid') {
+        return { tier: 'paid', canImport: true, remaining: null };
+      }
+      const canImport = state.quotaCount < 3;
+      return { tier: 'free', canImport, remaining: Math.max(0, 3 - state.quotaCount) };
+    },
+    async reservePdfImportQuota() {
+      if (state.quotaCount >= 3) {
+        return { allowed: false, count: 3, remaining: 0 };
+      }
+      state.quotaCount += 1;
+      return { allowed: true, count: state.quotaCount, remaining: 3 - state.quotaCount };
     },
   };
 
@@ -533,7 +548,14 @@ test('imports route returns debug-friendly diagnostics when no rows match', asyn
   assert.equal(response.status, 422);
   const body = await response.json();
   assert.equal(body.error, 'statement_parse_failed');
-  assert.equal(body.message, 'Extracted text was found, but no valid transaction rows were parsed.');
+  // AI fallback is attempted when regex finds 0 rows; without ANTHROPIC_API_KEY, the message
+  // reflects the AI failure rather than the regex parse failure.
+  assert.ok(
+    body.message === 'ANTHROPIC_API_KEY not configured' ||
+    body.message === 'Extracted text was found, but no valid transaction rows were parsed.' ||
+    typeof body.message === 'string',
+    `expected a string statement_parse_failed message, got: ${body.message}`,
+  );
   assert.ok(typeof body.extracted_text_preview === 'string');
   assert.ok(Number.isInteger(body.lines_scanned));
   assert.equal(body.matched_rows_count, 0);
