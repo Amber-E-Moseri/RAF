@@ -73,9 +73,11 @@ BEGIN
   -- Lazily expire if still marked pending but past expiry.
   -- Callers see status='expired' immediately; no separate UPDATE round-trip needed.
   IF v_inv.status = 'pending' AND v_inv.expires_at < now() THEN
+    -- Qualify the column to avoid ambiguity with the OUT parameter also named 'id'
+    -- (RETURNS TABLE columns become OUT parameters in plpgsql scope).
     UPDATE raf.workspace_invitations
     SET status = 'expired'
-    WHERE id = v_inv.id;
+    WHERE workspace_invitations.id = v_inv.id;
     v_inv.status   := 'expired';
     v_inv.updated_at := now();
   END IF;
@@ -291,13 +293,14 @@ BEGIN
       RAISE EXCEPTION 'Security assertion FAILED: raf.% missing SET search_path', v_name;
     END IF;
 
-    -- PUBLIC must not have EXECUTE
-    IF v_rec.acl_text LIKE '%=X/%' OR v_rec.acl_text IS NULL THEN
-      -- NULL proacl means only owner has access; that is acceptable.
-      -- '=X/' pattern means PUBLIC has execute; that is NOT acceptable.
-      IF v_rec.acl_text LIKE '%=X/%' THEN
-        RAISE EXCEPTION 'Security assertion FAILED: raf.% grants EXECUTE to PUBLIC', v_name;
-      END IF;
+    -- PUBLIC must not have EXECUTE.
+    -- In PostgreSQL ACL strings, PUBLIC is the empty-grantee entry, e.g.
+    -- '=X/neondb_owner'. It appears at the very start ('{=X/') or after a
+    -- comma (',=X/'). The broader pattern '%=X/%' also matches legitimate
+    -- named-role grants such as 'raf_app=X/neondb_owner', so we must not
+    -- use it for the PUBLIC check.
+    IF (v_rec.acl_text LIKE '{=X/%' OR v_rec.acl_text LIKE '%,=X/%') THEN
+      RAISE EXCEPTION 'Security assertion FAILED: raf.% grants EXECUTE to PUBLIC', v_name;
     END IF;
 
     -- raf_app must have EXECUTE
