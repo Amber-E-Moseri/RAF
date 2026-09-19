@@ -31,6 +31,7 @@ import { buildFixedBillsRepository } from '../lib/repositories/postgres/fixedBil
 import { buildImportsRepository } from '../lib/repositories/postgres/importsRepository.js';
 import { buildHouseholdRepository } from '../lib/repositories/postgres/householdRepository.js';
 import { buildInvitationsRepository } from '../lib/repositories/postgres/invitationsRepository.js';
+import { buildWorkspaceActivityRepository } from '../lib/repositories/postgres/workspaceActivityRepository.js';
 
 const SCHEMA = 'raf';
 const WORKSPACE_ID = 'aaaaaaaa-0000-4000-8000-000000000001';
@@ -428,6 +429,7 @@ test('no migrated method name triggers the compat gate when all repos are spread
     ...buildGoalsRepository(client, SCHEMA),
     ...buildFixedBillsRepository(client, SCHEMA),
     ...buildHouseholdRepository(client, SCHEMA),
+    ...buildWorkspaceActivityRepository(client, SCHEMA),
   };
 
   const expectedDirect = [
@@ -442,6 +444,7 @@ test('no migrated method name triggers the compat gate when all repos are spread
     'listGoals', 'insertGoal', 'getGoalById', 'updateGoal', 'deleteGoal',
     'listFixedBills', 'insertFixedBill', 'getFixedBillById', 'updateFixedBill',
     'updateHousehold',
+    'listWorkspaceActivity',
   ];
 
   for (const name of expectedDirect) {
@@ -600,4 +603,18 @@ test('updateHousehold dispatches directly', async () => {
   }]);
   assert.ok(!gate.wasInvoked(), 'updateHousehold must not invoke compat');
   assert.ok(client.calls.some((c) => /households/i.test(c.sql)), 'client.query called with households SQL');
+});
+
+// ---------------------------------------------------------------------------
+// Track B — listWorkspaceActivity dispatch
+// ---------------------------------------------------------------------------
+
+test('listWorkspaceActivity dispatches directly (Track B)', async () => {
+  const client = makeMockClient();
+  const repos = buildWorkspaceActivityRepository(client, SCHEMA);
+  const gate = makeThrowingLegacyGate();
+  const proxy = buildHybridProxy({ ...repos }, gate.getLegacyTx);
+
+  await assertDirectDispatch(proxy, gate, 'listWorkspaceActivity', [{ workspaceId: WORKSPACE_ID }]);
+  assert.ok(client.calls.some((c) => /workspace_activity/i.test(c.sql)), 'client.query called with workspace_activity SQL');
 });
