@@ -449,27 +449,130 @@ test('10.2 — parseImportBatch throws on row with invalid amount', async () => 
 test('11.1 — Same merchant/date/amount on different accounts: duplicate detection scope is household (not account)', async () => {
   // findDuplicateTransaction fingerprints on householdId+date+amount+merchant without accountId.
   // This test documents the current behavior so any future change is explicit.
+  //
+  // The two CSV files have distinct content (different header rows) so they get different
+  // file hashes and both uploads proceed. This isolates the content-similarity dedup from
+  // the file-level idempotency check.
   const db = createInMemoryDb();
 
-  // First: import and approve for "Account A" (no accountId in this test — default null)
-  const batchA = await uploadAndParse(db, HOUSEHOLD_ID, [
-    { date: '2026-08-14', description: 'Amazon', amount: '84.22' },
-  ]);
+  // First file: standard header + transaction
+  const csv1 = 'Date,Description,Amount,Direction\n2026-08-14,Amazon,84.22,debit';
+  const batchAResult = await uploadImportBatch({
+    db, householdId: HOUSEHOLD_ID,
+    input: { filename: 'account_a.csv', text: csv1 },
+  });
+  const batchA = batchAResult.batchId;
+  await parseImportBatch({ db, householdId: HOUSEHOLD_ID, batchId: batchA, input: COLUMN_MAP });
   await approveAllPendingRows(db, HOUSEHOLD_ID, batchA);
 
-  // Second: import the identical row for "Account B" (same household)
-  // findDuplicateTransaction has no accountId parameter — the fingerprint is
-  // householdId+date+amount+merchant, so this WILL be detected as a duplicate.
-  const batchB = await uploadAndParse(db, HOUSEHOLD_ID, [
-    { date: '2026-08-14', description: 'Amazon', amount: '84.22' },
-  ]);
+  // Second file: same transaction data but different file bytes (trailing newline → different hash)
+  // Simulates same bank transaction appearing in a second account's export.
+  const csv2 = 'Date,Description,Amount,Direction\n2026-08-14,Amazon,84.22,debit\n';
+  const batchBResult = await uploadImportBatch({
+    db, householdId: HOUSEHOLD_ID,
+    input: { filename: 'account_b.csv', text: csv2 },
+  });
+  const batchB = batchBResult.batchId;
+  await parseImportBatch({ db, householdId: HOUSEHOLD_ID, batchId: batchB, input: COLUMN_MAP });
 
   const reviewB = await reviewImportBatch({ db, householdId: HOUSEHOLD_ID, batchId: batchB });
   // Document actual behavior: row is marked duplicate (household-level fingerprint, not account-level)
   assert.strictEqual(
     reviewB.rows[0].status,
     'duplicate',
-    'Current behavior: household-level fingerprint treats same tx as duplicate across accounts. ' +
+    'Current behavior: household-level findDuplicateTransaction treats same tx as duplicate across accounts. ' +
     'If account-scoped semantics are intended, this test will flag the regression.',
   );
+});
+
+// ─── Section 12: File-Level Import Idempotency ───────────────────────────────
+
+test('12.1 — Same file uploaded twice: second upload rejected with 409', async () => {
+  const db = createInMemoryDb();
+  const csv = makeCsv([{ date: '2026-09-01', description: 'Groceries', amount: '62.50' }]);
+
+  await uploadImportBatch({ db, householdId: HOUSEHOLD_ID, input: { filename: 'sep.csv', text: csv } });
+
+  const err = await uploadImportBatch({
+    db,
+    householdId: HOUSEHOLD_ID,
+    input: { filename: 'sep.csv', text: csv },
+  }).catch((e) => e);
+
+  assert.ok(err instanceof Error, 'duplicate upload must throw');
+  assert.strictEqual(err.status, 409, 'duplicate file upload must return HTTP 409');
+});
+
+test('12.2 — Same content, different filename: second upload still rejected (hash is content-based)', async () => {
+  const db = createInMemoryDb();
+  const csv = makeCsv([{ date: '2026-09-01', description: 'Groceries', amount: '62.50' }]);
+
+  await uploadImportBatch({ db, householdId: HOUSEHOLD_ID, input: { filename: 'original.csv', text: csv } });
+
+  const err = await uploadImportBatch({
+    db,
+    householdId: HOUSEHOLD_ID,
+    input: { filename: 'renamed_copy.csv', text: csv },
+  }).catch((e) => e);
+
+  assert.ok(err instanceof Error, 'same content with different filename must throw');
+  assert.strictEqual(err.status, 409, 'content-identical file must be rejected regardless of name');
+});
+
+test('12.3 — Different content, same filename: both uploads proceed', async () => {
+  const db = createInMemoryDb();
+  const csv1 = makeCsv([{ date: '2026-09-01', description: 'Groceries', amount: '62.50' }]);
+  const csv2 = makeCsv([{ date: '2026-09-15', description: 'Rent', amount: '1500.00' }]);
+
+  const b1 = await uploadImportBatch({ db, householdId: HOUSEHOLD_ID, input: { filename: 'stmt.csv', text: csv1 } });
+  const b2 = await uploadImportBatch({ db, householdId: HOUSEHOLD_ID, input: { filename: 'stmt.csv', text: csv2 } });
+
+  assert.ok(b1.batchId, 'first batch created');
+  assert.ok(b2.batchId, 'second batch created');
+  assert.notStrictEqual(b1.batchId, b2.batchId, 'different content produces separate batches');
+});
+
+test('12.4 — Same file in different workspaces: both proceed independently', async () => {
+  const db = createInMemoryDb();
+  const csv = makeCsv([{ date: '2026-09-01', description: 'Groceries', amount: '62.50' }]);
+
+  const b1 = await uploadImportBatch({ db, householdId: HOUSEHOLD_ID, input: { filename: 'sep.csv', text: csv } });
+  const b2 = await uploadImportBatch({ db, householdId: HOUSEHOLD_B, input: { filename: 'sep.csv', text: csv } });
+
+  assert.ok(b1.batchId, 'workspace A batch created');
+  assert.ok(b2.batchId, 'workspace B batch created');
+  assert.notStrictEqual(b1.batchId, b2.batchId, 'file-level uniqueness is workspace-scoped; cross-workspace same file is allowed');
+});
+
+test('12.5 — Legitimate identical-looking transactions in same file: file-level dedup does not suppress them', async () => {
+  // Two coffee purchases, same date, same merchant, same amount — appearing twice in the same CSV.
+  // The file-hash idempotency constraint prevents re-uploading the file, but it cannot and
+  // should not suppress rows that exist within a single upload.
+  //
+  // Separate authority: the approval-time in-memory fingerprint (buildImportRowFingerprint)
+  // will still suppress the second row when both are approved with the SAME category, because
+  // that mechanism deduplicates within a single approval pass. To get two canonical transactions,
+  // the user must assign different categories — which is the correct UX prompt for economically
+  // identical-looking rows.
+  const db = createInMemoryDb();
+
+  const batchId = await uploadAndParse(db, HOUSEHOLD_ID, [
+    { date: '2026-09-10', description: 'Coffee Shop', amount: '5.00' },
+    { date: '2026-09-10', description: 'Coffee Shop', amount: '5.00' },
+  ]);
+
+  // Both rows reach review stage (file-level dedup has no effect here)
+  const review = await reviewImportBatch({ db, householdId: HOUSEHOLD_ID, batchId });
+  assert.strictEqual(review.rows.length, 2, 'both rows present in review — file-level dedup does not suppress intra-file rows');
+  assert.ok(
+    review.rows.every((r) => r.status === 'pending'),
+    'both rows are pending, not suppressed by file-level idempotency',
+  );
+
+  // Approve with different categories so approval-time fingerprints differ → two transactions
+  await updateImportedRow({ db, householdId: HOUSEHOLD_ID, rowId: review.rows[0].id, input: { status: 'approved', categoryId: 'cat_dining' } });
+  await updateImportedRow({ db, householdId: HOUSEHOLD_ID, rowId: review.rows[1].id, input: { status: 'approved', categoryId: 'cat_groceries' } });
+  const result = await approveImportBatch({ db, householdId: HOUSEHOLD_ID, batchId });
+
+  assert.strictEqual(result.inserted, 2, 'two transactions created when categories differ — distinct approval-time fingerprints');
 });
