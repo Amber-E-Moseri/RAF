@@ -121,6 +121,56 @@ test('uploadImportBatch creates an upload batch and stores raw row metadata from
   });
 });
 
+test('uploadImportBatch maps only the file-hash unique constraint to duplicate-file 409', async () => {
+  async function uploadWithInsertError(error) {
+    const db = createDbDouble();
+    db.state.insertedBatches = [];
+    const originalTransaction = db.transaction;
+    db.transaction = async (callback) => originalTransaction(async (tx) => {
+      const failingTx = {
+        ...tx,
+        async insertImportBatch() {
+          throw error;
+        },
+      };
+      return callback(failingTx);
+    });
+
+    return uploadImportBatch({
+      db,
+      householdId: 'household_1',
+      input: {
+        filename: 'test.csv',
+        text: 'Date,Description,Amount\n2026-03-10,Coffee Shop,12.99\n',
+      },
+    }).catch((err) => err);
+  }
+
+  const targetConstraintError = Object.assign(new Error('duplicate file hash'), {
+    code: '23505',
+    constraint: 'idx_import_batches_workspace_file_hash',
+  });
+  const targetResult = await uploadWithInsertError(targetConstraintError);
+  assert.equal(targetResult.status, 409);
+  assert.equal(targetResult.message, 'this file has already been imported to this workspace');
+
+  const otherConstraintError = Object.assign(new Error('other unique violation'), {
+    code: '23505',
+    constraint: 'some_other_unique_constraint',
+  });
+  assert.equal(await uploadWithInsertError(otherConstraintError), otherConstraintError);
+
+  const missingConstraintError = Object.assign(new Error('unidentified unique violation'), {
+    code: '23505',
+  });
+  assert.equal(await uploadWithInsertError(missingConstraintError), missingConstraintError);
+
+  const genericDbError = Object.assign(new Error('database unavailable'), {
+    code: '57P01',
+  });
+  assert.equal(await uploadWithInsertError(genericDbError), genericDbError);
+});
+
 test('parseImportBatch parses uploaded rawData with explicit mapping, applies merchant suggestions, and flags duplicates', async () => {
   const db = createDbDouble({
     rows: [
