@@ -468,8 +468,8 @@ export function Goals() {
   return (
     <PageShell
       eyebrow="Goals"
-      title="Fund what matters next."
-      description="Track progress, target dates and milestones without silently redirecting your money."
+      title="Goals"
+      description="Fund what matters next. Track progress, target dates and milestones without silently redirecting your money."
       actions={
         <Button type="button" onClick={() => { resetForm(); setShowCreateForm(true); }}>
           New goal
@@ -814,6 +814,9 @@ export function Goals() {
             {selectedGoalAvgMonthly > 0 ? (
               <div className="mt-4 rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
                 <div className="text-sm font-semibold text-[var(--text-strong)]">Pace</div>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
+                  Estimate only: if this period's pace holds, RAF can show how long the remaining target may take.
+                </p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <div>
                     <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Avg / month (this period)</div>

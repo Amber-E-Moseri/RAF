@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   getAllocationCategories,
   getAllocationCategoryHistory,
@@ -18,6 +18,13 @@ import type {
   AllocationCategory,
   AllocationCategorySnapshot,
 } from "../lib/types";
+
+const PLAN_TABS = ["allocations", "goals", "debts"] as const;
+type PlanTab = typeof PLAN_TABS[number];
+
+function isPlanTab(value: string | null): value is PlanTab {
+  return PLAN_TABS.includes(value as PlanTab);
+}
 
 function CurrentAllocationSummary() {
   const [categories, setCategories] = useState<AllocationCategory[]>([]);
@@ -159,15 +166,69 @@ function CurrentAllocationSummary() {
 }
 
 export function Plan() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const validTab: PlanTab = isPlanTab(requestedTab) ? requestedTab : "allocations";
+
+  function selectTab(tab: PlanTab) {
+    setSearchParams(tab === "allocations" ? {} : { tab });
+  }
+
   return (
     <PageShell
       eyebrow="Plan"
       title="Allocation without noise."
       description="Adjust allocation preferences, see execution, and keep Buffer visible without turning RAF into a traditional budgeting app."
     >
-      <CurrentAllocationSummary />
-      <PlanExecutionCard />
-      <BufferStatusCard />
+      <div className="flex flex-wrap gap-2">
+        {PLAN_TABS.map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            className={[
+              "rounded-full border px-4 py-2 text-sm font-medium transition",
+              validTab === tab
+                ? "border-transparent bg-[var(--primary-color)] text-[var(--primary-contrast)]"
+                : "border-[var(--border-color)] bg-[var(--surface-color)] text-[var(--text-muted)] hover:bg-[var(--surface-plain)]",
+            ].join(" ")}
+            onClick={() => selectTab(tab)}
+          >
+            {tab === "allocations" ? "Allocations" : tab === "goals" ? "Goals" : "Debts"}
+          </button>
+        ))}
+      </div>
+
+      {validTab === "allocations" ? (
+        <>
+          <CurrentAllocationSummary />
+          <PlanExecutionCard />
+          <BufferStatusCard />
+        </>
+      ) : null}
+
+      {validTab === "goals" ? (
+        <Card
+          title="Goals"
+          subtitle="Create and maintain savings targets from the dedicated Goals workspace."
+          actions={<Link className="text-sm font-semibold text-[var(--primary-color)]" to="/goals">Open Goals</Link>}
+        >
+          <p className="text-sm text-[var(--text-muted)]">
+            Goal progress stays server-authoritative and linked to actual transactions.
+          </p>
+        </Card>
+      ) : null}
+
+      {validTab === "debts" ? (
+        <Card
+          title="Debts"
+          subtitle="Review balances, payments, interest, fees, and payoff pacing from the dedicated Debts workspace."
+          actions={<Link className="text-sm font-semibold text-[var(--primary-color)]" to="/debts">Open Debts</Link>}
+        >
+          <p className="text-sm text-[var(--text-muted)]">
+            Debt balances remain derived from payment and adjustment activity.
+          </p>
+        </Card>
+      ) : null}
     </PageShell>
   );
 }

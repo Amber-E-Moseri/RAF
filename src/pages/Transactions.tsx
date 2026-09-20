@@ -1392,6 +1392,9 @@ export function Transactions() {
       description="Bank activity stays canonical. Categories, notes and splits explain what the money was for without duplicating the underlying transaction."
       actions={
         <div className="flex gap-2">
+          <Button type="button" variant="secondary" onClick={() => setShowIncomeModal(true)}>
+            Add Income
+          </Button>
           <Button type="button" variant="secondary" onClick={() => setShowImportWorkflow((current) => !current)}>
             Import statement
           </Button>

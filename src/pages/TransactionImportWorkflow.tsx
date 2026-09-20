@@ -10,6 +10,12 @@ import { Money } from "../components/ui/Money";
 import { ImportRuleEditor } from "../components/imports/ImportRuleEditor";
 import { LoadingSpinner } from "../components/feedback/LoadingSpinner";
 import { formatIsoDate } from "../lib/format";
+import type { ImportClassificationPayload } from "../lib/types";
+
+type BadgeTone = "neutral" | "success" | "warning" | "danger";
+type ImportPanelMode = "review" | "details";
+type ImportRuleMode = "suggestion" | "reusable_rule";
+type ImportClassificationType = ImportClassificationPayload["classification_type"];
 
 function formatOptionalDateTime(value: string | null | undefined) {
   if (!value) return "—";
@@ -31,8 +37,8 @@ interface TransactionImportWorkflowProps {
   importsSummary: {
     total: number;
     unreviewed: number;
-    earliestDate?: string;
-    latestDate?: string;
+    earliestDate?: string | null;
+    latestDate?: string | null;
   };
 
   // Imported Rows Review
@@ -53,7 +59,7 @@ interface TransactionImportWorkflowProps {
   isLoading: boolean;
   error: string | null;
   data: any | null;
-  importPanelModes: Record<string, string | null>;
+  importPanelModes: Record<string, ImportPanelMode | null>;
   openImportMenuId: string | null;
   openAdvancedMenuId: string | null;
   editingRuleId: string | null;
@@ -74,13 +80,13 @@ interface TransactionImportWorkflowProps {
   onHandleReviewImportedRow: (item: any) => Promise<void>;
   onHandleUnignoreImportedRow: (item: any) => Promise<void>;
   onHandleUnprocessImportedRow: (item: any) => Promise<void>;
-  onOpenImportPanel: (id: string, mode: string) => void;
+  onOpenImportPanel: (id: string, mode: ImportPanelMode) => void;
   onCloseImportPanel: (id: string) => void;
   onToggleAdvancedMenu: (id: string) => void;
   onToggleImportMenu: (id: string) => void;
   onHandleIgnoreImportedRow: (item: any) => Promise<void>;
   onHandleDeleteRule: (rule: any) => Promise<void>;
-  onHandleRuleModeUpdate: (rule: any, mode: string, autoApply: boolean) => Promise<void>;
+  onHandleRuleModeUpdate: (rule: any, mode: ImportRuleMode, autoApply: boolean) => Promise<void>;
   onHandleSaveRuleEdits: (rule: any) => Promise<void>;
 
   // Import History
@@ -97,15 +103,15 @@ interface TransactionImportWorkflowProps {
 
   // Derived state helpers
   getReviewDraft: (item: any) => any;
-  importRowStatus: (item: any, draft: any) => { tone: string; label: string };
+  importRowStatus: (item: any, draft: any) => { tone: BadgeTone; label: string };
   importStateNote: (item: any, draft: any) => string;
   getBucketLabel: (item: any) => string;
   getLinkedLabel: (item: any) => string;
-  primaryReviewLabel: (classificationType: string) => string;
-  requiresCategorySelection: (classificationType: string) => boolean;
-  requiresDebtSelection: (classificationType: string) => boolean;
-  requiresFixedBillSelection: (classificationType: string) => boolean;
-  requiresGoalSelection: (classificationType: string) => boolean;
+  primaryReviewLabel: (classificationType: ImportClassificationType) => string;
+  requiresCategorySelection: (classificationType: ImportClassificationType) => boolean;
+  requiresDebtSelection: (classificationType: ImportClassificationType) => boolean;
+  requiresFixedBillSelection: (classificationType: ImportClassificationType) => boolean;
+  requiresGoalSelection: (classificationType: ImportClassificationType) => boolean;
   getRuleDraft: (rule: any) => any;
   updateRuleDraft: (rule: any, patch: any) => void;
   looksLikeSavingsTransfer: (item: any) => boolean;

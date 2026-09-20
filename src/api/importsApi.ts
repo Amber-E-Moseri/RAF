@@ -68,7 +68,7 @@ export function updateImportReviewRule(ruleId: string, payload: ImportReviewRule
 }
 
 export function deleteImportReviewRule(ruleId: string) {
-  return deleteJson<{ success: true }>(`/import-rules/${ruleId}`, {
+  return deleteJson<{ success: true }>(`/import-rules/${ruleId}`, undefined, {
     headers: importHeaders,
   });
 }

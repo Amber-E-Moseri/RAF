@@ -15,10 +15,13 @@ test('Data Freshness card uses factual timestamps without color or threshold sem
 });
 
 test('transparency slice avoids Financial Inbox-owned review state', async () => {
-  const source = await readFile(new URL('../src/pages/Transactions.tsx', import.meta.url), 'utf8');
+  const [transactionsSource, workflowSource] = await Promise.all([
+    readFile(new URL('../src/pages/Transactions.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/pages/TransactionImportWorkflow.tsx', import.meta.url), 'utf8'),
+  ]);
 
-  assert.match(source, /Import History/, 'Import History card must exist in Transactions page');
-  assert.match(source, /read-only record/, 'card must be clearly labeled read-only');
+  assert.match(workflowSource, /Import History/, 'Import History card must exist in the Transactions import workflow');
+  assert.match(workflowSource, /read-only record/, 'card must be clearly labeled read-only');
 
-  assert.doesNotMatch(source, /importHistory.*Mark reviewed|Mark reviewed.*importHistory/s, 'Import History must not render Financial Inbox review controls');
+  assert.doesNotMatch(`${transactionsSource}\n${workflowSource}`, /importHistory.*Mark reviewed|Mark reviewed.*importHistory/s, 'Import History must not render Financial Inbox review controls');
 });
