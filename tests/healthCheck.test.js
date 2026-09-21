@@ -84,6 +84,9 @@ before(async () => {
   liveServer = await startIsolatedSqliteServer({
     repoRoot,
     testName: 'raf-health-check',
+    extraEnv: {
+      ALLOWED_ORIGINS: 'https://normisraf.netlify.app,https://raf-app-ten.vercel.app',
+    },
   });
   baseUrl = liveServer.baseUrl;
 });
@@ -129,13 +132,14 @@ test('CORS diagnostic: F — exact response contract', async () => {
   assert.equal(res.status, 200);
   const body = await res.json();
   const keys = Object.keys(body).sort();
-  const expected = ['configured', 'netlifyAllowed', 'nonEmpty', 'originCount', 'vercelAllowed'].sort();
+  const expected = ['configured', 'lastImportPreflight', 'netlifyAllowed', 'nonEmpty', 'originCount', 'vercelAllowed'].sort();
   assert.deepEqual(keys, expected, 'diagnostic must return exactly these fields, no more, no less');
   assert.equal(typeof body.configured, 'boolean', 'configured must be boolean');
   assert.equal(typeof body.nonEmpty, 'boolean', 'nonEmpty must be boolean');
   assert.equal(typeof body.originCount, 'number', 'originCount must be number');
   assert.equal(typeof body.netlifyAllowed, 'boolean', 'netlifyAllowed must be boolean');
   assert.equal(typeof body.vercelAllowed, 'boolean', 'vercelAllowed must be boolean');
+  assert.ok(typeof body.lastImportPreflight === 'object', 'lastImportPreflight must be an object');
 });
 
 test('CORS diagnostic: G — no secrets or raw origins exposed', async () => {
@@ -356,4 +360,173 @@ test('CORS diagnostic: whitespace handling', async () => {
     await new Promise((resolve) => server.close(resolve));
     delete process.env.ALLOWED_ORIGINS;
   }
+});
+
+// D2.7B-R15B: Minimal CORS boundary probe tests
+test('R15B: OPTIONS to target path with Vercel origin sets snapshot', async () => {
+  const res = await fetch(`${baseUrl}/api/v1/imports/upload`, {
+    method: 'OPTIONS',
+    headers: {
+      'Origin': 'https://raf-app-ten.vercel.app',
+      'Access-Control-Request-Method': 'POST',
+    },
+  });
+  assert.equal(res.status, 204);
+
+  const diagRes = await fetch(`${baseUrl}/__diag/cors-runtime`);
+  const body = await diagRes.json();
+  assert.ok(body.lastImportPreflight, 'lastImportPreflight field must exist');
+  assert.equal(body.lastImportPreflight.observed, true, 'observed must be true');
+  assert.equal(body.lastImportPreflight.originPresent, true, 'originPresent must be true');
+  assert.equal(body.lastImportPreflight.originMatchesVercel, true, 'originMatchesVercel must be true');
+  assert.equal(body.lastImportPreflight.originAllowedBySet, true, 'originAllowedBySet must be true');
+  assert.equal(body.lastImportPreflight.acaoPresentBeforeSend, true, 'acaoPresentBeforeSend must be true');
+  assert.equal(body.lastImportPreflight.varyOriginPresentBeforeSend, true, 'varyOriginPresentBeforeSend must be true');
+});
+
+test('R15B: invalid origin does not set allowedBySet', async () => {
+  const res = await fetch(`${baseUrl}/api/v1/imports/upload`, {
+    method: 'OPTIONS',
+    headers: {
+      'Origin': 'https://invalid.example.com',
+      'Access-Control-Request-Method': 'POST',
+    },
+  });
+  assert.equal(res.status, 204);
+
+  const diagRes = await fetch(`${baseUrl}/__diag/cors-runtime`);
+  const body = await diagRes.json();
+  assert.equal(body.lastImportPreflight.observed, true);
+  assert.equal(body.lastImportPreflight.originPresent, true);
+  assert.equal(body.lastImportPreflight.originMatchesVercel, false);
+  assert.equal(body.lastImportPreflight.originAllowedBySet, false);
+  assert.equal(body.lastImportPreflight.acaoPresentBeforeSend, false);
+  assert.equal(body.lastImportPreflight.varyOriginPresentBeforeSend, false);
+});
+
+test('R15B: no Origin header', async () => {
+  const res = await fetch(`${baseUrl}/api/v1/imports/upload`, {
+    method: 'OPTIONS',
+    headers: {
+      'Access-Control-Request-Method': 'POST',
+    },
+  });
+  assert.equal(res.status, 204);
+
+  const diagRes = await fetch(`${baseUrl}/__diag/cors-runtime`);
+  const body = await diagRes.json();
+  assert.equal(body.lastImportPreflight.observed, true);
+  assert.equal(body.lastImportPreflight.originPresent, false);
+  assert.equal(body.lastImportPreflight.originMatchesVercel, false);
+  assert.equal(body.lastImportPreflight.originAllowedBySet, false);
+  assert.equal(body.lastImportPreflight.acaoPresentBeforeSend, false);
+  assert.equal(body.lastImportPreflight.varyOriginPresentBeforeSend, false);
+});
+
+test('R15B: non-OPTIONS request does not overwrite snapshot', async () => {
+  // First capture a valid preflight
+  await fetch(`${baseUrl}/api/v1/imports/upload`, {
+    method: 'OPTIONS',
+    headers: { 'Origin': 'https://raf-app-ten.vercel.app' },
+  });
+
+  const diagBefore = await fetch(`${baseUrl}/__diag/cors-runtime`);
+  const bodyBefore = await diagBefore.json();
+  const snapBefore = JSON.stringify(bodyBefore.lastImportPreflight);
+
+  // Now send a POST/GET to same path
+  await fetch(`${baseUrl}/api/v1/imports/upload`, {
+    method: 'POST',
+    headers: { 'Origin': 'https://invalid.example.com' },
+  }).catch(() => {}); // 404 or 401 is ok, we only care snapshot didn't change
+
+  const diagAfter = await fetch(`${baseUrl}/__diag/cors-runtime`);
+  const bodyAfter = await diagAfter.json();
+  const snapAfter = JSON.stringify(bodyAfter.lastImportPreflight);
+
+  assert.equal(snapBefore, snapAfter, 'non-OPTIONS must not overwrite snapshot');
+});
+
+test('R15B: OPTIONS to different path does not overwrite snapshot', async () => {
+  // First capture valid preflight
+  await fetch(`${baseUrl}/api/v1/imports/upload`, {
+    method: 'OPTIONS',
+    headers: { 'Origin': 'https://raf-app-ten.vercel.app' },
+  });
+
+  const diagBefore = await fetch(`${baseUrl}/__diag/cors-runtime`);
+  const bodyBefore = await diagBefore.json();
+  const snapBefore = JSON.stringify(bodyBefore.lastImportPreflight);
+
+  // Send OPTIONS to different endpoint
+  await fetch(`${baseUrl}/api/v1/health`, {
+    method: 'OPTIONS',
+    headers: { 'Origin': 'https://invalid.example.com' },
+  });
+
+  const diagAfter = await fetch(`${baseUrl}/__diag/cors-runtime`);
+  const bodyAfter = await diagAfter.json();
+  const snapAfter = JSON.stringify(bodyAfter.lastImportPreflight);
+
+  assert.equal(snapBefore, snapAfter, 'different-path OPTIONS must not overwrite snapshot');
+});
+
+test('R15B: lastImportPreflight contract exactly 6 boolean fields', async () => {
+  await fetch(`${baseUrl}/api/v1/imports/upload`, {
+    method: 'OPTIONS',
+    headers: { 'Origin': 'https://raf-app-ten.vercel.app' },
+  });
+
+  const diagRes = await fetch(`${baseUrl}/__diag/cors-runtime`);
+  const body = await diagRes.json();
+  const snap = body.lastImportPreflight;
+  const keys = Object.keys(snap).sort();
+  const expected = ['acaoPresentBeforeSend', 'observed', 'originAllowedBySet', 'originMatchesVercel', 'originPresent', 'varyOriginPresentBeforeSend'].sort();
+
+  assert.deepEqual(keys, expected, 'lastImportPreflight must contain exactly these 6 fields');
+  for (const key of keys) {
+    assert.equal(typeof snap[key], 'boolean', `${key} must be boolean`);
+  }
+});
+
+test('R15B: diagnostic does not expose raw data', async () => {
+  await fetch(`${baseUrl}/api/v1/imports/upload`, {
+    method: 'OPTIONS',
+    headers: { 'Origin': 'https://raf-app-ten.vercel.app' },
+  });
+
+  const diagRes = await fetch(`${baseUrl}/__diag/cors-runtime`);
+  const bodyStr = await diagRes.text();
+
+  assert.ok(!bodyStr.includes('raf-app-ten'), 'must not expose raw Vercel origin');
+  assert.ok(!bodyStr.includes('normisraf'), 'must not expose raw Netlify origin');
+  assert.ok(!bodyStr.includes('ALLOWED_ORIGINS'), 'must not expose env var name');
+  assert.ok(!bodyStr.includes('Authorization'), 'must not expose headers');
+  assert.ok(!bodyStr.includes('workspace'), 'must not expose workspace data');
+});
+
+test('R15B: R14 contract preserved (5 runtime fields)', async () => {
+  const diagRes = await fetch(`${baseUrl}/__diag/cors-runtime`);
+  const body = await diagRes.json();
+
+  assert.equal(typeof body.configured, 'boolean', 'configured must exist and be boolean');
+  assert.equal(typeof body.nonEmpty, 'boolean', 'nonEmpty must exist and be boolean');
+  assert.equal(typeof body.originCount, 'number', 'originCount must exist and be number');
+  assert.equal(typeof body.netlifyAllowed, 'boolean', 'netlifyAllowed must exist and be boolean');
+  assert.equal(typeof body.vercelAllowed, 'boolean', 'vercelAllowed must exist and be boolean');
+
+  assert.equal(body.configured, true);
+  assert.equal(body.nonEmpty, true);
+  assert.equal(body.originCount, 2);
+  assert.equal(body.netlifyAllowed, true);
+  assert.equal(body.vercelAllowed, true);
+});
+
+test('R15B: health endpoint regression', async () => {
+  const res = await fetch(`${baseUrl}/health`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.deepEqual(Object.keys(body).sort(), ['service', 'status'].sort());
+  assert.equal(body.status, 'ok');
+  assert.equal(body.service, 'raf-api');
 });

@@ -45,6 +45,18 @@ app.use((req, res, next) => {
 
 const allowedOriginsSet = new Set(allowedOrigins);
 
+// D2.7B-R15B: Minimal CORS boundary probe — captures state for OPTIONS /api/v1/imports/upload only
+const corsDiagState = {
+  lastImportPreflight: {
+    observed: false,
+    originPresent: false,
+    originMatchesVercel: false,
+    originAllowedBySet: false,
+    acaoPresentBeforeSend: false,
+    varyOriginPresentBeforeSend: false,
+  },
+};
+
 app.use((req, res, next) => {
   const origin = req.headers.origin;
 
@@ -58,6 +70,18 @@ app.use((req, res, next) => {
 
   res.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key, x-workspace-id, x-household-id, x-household_id');
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+
+  // D2.7B-R15B: Capture snapshot for target request BEFORE res.status(204).end()
+  if (req.method === 'OPTIONS' && req.path === '/api/v1/imports/upload') {
+    corsDiagState.lastImportPreflight = {
+      observed: true,
+      originPresent: Boolean(origin),
+      originMatchesVercel: origin === 'https://raf-app-ten.vercel.app',
+      originAllowedBySet: Boolean(isAllowed),
+      acaoPresentBeforeSend: Boolean(res.getHeader('Access-Control-Allow-Origin')),
+      varyOriginPresentBeforeSend: Boolean(res.getHeader('Vary')?.includes('Origin')),
+    };
+  }
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
@@ -103,8 +127,8 @@ app.get('/api/v1/health', async (_req, res) => {
   res.status(status).json(body);
 });
 
-// Temporary CORS runtime diagnostic endpoint (D2.7B-R13)
-// Removed after single diagnostic call and result interpretation
+// Temporary CORS runtime diagnostic endpoint (D2.7B-R13 + R15B)
+// Removed after diagnostic interpretation
 app.get('/__diag/cors-runtime', (_req, res) => {
   const configured = Object.prototype.hasOwnProperty.call(process.env, 'ALLOWED_ORIGINS');
   const nonEmpty = Boolean(process.env.ALLOWED_ORIGINS?.trim());
@@ -115,6 +139,7 @@ app.get('/__diag/cors-runtime', (_req, res) => {
     originCount: allowedOriginsSet.size,
     netlifyAllowed: allowedOriginsSet.has('https://normisraf.netlify.app'),
     vercelAllowed: allowedOriginsSet.has('https://raf-app-ten.vercel.app'),
+    lastImportPreflight: corsDiagState.lastImportPreflight,
   });
 });
 
