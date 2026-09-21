@@ -659,7 +659,10 @@ describe('Phase 8 — Full-Year Final Certification', () => {
 
     const singleRow = '2026-04-10,Amazon,84.22,debit';
     const csv1 = `Date,Description,Amount,Direction\n${singleRow}`;
-    const csv2 = `Date,Description,Amount,Direction\n${singleRow}`;
+    // csv2 contains the same economic row but different file bytes (trailing newline)
+    // This satisfies D2.1 file-level idempotency (different SHA-256) while testing
+    // row-level duplicate detection across uploads
+    const csv2 = `Date,Description,Amount,Direction\n${singleRow}\n`;
 
     const b1 = await uploadImportBatch({ db, householdId: HH_A,
       input: { filename: 'batch1.csv', text: csv1, accountId: null } });
@@ -673,7 +676,7 @@ describe('Phase 8 — Full-Year Final Certification', () => {
     }
     await approveImportBatch({ db, householdId: HH_A, batchId: b1.batchId });
 
-    // Second identical batch
+    // Second batch with different file bytes but same economic row
     const b2 = await uploadImportBatch({ db, householdId: HH_A,
       input: { filename: 'batch2.csv', text: csv2, accountId: null } });
     await parseImportBatch({ db, householdId: HH_A, batchId: b2.batchId,
