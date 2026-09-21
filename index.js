@@ -103,6 +103,21 @@ app.get('/api/v1/health', async (_req, res) => {
   res.status(status).json(body);
 });
 
+// Temporary CORS runtime diagnostic endpoint (D2.7B-R13)
+// Removed after single diagnostic call and result interpretation
+app.get('/__diag/cors-runtime', (_req, res) => {
+  const configured = Object.prototype.hasOwnProperty.call(process.env, 'ALLOWED_ORIGINS');
+  const nonEmpty = Boolean(process.env.ALLOWED_ORIGINS?.trim());
+
+  res.status(200).json({
+    configured,
+    nonEmpty,
+    originCount: allowedOriginsSet.size,
+    netlifyAllowed: allowedOriginsSet.has('https://normisraf.netlify.app'),
+    vercelAllowed: allowedOriginsSet.has('https://raf-app-ten.vercel.app'),
+  });
+});
+
 const apiRootDir = path.join(__dirname, 'app', 'api', 'v1');
 const aliases = [
   {
