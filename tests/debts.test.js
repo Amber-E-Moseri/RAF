@@ -1104,6 +1104,176 @@ test('listDebts auto-posts late fee when due cycle is missed and auto late fee i
   assert.equal(result.items[0].paymentStatus, 'missed_payment');
 });
 
+test('listDebts auto-post interest: multi-month balance is correct across three sequential months (DEF-B-001 regression)', async () => {
+  // Scenario from B1 certification: $1200, 12% APR, autoPostInterest=true, no payments.
+  // Interest must compound on the correct closing balance each month, not an inflated one.
+  const debt = {
+    id: 'debt_1',
+    householdId: 'household_1',
+    name: 'DEF-B-001 Regression Card',
+    startingBalance: '1200.00',
+    apr: 12,
+    minimumPayment: '50.00',
+    monthlyPayment: '100.00',
+    statementDay: 10,
+    paymentDueDay: 25,
+    autoPostInterest: true,
+    autoPostLateFee: false,
+    sortOrder: 1,
+    isActive: true,
+    createdAt: '2026-03-01T00:00:00.000Z',
+  };
+  const marchDb = createDbDouble({ debts: [debt], household: { id: 'household_1', activeMonth: '2026-03-01' } });
+  const aprilDb = createDbDouble({ debts: [debt], household: { id: 'household_1', activeMonth: '2026-04-01' } });
+  const mayDb = createDbDouble({ debts: [debt], household: { id: 'household_1', activeMonth: '2026-05-01' } });
+
+  const march = await listDebts({ db: marchDb, householdId: 'household_1' });
+  // Month 1: opening $1200.00, interest = Math.round(120000 * 0.01) = $12.00, closing $1212.00
+  assert.equal(march.items[0].interestChargedThisMonth, '12.00');
+  assert.equal(march.items[0].currentBalance, '1212.00');
+
+  const april = await listDebts({ db: aprilDb, householdId: 'household_1' });
+  // Month 2: opening $1212.00, interest = Math.round(121200 * 0.01) = 1212¢ = $12.12, closing $1224.12
+  assert.equal(april.items[0].interestChargedThisMonth, '12.12');
+  assert.equal(april.items[0].currentBalance, '1224.12');
+
+  const may = await listDebts({ db: mayDb, householdId: 'household_1' });
+  // Month 3: opening $1224.12, interest = Math.round(122412 * 0.01) = 1224¢ = $12.24, closing $1236.36
+  assert.equal(may.items[0].interestChargedThisMonth, '12.24');
+  assert.equal(may.items[0].currentBalance, '1236.36');
+});
+
+test('listDebts auto-post interest: payment reduces next-month opening balance for interest calculation', async () => {
+  // Proves interest is applied once and the post-payment opening balance is used for month N+1.
+  const debt = {
+    id: 'debt_1',
+    householdId: 'household_1',
+    name: 'Payment Interaction Card',
+    startingBalance: '2400.00',
+    apr: 12,
+    minimumPayment: '50.00',
+    monthlyPayment: '100.00',
+    statementDay: 10,
+    paymentDueDay: 25,
+    autoPostInterest: true,
+    autoPostLateFee: false,
+    sortOrder: 1,
+    isActive: true,
+    createdAt: '2026-03-01T00:00:00.000Z',
+  };
+  const payment = {
+    id: 'pay_1',
+    debtId: 'debt_1',
+    householdId: 'household_1',
+    amount: '100.00',
+    paymentDate: '2026-04-15',
+    transactionId: 'tx_1',
+  };
+  const marchDb = createDbDouble({ debts: [debt], household: { id: 'household_1', activeMonth: '2026-03-01' } });
+  const aprilDb = createDbDouble({ debts: [debt], debtPayments: [payment], household: { id: 'household_1', activeMonth: '2026-04-01' } });
+
+  const march = await listDebts({ db: marchDb, householdId: 'household_1' });
+  // Month 1: opening $2400, interest = Math.round(240000 * 0.01) = $24.00, no payments, closing $2424.00
+  assert.equal(march.items[0].interestChargedThisMonth, '24.00');
+  assert.equal(march.items[0].paymentsThisMonth, '0.00');
+  assert.equal(march.items[0].currentBalance, '2424.00');
+
+  const april = await listDebts({ db: aprilDb, householdId: 'household_1' });
+  // Month 2: opening $2424.00, interest = Math.round(242400 * 0.01) = 2424¢ = $24.24
+  // payment $100.00, closing = $2424.00 + $24.24 - $100.00 = $2348.24
+  assert.equal(april.items[0].interestChargedThisMonth, '24.24');
+  assert.equal(april.items[0].paymentsThisMonth, '100.00');
+  assert.equal(april.items[0].currentBalance, '2348.24');
+});
+
+test('listDebts auto-post interest and late fee: each charged exactly once in multi-month scenario', async () => {
+  // Proves interest is counted once and late fee is counted once even when both are auto-posted.
+  const debt = {
+    id: 'debt_1',
+    householdId: 'household_1',
+    name: 'Late Fee Interaction Card',
+    startingBalance: '1500.00',
+    apr: 12,
+    minimumPayment: '50.00',
+    monthlyPayment: '100.00',
+    statementDay: 10,
+    paymentDueDay: 25,
+    lateFeeAmount: '25.00',
+    autoPostInterest: true,
+    autoPostLateFee: true,
+    sortOrder: 1,
+    isActive: true,
+    createdAt: '2026-03-01T00:00:00.000Z',
+  };
+  // Month 2: $100 payment (>= $50 minimum) prevents late fee
+  const payment = {
+    id: 'pay_1',
+    debtId: 'debt_1',
+    householdId: 'household_1',
+    amount: '100.00',
+    paymentDate: '2026-04-20',
+    transactionId: 'tx_1',
+  };
+  const marchDb = createDbDouble({ debts: [debt], household: { id: 'household_1', activeMonth: '2026-03-01' } });
+  const aprilDb = createDbDouble({ debts: [debt], debtPayments: [payment], household: { id: 'household_1', activeMonth: '2026-04-01' } });
+
+  const march = await listDebts({ db: marchDb, householdId: 'household_1' });
+  // Month 1: opening $1500, interest = Math.round(150000 * 0.01) = $15.00, late fee = $25.00
+  // closing = $1500 + $15 + $25 = $1540.00
+  assert.equal(march.items[0].interestChargedThisMonth, '15.00');
+  assert.equal(march.items[0].feesThisMonth, '25.00');
+  assert.equal(march.items[0].currentBalance, '1540.00');
+
+  const april = await listDebts({ db: aprilDb, householdId: 'household_1' });
+  // Month 2: opening $1540.00 (correct, not inflated), interest = Math.round(154000 * 0.01) = 1540¢ = $15.40
+  // payment $100, no late fee (payment >= minimum), closing = $1540 + $15.40 - $100 = $1455.40
+  assert.equal(april.items[0].interestChargedThisMonth, '15.40');
+  assert.equal(april.items[0].feesThisMonth, '0.00');
+  assert.equal(april.items[0].paymentsThisMonth, '100.00');
+  assert.equal(april.items[0].currentBalance, '1455.40');
+});
+
+test('listDebts auto-post interest: does not generate interest when manual interest already exists for the statement date', async () => {
+  // Proves suppression: a persisted interest adjustment on the statement date prevents
+  // a second auto-generated one from being created.
+  const debt = {
+    id: 'debt_1',
+    householdId: 'household_1',
+    name: 'Suppressed Interest Card',
+    startingBalance: '1200.00',
+    apr: 12,
+    minimumPayment: '50.00',
+    monthlyPayment: '100.00',
+    statementDay: 10,
+    autoPostInterest: true,
+    autoPostLateFee: false,
+    sortOrder: 1,
+    isActive: true,
+    createdAt: '2026-03-01T00:00:00.000Z',
+  };
+  // Manual interest already recorded for the March statement date (different amount to prove
+  // it is the persisted value being used, not the auto-generated $12.00).
+  const persistedInterest = {
+    id: 'adj_1',
+    debtId: 'debt_1',
+    householdId: 'household_1',
+    amount: '15.00',
+    adjustmentType: 'interest',
+    effectiveDate: '2026-03-10',
+    createdAt: '2026-03-10T00:00:00.000Z',
+  };
+  const db = createDbDouble({
+    debts: [debt],
+    debtAdjustments: [persistedInterest],
+    household: { id: 'household_1', activeMonth: '2026-03-01' },
+  });
+
+  const result = await listDebts({ db, householdId: 'household_1' });
+  // Only the persisted $15.00 should count — auto-generated $12.00 must not be created.
+  assert.equal(result.items[0].interestChargedThisMonth, '15.00');
+  assert.equal(result.items[0].currentBalance, '1215.00');
+});
+
 test('listDebts handles a 12-month credit card stress dataset with interest, spend, missed payment, fee, and payoff shifts', async () => {
   const dataset = buildDebtStressDataset();
 
