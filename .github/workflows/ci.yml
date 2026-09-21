@@ -6,10 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  NODE_VERSION: '22'
+  CI_JWT_SECRET: ci-test-secret-do-not-use-in-production
+  OWNER_DATABASE_URL: postgres://neondb_owner:owner@localhost:5432/raf_ci
+  APP_DATABASE_URL: postgres://raf_app:app@localhost:5432/raf_ci
+
 jobs:
-  # ──────────────────────────────────────────────────────────────
-  # Job 1: Unit tests — SQLite in-memory, no secrets required
-  # ──────────────────────────────────────────────────────────────
   unit:
     name: Unit tests (SQLite)
     runs-on: ubuntu-latest
@@ -19,8 +22,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
@@ -28,80 +31,129 @@ jobs:
       - name: Run unit tests
         run: npm test
         env:
-          # SQLite mode — Postgres tests skip gracefully when POSTGRES_CONNECTION_STRING is absent
           PERSISTENCE_DRIVER: sqlite
           RAF_DB_PATH: ':memory:'
-          JWT_SECRET: ci-test-secret-do-not-use-in-production
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
           RAF_AUTH_REQUIRED: 'true'
 
-  # ──────────────────────────────────────────────────────────────
-  # Job 2: Postgres integration tests — requires repo secrets
-  # Skipped automatically when secrets are not configured.
-  # ──────────────────────────────────────────────────────────────
-  postgres:
-    name: Postgres integration tests
+  typecheck:
+    name: Typecheck
     runs-on: ubuntu-latest
-    # Only run when the privileged connection string secret is present
-    if: ${{ vars.ENABLE_POSTGRES_CI == 'true' }}
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Typecheck
+        run: npm run typecheck
+
+  postgres:
+    name: Postgres integration tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create CI owner database
+        run: |
+          docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "CREATE ROLE neondb_owner LOGIN PASSWORD 'owner' CREATEROLE CREATEDB"
+          docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE raf_ci OWNER neondb_owner"
+
       - name: Run schema migrations
         run: node scripts/migrate.js
         env:
-          POSTGRES_CONNECTION_STRING: ${{ secrets.POSTGRES_CONNECTION_STRING }}
+          POSTGRES_CONNECTION_STRING: ${{ env.OWNER_DATABASE_URL }}
+
+      - name: Set runtime role password
+        run: docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "ALTER ROLE raf_app PASSWORD 'app'"
 
       - name: Run Postgres integration tests
         run: npm test
         env:
           PERSISTENCE_DRIVER: postgres
-          POSTGRES_CONNECTION_STRING: ${{ secrets.POSTGRES_CONNECTION_STRING }}
-          POSTGRES_CONNECTION_STRING_APP: ${{ secrets.POSTGRES_CONNECTION_STRING_APP }}
-          JWT_SECRET: ${{ secrets.CI_JWT_SECRET }}
+          POSTGRES_CONNECTION_STRING: ${{ env.OWNER_DATABASE_URL }}
+          POSTGRES_CONNECTION_STRING_APP: ${{ env.APP_DATABASE_URL }}
+          JWT_SECRET: ${{ env.CI_JWT_SECRET }}
           RAF_AUTH_REQUIRED: 'true'
 
-  # ──────────────────────────────────────────────────────────────
-  # Job 3: RLS enforcement tests — proves raf_app role enforces RLS
-  # Requires POSTGRES_CONNECTION_STRING (admin) and
-  # POSTGRES_CONNECTION_STRING_APP (raf_app, NOBYPASSRLS).
-  # ──────────────────────────────────────────────────────────────
   rls:
     name: RLS enforcement tests (raf_app)
     runs-on: ubuntu-latest
-    if: ${{ vars.ENABLE_POSTGRES_CI == 'true' }}
     needs: [postgres]
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Create CI owner database
+        run: |
+          docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "CREATE ROLE neondb_owner LOGIN PASSWORD 'owner' CREATEROLE CREATEDB"
+          docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE raf_ci OWNER neondb_owner"
+
+      - name: Run schema migrations
+        run: node scripts/migrate.js
+        env:
+          POSTGRES_CONNECTION_STRING: ${{ env.OWNER_DATABASE_URL }}
+
+      - name: Set runtime role password
+        run: docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "ALTER ROLE raf_app PASSWORD 'app'"
+
       - name: Run RLS enforcement tests via raf_app role
         run: node --test tests/branchERlsEnforcement.test.js
         env:
-          DATABASE_URL: ${{ secrets.POSTGRES_CONNECTION_STRING }}
-          POSTGRES_CONNECTION_STRING_APP: ${{ secrets.POSTGRES_CONNECTION_STRING_APP }}
+          DATABASE_URL: ${{ env.OWNER_DATABASE_URL }}
+          POSTGRES_CONNECTION_STRING_APP: ${{ env.APP_DATABASE_URL }}
           RAF_RUN_POSTGRES_RLS_TESTS: 'true'
           RAF_CONFIRM_NON_PRODUCTION_DB: 'true'
 
-  # ──────────────────────────────────────────────────────────────
-  # Lint — always runs
-  # ──────────────────────────────────────────────────────────────
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -111,11 +163,29 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
       - name: Lint
         run: npm run lint
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
