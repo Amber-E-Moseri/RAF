@@ -196,7 +196,7 @@ maybeTest('C-PG-1: Goal disposition commits atomically with month close', async 
       db: securedDb,
       householdId,
       period,
-      userId: 'test-user-pg-1',
+      userId: ownerUserId,
       bufferDispositionInput: { type: 'apply_to_goal', targetId: goalId },
     });
 
@@ -252,7 +252,7 @@ maybeTest('C-PG-2: Goal disposition rolls back atomically when close persistence
       db: failDb,
       householdId,
       period,
-      userId: 'test-user-pg-2',
+      userId: ownerUserId,
       bufferDispositionInput: { type: 'apply_to_goal', targetId: goalId },
     }).catch((e) => e);
 
@@ -293,7 +293,7 @@ maybeTest('C-PG-2: Goal disposition rolls back atomically when close persistence
       db: securedDb,
       householdId,
       period,
-      userId: 'test-user-pg-2-retry',
+      userId: ownerUserId,
       bufferDispositionInput: { type: 'apply_to_goal', targetId: goalId },
     });
     assert.strictEqual(retryResult.state, LifecycleState.CLOSED);
@@ -337,7 +337,7 @@ maybeTest('C-PG-3: Debt disposition commits atomically with month close', async 
       db: securedDb,
       householdId,
       period,
-      userId: 'test-user-pg-3',
+      userId: ownerUserId,
       bufferDispositionInput: { type: 'apply_to_debt', targetId: debtId },
     });
 
@@ -393,7 +393,7 @@ maybeTest('C-PG-4: Debt disposition + payment roll back when close persistence f
       db: failDb,
       householdId,
       period,
-      userId: 'test-user-pg-4',
+      userId: ownerUserId,
       bufferDispositionInput: { type: 'apply_to_debt', targetId: debtId },
     }).catch((e) => e);
 
@@ -433,7 +433,7 @@ maybeTest('C-PG-4: Debt disposition + payment roll back when close persistence f
       db: securedDb,
       householdId,
       period,
-      userId: 'test-user-pg-4-retry',
+      userId: ownerUserId,
       bufferDispositionInput: { type: 'apply_to_debt', targetId: debtId },
     });
     assert.strictEqual(retryResult.state, LifecycleState.CLOSED);
@@ -470,7 +470,7 @@ maybeTest('C-PG-5: return_to_plan is metadata-only — no financial transaction 
       db: securedDb,
       householdId,
       period,
-      userId: 'test-user-pg-5',
+      userId: ownerUserId,
       bufferDispositionInput: { type: 'return_to_plan' },
     });
 
@@ -532,7 +532,7 @@ maybeTest('C-PG-6: WS_A month cannot dispose to WS_B goal (cross-workspace rejec
       db: securedDbA,
       householdId: wsA,
       period,
-      userId: 'test-user-pg-6',
+      userId: ownerUserIdA,
       bufferDispositionInput: { type: 'apply_to_goal', targetId: foreignGoalId },
     }).catch((e) => e);
 
@@ -592,7 +592,7 @@ maybeTest('C-PG-7: WS_A month cannot dispose to WS_B debt (cross-workspace rejec
       db: securedDbA,
       householdId: wsA,
       period,
-      userId: 'test-user-pg-7',
+      userId: ownerUserIdA,
       bufferDispositionInput: { type: 'apply_to_debt', targetId: foreignDebtId },
     }).catch((e) => e);
 
@@ -643,7 +643,7 @@ maybeTest('C-PG-8: Client-supplied amount is ignored — server derives $100 fro
       db: securedDb,
       householdId,
       period,
-      userId: 'test-user-pg-8',
+      userId: ownerUserId,
       // Intentionally pass amount in the input to confirm server ignores it
       bufferDispositionInput: { type: 'apply_to_goal', targetId: goalId, amount: '500.00' },
     });
