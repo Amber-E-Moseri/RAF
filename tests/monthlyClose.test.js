@@ -567,6 +567,222 @@ test('close with buffer disposition records disposition in snapshot', async () =
   assert.strictEqual(result.bufferDisposition.type, 'return_to_plan');
 });
 
+test('atomic close applies full server-derived buffer amount to a goal and closes once', async () => {
+  const { db, hh } = await makDbWithBuffer('_atomic_goal', '500.00', '200.00');
+  let goalId;
+  await db.transaction(async (tx) => {
+    const g = await tx.insertGoal({ householdId: hh, name: 'Vacation', targetAmount: '2000.00', active: true });
+    goalId = g.id;
+  });
+
+  const result = await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'apply_to_goal', amount: '999.00', targetId: goalId },
+  });
+
+  assert.strictEqual(result.state, LifecycleState.CLOSED);
+  assert.deepStrictEqual(result.bufferDisposition, { type: 'apply_to_goal', amount: '300.00', targetId: goalId });
+  assert.strictEqual(result.snapshot.goals.totalContributions, '300.00');
+
+  const txs = await db.transaction((tx) => tx.listTransactions({ householdId: hh, from: PERIOD, to: PERIOD }));
+  const goalTxs = txs.items.filter((t) => t.linkedGoalId === goalId && t.source === 'buffer_disposition');
+  assert.strictEqual(goalTxs.length, 1);
+  assert.strictEqual(goalTxs[0].amount, '300.00');
+});
+
+test('atomic close applies full server-derived buffer amount to a debt and closes once', async () => {
+  const { db, hh } = await makDbWithBuffer('_atomic_debt', '500.00', '200.00');
+  let debtId;
+  await db.transaction(async (tx) => {
+    const d = await tx.insertDebt({ householdId: hh, name: 'Car Loan', currentBalance: '10000.00', minimumPayment: '300.00', type: 'installment' });
+    debtId = d.id;
+  });
+
+  const result = await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'apply_to_debt', amount: '999.00', targetId: debtId },
+  });
+
+  assert.strictEqual(result.state, LifecycleState.CLOSED);
+  assert.deepStrictEqual(result.bufferDisposition, { type: 'apply_to_debt', amount: '300.00', targetId: debtId });
+  assert.strictEqual(result.snapshot.debts.totalPayments, '300.00');
+
+  const payments = await db.transaction((tx) => tx.listDebtPayments({ householdId: hh, debtId, from: PERIOD, to: PERIOD }));
+  const bufferPayments = payments.filter((p) => p.amount === '300.00');
+  assert.strictEqual(bufferPayments.length, 1);
+});
+
+test('atomic close return_to_plan is metadata-only and does not create goal/debt effects', async () => {
+  const { db, hh } = await makDbWithBuffer('_atomic_return', '500.00', '200.00');
+  const result = await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'return_to_plan' },
+  });
+
+  assert.strictEqual(result.state, LifecycleState.CLOSED);
+  assert.deepStrictEqual(result.bufferDisposition, { type: 'return_to_plan', amount: '300.00', targetId: null });
+  assert.strictEqual(result.snapshot.spending.netSurplus, '300.00');
+  assert.strictEqual(result.snapshot.goals.totalContributions, '0.00');
+  assert.strictEqual(result.snapshot.debts.totalPayments, '0.00');
+
+  const txs = await db.transaction((tx) => tx.listTransactions({ householdId: hh, from: PERIOD, to: PERIOD }));
+  assert.strictEqual(txs.items.filter((t) => t.source === 'buffer_disposition').length, 0);
+});
+
+test('atomic close rejects malformed disposition before financial mutation', async () => {
+  const { db, hh } = await makDbWithBuffer('_atomic_invalid', '500.00', '200.00');
+  const err = await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'return_to_plan', targetId: 'not-allowed' },
+  }).catch((e) => e);
+
+  assert.ok(err instanceof MonthlyReviewHttpError);
+  assert.strictEqual(err.status, 400);
+  const state = await getMonthLifecycleState({ db, householdId: hh, period: PERIOD });
+  assert.strictEqual(state.state, LifecycleState.OPEN);
+  const txs = await db.transaction((tx) => tx.listTransactions({ householdId: hh, from: PERIOD, to: PERIOD }));
+  assert.strictEqual(txs.items.filter((t) => t.source === 'buffer_disposition').length, 0);
+});
+
+test('atomic close rejects zero remaining buffer disposition', async () => {
+  const { db, hh } = await makDbWithBuffer('_atomic_zero', '500.00', '500.00');
+  let goalId;
+  await db.transaction(async (tx) => {
+    const g = await tx.insertGoal({ householdId: hh, name: 'Vacation', targetAmount: '2000.00', active: true });
+    goalId = g.id;
+  });
+
+  const err = await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'apply_to_goal', targetId: goalId },
+  }).catch((e) => e);
+
+  assert.ok(err instanceof MonthlyReviewHttpError);
+  assert.strictEqual(err.status, 422);
+  const state = await getMonthLifecycleState({ db, householdId: hh, period: PERIOD });
+  assert.strictEqual(state.state, LifecycleState.OPEN);
+});
+
+function withFailingClosePersistence(db, householdId) {
+  return {
+    async transaction(callback) {
+      const insertedTransactionIds = [];
+      try {
+        return await db.transaction(async (tx) => callback({
+          ...tx,
+          async insertTransaction(payload) {
+            const row = await tx.insertTransaction(payload);
+            insertedTransactionIds.push(row.id);
+            return row;
+          },
+          async insertMonthClose() {
+            throw new Error('INJECTED_CLOSE_PERSISTENCE_FAILURE');
+          },
+        }));
+      } catch (error) {
+        await db.transaction(async (tx) => {
+          for (const transactionId of insertedTransactionIds) {
+            await tx.deleteDebtPaymentByTransactionId({ householdId, transactionId });
+            await tx.deleteTransaction({ householdId, transactionId });
+          }
+        });
+        throw error;
+      }
+    },
+  };
+}
+
+test('atomic close goal effect rolls back when close persistence fails, then retry applies once', async () => {
+  const suffix = '_atomic_goal_rollback';
+  const { db, hh } = await makDbWithBuffer(suffix, '500.00', '200.00');
+  let goalId;
+  await db.transaction(async (tx) => {
+    const g = await tx.insertGoal({ householdId: hh, name: 'Vacation', targetAmount: '2000.00', active: true });
+    goalId = g.id;
+  });
+
+  const failingDb = withFailingClosePersistence(db, hh);
+  const err = await closeMonth({
+    db: failingDb, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'apply_to_goal', targetId: goalId },
+  }).catch((e) => e);
+  assert.equal(err.message, 'INJECTED_CLOSE_PERSISTENCE_FAILURE');
+
+  let txs = await db.transaction((tx) => tx.listTransactions({ householdId: hh, from: PERIOD, to: PERIOD }));
+  assert.strictEqual(txs.items.filter((t) => t.source === 'buffer_disposition').length, 0);
+  let state = await getMonthLifecycleState({ db, householdId: hh, period: PERIOD });
+  assert.strictEqual(state.state, LifecycleState.OPEN);
+
+  await closeMonth({ db, householdId: hh, period: PERIOD, userId: 'u1', bufferDispositionInput: { type: 'apply_to_goal', targetId: goalId } });
+  txs = await db.transaction((tx) => tx.listTransactions({ householdId: hh, from: PERIOD, to: PERIOD }));
+  assert.strictEqual(txs.items.filter((t) => t.source === 'buffer_disposition' && t.linkedGoalId === goalId).length, 1);
+});
+
+test('atomic close debt effect rolls back when close persistence fails, then retry applies once', async () => {
+  const { db, hh } = await makDbWithBuffer('_atomic_debt_rollback', '500.00', '200.00');
+  let debtId;
+  await db.transaction(async (tx) => {
+    const d = await tx.insertDebt({ householdId: hh, name: 'Car Loan', currentBalance: '10000.00', minimumPayment: '300.00', type: 'installment' });
+    debtId = d.id;
+  });
+
+  const failingDb = withFailingClosePersistence(db, hh);
+  const err = await closeMonth({
+    db: failingDb, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'apply_to_debt', targetId: debtId },
+  }).catch((e) => e);
+  assert.equal(err.message, 'INJECTED_CLOSE_PERSISTENCE_FAILURE');
+
+  let txs = await db.transaction((tx) => tx.listTransactions({ householdId: hh, from: PERIOD, to: PERIOD }));
+  let payments = await db.transaction((tx) => tx.listDebtPayments({ householdId: hh, debtId, from: PERIOD, to: PERIOD }));
+  assert.strictEqual(txs.items.filter((t) => t.source === 'buffer_disposition').length, 0);
+  assert.strictEqual(payments.length, 0);
+  let state = await getMonthLifecycleState({ db, householdId: hh, period: PERIOD });
+  assert.strictEqual(state.state, LifecycleState.OPEN);
+
+  await closeMonth({ db, householdId: hh, period: PERIOD, userId: 'u1', bufferDispositionInput: { type: 'apply_to_debt', targetId: debtId } });
+  txs = await db.transaction((tx) => tx.listTransactions({ householdId: hh, from: PERIOD, to: PERIOD }));
+  payments = await db.transaction((tx) => tx.listDebtPayments({ householdId: hh, debtId, from: PERIOD, to: PERIOD }));
+  assert.strictEqual(txs.items.filter((t) => t.source === 'buffer_disposition' && t.linkedDebtId === debtId).length, 1);
+  assert.strictEqual(payments.length, 1);
+  assert.strictEqual(payments[0].amount, '300.00');
+});
+
+test('atomic close duplicate goal disposition request creates exactly one financial effect', async () => {
+  const { db, hh } = await makDbWithBuffer('_atomic_goal_duplicate', '500.00', '200.00');
+  let goalId;
+  await db.transaction(async (tx) => {
+    const g = await tx.insertGoal({ householdId: hh, name: 'Vacation', targetAmount: '2000.00', active: true });
+    goalId = g.id;
+  });
+
+  await closeMonth({ db, householdId: hh, period: PERIOD, userId: 'u1', bufferDispositionInput: { type: 'apply_to_goal', targetId: goalId } });
+  const err = await closeMonth({ db, householdId: hh, period: PERIOD, userId: 'u1', bufferDispositionInput: { type: 'apply_to_goal', targetId: goalId } }).catch((e) => e);
+  assert.ok(err instanceof MonthlyReviewHttpError);
+  assert.strictEqual(err.status, 409);
+
+  const txs = await db.transaction((tx) => tx.listTransactions({ householdId: hh, from: PERIOD, to: PERIOD }));
+  assert.strictEqual(txs.items.filter((t) => t.source === 'buffer_disposition' && t.linkedGoalId === goalId).length, 1);
+});
+
+test('atomic close duplicate debt disposition request creates exactly one financial effect', async () => {
+  const { db, hh } = await makDbWithBuffer('_atomic_debt_duplicate', '500.00', '200.00');
+  let debtId;
+  await db.transaction(async (tx) => {
+    const d = await tx.insertDebt({ householdId: hh, name: 'Car Loan', currentBalance: '10000.00', minimumPayment: '300.00', type: 'installment' });
+    debtId = d.id;
+  });
+
+  await closeMonth({ db, householdId: hh, period: PERIOD, userId: 'u1', bufferDispositionInput: { type: 'apply_to_debt', targetId: debtId } });
+  const err = await closeMonth({ db, householdId: hh, period: PERIOD, userId: 'u1', bufferDispositionInput: { type: 'apply_to_debt', targetId: debtId } }).catch((e) => e);
+  assert.ok(err instanceof MonthlyReviewHttpError);
+  assert.strictEqual(err.status, 409);
+
+  const payments = await db.transaction((tx) => tx.listDebtPayments({ householdId: hh, debtId, from: PERIOD, to: PERIOD }));
+  assert.strictEqual(payments.length, 1);
+  assert.strictEqual(payments[0].amount, '300.00');
+});
+
 test('reopen clears CLOSED state, preserves snapshot in history, and re-close creates v2', async () => {
   const db = await makeDb(HH + '_rce');
   const hh = HH + '_rce';
