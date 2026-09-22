@@ -151,6 +151,7 @@ export function Debts() {
   const [expandedSections, setExpandedSections] = useState<Record<string, { month: boolean; payoff: boolean; transactions: boolean }>>({});
   const [showCreateDebtForm, setShowCreateDebtForm] = useState(false);
   const [isDeletingDebtId, setIsDeletingDebtId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   function isSectionExpanded(debtId: string, section: "month" | "payoff" | "transactions") {
     return expandedSections[debtId]?.[section] ?? false;
@@ -193,16 +194,13 @@ export function Debts() {
   }
 
   async function handleDeleteDebt(debt: NonNullable<typeof data>["items"][number]) {
-    const confirmed = window.confirm(
-      `Delete "${debt.name}"? This cannot be undone. Debts with linked payments cannot be deleted — disable them instead.`,
-    );
-    if (!confirmed) return;
 
     setIsDeletingDebtId(debt.id);
     setSubmitError(null);
     try {
       await deleteDebt(debt.id);
       setSubmitSuccess(`"${debt.name}" deleted.`);
+      setConfirmDeleteId(null);
       await reload();
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Debt could not be deleted.");
@@ -631,15 +629,36 @@ export function Debts() {
                       <Button type="button" className="rounded-[8px] px-[9px] py-[6px] text-[10px] font-[900] min-h-0" onClick={() => openEditModal(debt)}>Record payment</Button>
                       <Button type="button" variant="secondary" className="rounded-[8px] px-[9px] py-[6px] text-[10px] font-[900] min-h-0" onClick={() => toggleSection(debt.id, "transactions")}>Link transaction</Button>
                       <Button type="button" variant="secondary" className="rounded-[8px] px-[9px] py-[6px] text-[10px] font-[900] min-h-0" onClick={() => openEditModal(debt)}>Edit</Button>
-                      <button
-                        type="button"
-                        aria-label="Delete debt"
-                        disabled={isDeletingDebtId === debt.id}
-                        className="ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-[var(--text-muted)] transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40"
-                        onClick={() => void handleDeleteDebt(debt)}
-                      >
-                        {isDeletingDebtId === debt.id ? "…" : "🗑"}
-                      </button>
+                      {confirmDeleteId === debt.id ? (
+                        <div className="ml-auto flex items-center gap-[6px]">
+                          <span className="text-[10px] text-[var(--text-muted)]">Delete?</span>
+                          <button
+                            type="button"
+                            disabled={isDeletingDebtId === debt.id}
+                            className="rounded-[6px] bg-rose-600 px-[8px] py-[4px] text-[10px] font-[800] text-white transition hover:bg-rose-700 disabled:opacity-40"
+                            onClick={() => void handleDeleteDebt(debt)}
+                          >
+                            {isDeletingDebtId === debt.id ? "…" : "Yes, delete"}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-[6px] border border-[var(--border-color)] px-[8px] py-[4px] text-[10px] font-[700] text-[var(--text-secondary)] transition hover:bg-[var(--surface-elevated)]"
+                            onClick={() => setConfirmDeleteId(null)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          aria-label="Delete debt"
+                          disabled={isDeletingDebtId === debt.id}
+                          className="ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-[var(--text-muted)] transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40"
+                          onClick={() => setConfirmDeleteId(debt.id)}
+                        >
+                          🗑
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
