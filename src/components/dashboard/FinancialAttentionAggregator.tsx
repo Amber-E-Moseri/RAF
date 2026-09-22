@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Financial Attention Aggregator
  * Renders canonical attention items from the /api/v1/financial-attention endpoint.
  * GOAL_FUNDING_REVIEW deferred (requires Goal lifecycle branch, Phase-2 gate).
@@ -18,7 +18,7 @@ export type AttentionItemType =
   | "GOAL_FUNDING_REVIEW";
 
 /**
- * BLOCKING:      RAF prevents progression until resolved.
+ * BLOCKING:      NOMI prevents progression until resolved.
  * ACTION_NEEDED: Concrete unresolved action; does not block normal use.
  * REVIEW:        Non-blocking financial decision awaiting deliberate review.
  */

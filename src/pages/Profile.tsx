@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 
 import { getAllocationCategories } from "../api/allocationCategoriesApi";
 import { ApiError } from "../api/client";
@@ -172,14 +172,14 @@ export function Profile() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold text-raf-ink">Jane Doe</h2>
-                <p className="mt-1 text-sm text-stone-500">Local RAF profile placeholder</p>
+                <p className="mt-1 text-sm text-stone-500">Local NOMI profile placeholder</p>
               </div>
               <Badge tone="neutral">Profile placeholder</Badge>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
                 <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">Household</p>
-                <p className="mt-2 text-sm font-medium text-raf-ink">Local RAF Household</p>
+                <p className="mt-2 text-sm font-medium text-raf-ink">Local NOMI Household</p>
                 <p className="mt-1 text-sm text-stone-500">Household and account details will appear here when available.</p>
               </div>
               <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">

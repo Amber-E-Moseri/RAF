@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 
 import { getAllocationCategories } from "../api/allocationCategoriesApi";
 import { getDebts } from "../api/debtsApi";
@@ -60,7 +60,7 @@ const themeGroups: Array<{
   helper: string;
 }> = [
   { mood: "Professional", values: ["minimal", "violet"], helper: "Calm contrast for focused daily finance work." },
-  { mood: "Balanced", values: ["emerald"], helper: "RAF's default look with steady contrast and warmth." },
+  { mood: "Balanced", values: ["emerald"], helper: "NOMI's default look with steady contrast and warmth." },
   { mood: "Expressive", values: ["blush"], helper: "A softer accent with a little more personality." },
 ];
 
@@ -275,7 +275,7 @@ export function AppearanceSettings({ tab }: { tab: SettingsContentTab }) {
 
         <Card
           title="Theme"
-          subtitle="Choose a mood that fits how you want RAF to feel while you review income, allocations, and transactions."
+          subtitle="Choose a mood that fits how you want NOMI to feel while you review income, allocations, and transactions."
         >
           <div className="grid gap-5 lg:grid-cols-2">
             {themeGroups.map((group, index) => (
@@ -329,7 +329,7 @@ export function AppearanceSettings({ tab }: { tab: SettingsContentTab }) {
 
         <Card
           title="Font"
-          subtitle="Pick the reading voice you want across RAF. The preview updates instantly so dense financial data stays easy to judge."
+          subtitle="Pick the reading voice you want across NOMI. The preview updates instantly so dense financial data stays easy to judge."
         >
           <div className="grid gap-2">
             {FONT_OPTIONS.map((option) => {

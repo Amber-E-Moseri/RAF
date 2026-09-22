@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
 
@@ -95,7 +95,7 @@ export function AddIncome() {
     <PageShell
       eyebrow="Income"
       title="Add Income"
-      description="Record income and see how RAF splits it."
+      description="Record income and see how NOMI splits it."
       actions={<Link className="text-sm font-semibold text-raf-moss" to="/dashboard">Back to Dashboard</Link>}
     >
       <section className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
@@ -238,11 +238,11 @@ export function AddIncome() {
               </div>
             </Card>
           ) : (
-            <Card title="What happens next" subtitle="RAF allocates each deposit from your saved category plan.">
+            <Card title="What happens next" subtitle="NOMI allocates each deposit from your saved category plan.">
               <ul className="space-y-3 text-sm text-[var(--text-muted)]">
-                <li>RAF records the deposit for the selected date.</li>
-                <li>RAF creates a saved allocation snapshot automatically.</li>
-                <li>RAF uses the active percentages saved for the deposit date, with any rounding cent routed to Buffer when it is active.</li>
+                <li>NOMI records the deposit for the selected date.</li>
+                <li>NOMI creates a saved allocation snapshot automatically.</li>
+                <li>NOMI uses the active percentages saved for the deposit date, with any rounding cent routed to Buffer when it is active.</li>
                 <li>The allocation shown here is the saved result for this deposit.</li>
                 <li>Use today&apos;s date in ISO format, for example {formatIsoDate(new Date().toISOString())}.</li>
               </ul>

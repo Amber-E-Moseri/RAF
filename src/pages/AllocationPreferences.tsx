@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 
 import { ApiError } from "../api/client";
 import {
@@ -348,7 +348,7 @@ export function AllocationPreferences() {
     <PageShell
       eyebrow="Plan"
       title="Allocation without noise."
-      description="Adjust allocation preferences, see execution, and keep Buffer visible without turning RAF into a traditional budgeting app."
+      description="Adjust allocation preferences, see execution, and keep Buffer visible without turning NOMI into a traditional budgeting app."
       actions={(
         <Button type="button" variant="ghost" onClick={() => setIsAdvancedMode((current) => !current)}>
           {isAdvancedMode ? "Hide Advanced" : "Show Advanced"}

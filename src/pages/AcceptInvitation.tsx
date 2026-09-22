@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { resolveInvitation, acceptInvitation, declineInvitation } from "../api/collaborationApi";
@@ -69,7 +69,7 @@ export function AcceptInvitation() {
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--brand-primary)] text-white text-[20px] font-bold">
             R
           </div>
-          <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">RAF</p>
+          <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">NOMI</p>
         </div>
 
         {phase === "loading" ? (

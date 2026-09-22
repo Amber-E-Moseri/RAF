@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError } from "../api/client";
 import { getRemiConversation, listRemiConversations, sendRemiMessage } from "../api/remiApi";
@@ -291,7 +291,7 @@ export function Remi() {
       id: uid(),
       role: "assistant",
       content:
-        "Hi — I can help you understand your RAF plan, cash flow, goals, and recent activity.",
+        "Hi — I can help you understand your NOMI plan, cash flow, goals, and recent activity.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -352,7 +352,7 @@ export function Remi() {
         id: uid(),
         role: "assistant",
         content:
-          "Hi — I can help you understand your RAF plan, cash flow, goals, and recent activity.",
+          "Hi — I can help you understand your NOMI plan, cash flow, goals, and recent activity.",
       },
     ]);
     setInput("");
@@ -401,7 +401,7 @@ export function Remi() {
   return (
     <PageShell
       eyebrow="Remi"
-      title="Your RAF guide."
+      title="Your NOMI guide."
       description="Ask about your plan, recent activity, goals or cash-flow context. This prototype uses local deterministic responses."
     >
       {/* Dot animation */}
@@ -439,7 +439,7 @@ export function Remi() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 disabled={sending}
-                placeholder={sending ? "Remi is thinking…" : "Ask Remi about your RAF…"}
+                placeholder={sending ? "Remi is thinking…" : "Ask Remi about your NOMI…"}
                 className="ui-field flex-1 text-[14px]"
               />
               <button

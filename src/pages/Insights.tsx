@@ -1,4 +1,4 @@
-import { getAllocationCategories } from "../api/allocationCategoriesApi";
+﻿import { getAllocationCategories } from "../api/allocationCategoriesApi";
 import { getHouseholdSettings } from "../api/householdApi";
 import { getDashboardReport, getFinancialHealthReport } from "../api/reportsApi";
 import { FinancialHealthIndicator } from "../components/dashboard/FinancialHealthIndicator";
@@ -130,7 +130,7 @@ export function Insights({
         <FinancialHealthIndicator
           report={latestHealth}
           title="Financial Health Score"
-          subtitle="Current month score and pillar breakdown, using the same monthly health model shown elsewhere in RAF."
+          subtitle="Current month score and pillar breakdown, using the same monthly health model shown elsewhere in NOMI."
         />
       ) : null}
 
@@ -181,7 +181,7 @@ export function Insights({
         ) : (
           <EmptyState
             title="No score trend yet"
-            message="Once RAF has monthly data for this year, the health score trend will appear here."
+            message="Once NOMI has monthly data for this year, the health score trend will appear here."
           />
         )}
       </Card>
@@ -225,7 +225,7 @@ export function Insights({
         ) : (
           <EmptyState
             title="No YTD data yet"
-            message="Once this year has category activity, RAF will show year-to-date allocation analytics here."
+            message="Once this year has category activity, NOMI will show year-to-date allocation analytics here."
           />
         )}
       </Card>

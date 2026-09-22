@@ -1,4 +1,4 @@
-import { Card } from "../components/ui/Card";
+﻿import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
 import { LoadingState } from "../components/feedback/LoadingState";
@@ -223,7 +223,7 @@ export function TransactionImportWorkflow({
 
       <Card
         title="Import Bank Statement"
-        subtitle="Upload a PDF bank statement to create imported rows for review. Nothing becomes a completed RAF transaction until you approve it."
+        subtitle="Upload a PDF bank statement to create imported rows for review. Nothing becomes a completed NOMI transaction until you approve it."
         actions={(
           <Button type="button" variant="secondary" disabled={isLoading || isImporting} onClick={() => void onImportRefresh()}>
             Refresh imports
