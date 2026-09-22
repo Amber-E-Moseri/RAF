@@ -651,3 +651,244 @@ test('C.perm6 — cross-workspace close attempt is rejected (no householdId in c
   // Without a householdId, the service will throw a 400 (householdId required)
   assert.ok(res.status === 400 || res.status === 403 || res.status === 500, 'missing workspace context is rejected');
 });
+
+// â”€â”€â”€ Section 9: Atomic Close + Disposition (gate tests) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// These tests prove the Phase 4 / Phase 5 gate requirements:
+// disposition and close are one atomic operation â€” no orphaned transactions.
+
+test('AT.1 â€” goal disposition + close succeeds atomically (one goal tx, month CLOSED)', async () => {
+  const { db, hh } = await makDbWithBuffer('_at1', '500.00', '100.00');
+  let goalId;
+  await db.transaction(async (tx) => {
+    const g = await tx.insertGoal({ householdId: hh, name: 'Vacation', targetAmount: '1000.00', active: true });
+    goalId = g.id;
+  });
+  const result = await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'apply_to_goal', targetId: goalId },
+  });
+  assert.strictEqual(result.state, LifecycleState.CLOSED);
+  assert.ok(result.bufferDisposition, 'bufferDisposition recorded');
+  assert.strictEqual(result.bufferDisposition.type, 'apply_to_goal');
+  assert.strictEqual(result.bufferDisposition.targetId, goalId);
+  const goalTx = result.snapshot.goals.contributions.find((c) => c.goalId === goalId);
+  assert.ok(goalTx, 'goal contribution captured in snapshot');
+  assert.ok(parseFloat(goalTx.amount) > 0, 'non-zero contribution');
+  assert.strictEqual(result.bufferDisposition.amount, '400.00');
+});
+
+test('AT.2 â€” debt disposition + close succeeds atomically (debt payment + CLOSED)', async () => {
+  const { db, hh } = await makDbWithBuffer('_at2', '500.00', '100.00');
+  let debtId;
+  await db.transaction(async (tx) => {
+    const d = await tx.insertDebt({ householdId: hh, name: 'Car', currentBalance: '5000.00', minimumPayment: '200.00', type: 'installment' });
+    debtId = d.id;
+  });
+  const result = await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'apply_to_debt', targetId: debtId },
+  });
+  assert.strictEqual(result.state, LifecycleState.CLOSED);
+  assert.ok(result.bufferDisposition?.type === 'apply_to_debt');
+  const debtPayment = result.snapshot.debts.payments.find((p) => p.debtId === debtId);
+  assert.ok(debtPayment, 'debt payment captured in snapshot');
+  assert.ok(parseFloat(debtPayment.amount) > 0);
+});
+
+test('AT.3 â€” return_to_plan is metadata-only (no financial mutation, CLOSED)', async () => {
+  const { db, hh } = await makDbWithBuffer('_at3', '500.00', '100.00');
+  const txBefore = await db.transaction((tx) => tx.listTransactions({ householdId: hh, from: PERIOD, to: PERIOD }));
+  const countBefore = (Array.isArray(txBefore) ? txBefore : (txBefore?.items ?? [])).length;
+
+  const result = await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'return_to_plan' },
+  });
+  assert.strictEqual(result.state, LifecycleState.CLOSED);
+  assert.strictEqual(result.bufferDisposition?.type, 'return_to_plan');
+  const txAfter = await db.transaction((tx) => tx.listTransactions({ householdId: hh, from: PERIOD, to: PERIOD }));
+  const countAfter = (Array.isArray(txAfter) ? txAfter : (txAfter?.items ?? [])).length;
+  assert.strictEqual(countAfter, countBefore, 'return_to_plan creates no transactions');
+});
+
+test('AT.4 â€” return_to_plan does not double-count surplus', async () => {
+  const { db, hh } = await makDbWithBuffer('_at4', '300.00', '100.00');
+  const result = await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'return_to_plan' },
+  });
+  const surplus = parseFloat(result.snapshot.spending.netSurplus);
+  const income = parseFloat(result.snapshot.income.totalReceived);
+  const spent = parseFloat(result.snapshot.spending.totalSpent);
+  assert.ok(Math.abs(surplus - (income - spent)) < 0.01, 'surplus = income - spent, no double-count');
+});
+
+test('AT.5 â€” server derives authoritative amount; client-supplied amount is ignored', async () => {
+  const { db, hh } = await makDbWithBuffer('_at5', '500.00', '100.00');
+  let goalId;
+  await db.transaction(async (tx) => {
+    const g = await tx.insertGoal({ householdId: hh, name: 'Emergency', targetAmount: '2000.00', active: true });
+    goalId = g.id;
+  });
+  const result = await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'apply_to_goal', targetId: goalId, amount: '999.99' },
+  });
+  assert.strictEqual(result.bufferDisposition.amount, '400.00');
+});
+
+test('AT.6 â€” zero buffer requires no disposition choice (close succeeds without it)', async () => {
+  const { db, hh } = await makDbWithBuffer('_at6', '100.00', '100.00');
+  const result = await closeMonth({ db, householdId: hh, period: PERIOD, userId: 'u1' });
+  assert.strictEqual(result.state, LifecycleState.CLOSED);
+  assert.strictEqual(result.bufferDisposition, null);
+});
+
+test('AT.7 â€” cross-workspace goal rejected inside atomic close', async () => {
+  const { db, hh } = await makDbWithBuffer('_at7', '500.00', '100.00');
+  const foreignHh = hh + '_foreign';
+  const db2 = await makeDb(foreignHh);
+  let foreignGoalId;
+  await db2.transaction(async (tx) => {
+    const g = await tx.insertGoal({ householdId: foreignHh, name: 'Foreign Goal', targetAmount: '1000.00', active: true });
+    foreignGoalId = g.id;
+  });
+  const err = await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'apply_to_goal', targetId: foreignGoalId },
+  }).catch((e) => e);
+  assert.ok(err instanceof MonthlyReviewHttpError);
+  assert.strictEqual(err.status, 422);
+  const state = await getMonthLifecycleState({ db, householdId: hh, period: PERIOD });
+  assert.strictEqual(state.state, LifecycleState.OPEN);
+});
+
+test('AT.8 â€” cross-workspace debt rejected inside atomic close', async () => {
+  const { db, hh } = await makDbWithBuffer('_at8', '500.00', '100.00');
+  const foreignHh = hh + '_foreign';
+  const db2 = await makeDb(foreignHh);
+  let foreignDebtId;
+  await db2.transaction(async (tx) => {
+    const d = await tx.insertDebt({ householdId: foreignHh, name: 'Foreign Debt', currentBalance: '5000.00', minimumPayment: '100.00', type: 'installment' });
+    foreignDebtId = d.id;
+  });
+  const err = await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'apply_to_debt', targetId: foreignDebtId },
+  }).catch((e) => e);
+  assert.ok(err instanceof MonthlyReviewHttpError);
+  assert.strictEqual(err.status, 422);
+  const state = await getMonthLifecycleState({ db, householdId: hh, period: PERIOD });
+  assert.strictEqual(state.state, LifecycleState.OPEN);
+});
+
+test('AT.9 â€” invalid disposition type leaves month open', async () => {
+  const { db, hh } = await makDbWithBuffer('_at9', '500.00', '100.00');
+  const err = await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'roll_to_next' },
+  }).catch((e) => e);
+  assert.ok(err instanceof MonthlyReviewHttpError);
+  assert.strictEqual(err.status, 400);
+  const state = await getMonthLifecycleState({ db, householdId: hh, period: PERIOD });
+  assert.strictEqual(state.state, LifecycleState.OPEN);
+});
+
+test('AT.10 â€” double-submit goal close produces exactly one effect (idempotency)', async () => {
+  const { db, hh } = await makDbWithBuffer('_at10', '500.00', '100.00');
+  let goalId;
+  await db.transaction(async (tx) => {
+    const g = await tx.insertGoal({ householdId: hh, name: 'Trip', targetAmount: '1000.00', active: true });
+    goalId = g.id;
+  });
+  await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'apply_to_goal', targetId: goalId },
+  });
+  const err = await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'apply_to_goal', targetId: goalId },
+  }).catch((e) => e);
+  assert.ok(err instanceof MonthlyReviewHttpError);
+  assert.strictEqual(err.status, 409);
+  const txs = await db.transaction((tx) => tx.listTransactions({ householdId: hh, from: PERIOD, to: PERIOD }));
+  const txRows = Array.isArray(txs) ? txs : (txs?.items ?? []);
+  const dispTxs = txRows.filter((t) => t.linkedGoalId === goalId && t.source === 'buffer_disposition');
+  assert.strictEqual(dispTxs.length, 1, 'exactly one disposition transaction');
+});
+
+test('AT.11 â€” double-submit debt close produces exactly one payment (idempotency)', async () => {
+  const { db, hh } = await makDbWithBuffer('_at11', '500.00', '100.00');
+  let debtId;
+  await db.transaction(async (tx) => {
+    const d = await tx.insertDebt({ householdId: hh, name: 'Loan', currentBalance: '3000.00', minimumPayment: '100.00', type: 'installment' });
+    debtId = d.id;
+  });
+  await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'apply_to_debt', targetId: debtId },
+  });
+  const err = await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'apply_to_debt', targetId: debtId },
+  }).catch((e) => e);
+  assert.strictEqual(err.status, 409);
+  const payments = await db.transaction((tx) => tx.listDebtPayments({ householdId: hh, from: PERIOD, to: PERIOD }));
+  const dispPayments = (Array.isArray(payments) ? payments : []).filter((p) => p.debtId === debtId);
+  assert.strictEqual(dispPayments.length, 1, 'exactly one debt payment');
+});
+
+test('AT.12 â€” goal target required for apply_to_goal disposition', async () => {
+  const { db, hh } = await makDbWithBuffer('_at12', '500.00', '100.00');
+  const err = await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'apply_to_goal' },
+  }).catch((e) => e);
+  assert.ok(err instanceof MonthlyReviewHttpError);
+  assert.ok(err.status === 400 || err.status === 422);
+  const state = await getMonthLifecycleState({ db, householdId: hh, period: PERIOD });
+  assert.strictEqual(state.state, LifecycleState.OPEN);
+});
+
+test('AT.13 â€” debt target required for apply_to_debt disposition', async () => {
+  const { db, hh } = await makDbWithBuffer('_at13', '500.00', '100.00');
+  const err = await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'apply_to_debt' },
+  }).catch((e) => e);
+  assert.ok(err instanceof MonthlyReviewHttpError);
+  assert.ok(err.status === 400 || err.status === 422);
+  const state = await getMonthLifecycleState({ db, householdId: hh, period: PERIOD });
+  assert.strictEqual(state.state, LifecycleState.OPEN);
+});
+
+test('AT.14 â€” close-readiness bufferRemaining matches close authority', async () => {
+  const { db, hh } = await makDbWithBuffer('_at14', '500.00', '100.00');
+  const readiness = await getCloseReadiness({ db, householdId: hh, period: PERIOD });
+  assert.strictEqual(readiness.summary.bufferRemaining, '400.00');
+  const result = await closeMonth({ db, householdId: hh, period: PERIOD, userId: 'u1' });
+  assert.strictEqual(
+    result.snapshot.buffer?.remaining,
+    readiness.summary.bufferRemaining,
+    'displayed bufferRemaining equals authoritative close buffer'
+  );
+});
+
+test('AT.15 â€” already-closed month disposition attempt produces no effect', async () => {
+  const { db, hh } = await makDbWithBuffer('_at15', '500.00', '100.00');
+  let goalId;
+  await db.transaction(async (tx) => {
+    const g = await tx.insertGoal({ householdId: hh, name: 'Savings', targetAmount: '1000.00', active: true });
+    goalId = g.id;
+  });
+  await closeMonth({ db, householdId: hh, period: PERIOD, userId: 'u1' });
+  const err = await closeMonth({
+    db, householdId: hh, period: PERIOD, userId: 'u1',
+    bufferDispositionInput: { type: 'apply_to_goal', targetId: goalId },
+  }).catch((e) => e);
+  assert.ok(err instanceof MonthlyReviewHttpError);
+  assert.strictEqual(err.status, 409, 'already-closed month rejected');
+  const txs = await db.transaction((tx) => tx.listTransactions({ householdId: hh, from: PERIOD, to: PERIOD }));
+  const dispTxs = (Array.isArray(txs) ? txs : (txs?.items ?? [])).filter((t) => t.source === 'buffer_disposition');
+  assert.strictEqual(dispTxs.length, 0, 'no disposition transaction created');
+});

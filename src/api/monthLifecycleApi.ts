@@ -51,7 +51,7 @@ export interface MonthCloseSnapshot {
 
 export interface BufferDisposition {
   type: "apply_to_goal" | "apply_to_debt" | "return_to_plan";
-  amount: string;
+  amount?: string; // authoritative amount is server-derived; omit on client requests
   targetId?: string | null;
 }
 

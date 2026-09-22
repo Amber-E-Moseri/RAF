@@ -3,7 +3,6 @@ import { getAllocationCategories } from "../api/allocationCategoriesApi";
 import { getDebts } from "../api/debtsApi";
 import { getGoals } from "../api/goalsApi";
 import {
-  applyBufferDisposition,
   closeMonth,
   getCloseReadiness,
   getMonthLifecycle,
@@ -254,26 +253,23 @@ export function MonthlyReview() {
 
   async function handleCloseMonth() {
     if (!lifecyclePeriod) return;
-    const bufferAmt = closeReadiness?.summary.bufferRemaining ?? "0.00";
-    const hasBudgetBuffer = parseFloat(bufferAmt) > 0;
+    const hasBudgetBuffer = parseFloat(closeReadiness?.summary.bufferRemaining ?? "0") > 0;
 
     setIsClosingMonth(true);
     setLifecycleActionError(null);
     try {
-      if (hasBudgetBuffer && (dispositionType === "apply_to_goal" || dispositionType === "apply_to_debt")) {
-        const targetId = dispositionType === "apply_to_goal" ? dispositionGoalId : dispositionDebtId;
-        if (!targetId) throw new Error("Please select a destination.");
-        await applyBufferDisposition({
-          period: lifecyclePeriod,
-          disposition: { type: dispositionType, amount: bufferAmt, targetId },
-        });
-      }
+      // One atomic request: disposition + close happen in a single server transaction.
+      // The server derives the authoritative buffer amount — we send only type + targetId.
+      const targetId =
+        dispositionType === "apply_to_goal" ? dispositionGoalId
+        : dispositionType === "apply_to_debt" ? dispositionDebtId
+        : null;
 
       const result = await closeMonth({
         period: lifecyclePeriod,
         bufferDisposition:
-          hasBudgetBuffer && dispositionType === "return_to_plan"
-            ? { type: "return_to_plan", amount: bufferAmt, targetId: null }
+          hasBudgetBuffer && dispositionType
+            ? { type: dispositionType, targetId }
             : undefined,
       });
       setCloseResult(result);
@@ -913,8 +909,8 @@ export function MonthlyReview() {
                           className="mt-0.5 shrink-0"
                         />
                         <div>
-                          <p className="text-[13px] font-[600] text-[var(--text-primary)]">Add to this month&apos;s surplus</p>
-                          <p className="text-[11px] text-[var(--text-muted)]">The unused buffer will be counted as part of this month&apos;s available surplus.</p>
+                          <p className="text-[13px] font-[600] text-[var(--text-primary)]">Leave in this month&apos;s surplus</p>
+                          <p className="text-[11px] text-[var(--text-muted)]">Your unused buffer is already part of this month&apos;s remaining surplus. This records that you chose not to direct it to a goal or debt.</p>
                         </div>
                       </label>
                     </div>
