@@ -244,7 +244,9 @@ Also test constraint-driven rollback: attempt an operation that violates a trigg
 
 ### 38. If network drops after commit but before client receives response?
 
-The server has committed the transaction—the financial state is durably persisted. The client doesn't know and will likely retry the same request. The server receives a duplicate (idempotent retry). If the operation is idempotent (paying a goal by ID: if goal already at target balance, no-op), retrying is safe. If not (creating a new transaction), you need an idempotency key to deduplicate. Nomi doesn't yet have idempotency key infrastructure; this is a limitation post-launch.
+The server has committed the transaction—the financial state is durably persisted. The client doesn't know and will likely retry the same request. The server receives a duplicate (idempotent retry). If the operation is idempotent (paying a goal by ID: if goal already at target balance, no-op), retrying is safe. If not (creating a new transaction), you need an idempotency key to deduplicate.
+
+RAF has targeted idempotency protections for the highest-risk duplicate operations. CSV import batches use a file-hash uniqueness constraint (`UNIQUE(workspace_id, file_hash)` on `raf.import_batches`). Imported transaction rows carry a fingerprint uniqueness constraint (`UNIQUE(workspace_id, fingerprint)` on `raf.imported_transactions`). General-purpose idempotency keys on all financial mutations (goal contributions, debt payments, buffer disposition) are not yet implemented and are the next hardening priority post-launch.
 
 ### 39. How do you make financial operations safe to retry?
 
@@ -276,7 +278,7 @@ Network latency, JavaScript errors, or a malicious client can submit duplicate r
 
 ### 44. How do you prevent duplicate statement imports?
 
-Uniqueness constraint in the database: `UNIQUE (workspace_id, account_id, import_date, statement_hash)` or similar. Before inserting import rows, compute a hash of the statement content. If an import with the same hash exists for the same account + period, reject or de-duplicate. Also: UI prevents re-uploading the same file by checking the account's import history before submission.
+Two database-layer uniqueness constraints prevent duplicate imports. For batch-level (file uploads): `UNIQUE(workspace_id, file_hash) WHERE file_hash IS NOT NULL` on `raf.import_batches` — the hash is a SHA-256 of the file contents, scoped per workspace. For row-level: `UNIQUE(workspace_id, fingerprint) WHERE fingerprint IS NOT NULL` on `raf.imported_transactions`. Both use partial indexes so legacy rows without hashes remain unconstrained. If a file with the same hash has already been imported into the same workspace, the constraint fires and the application returns a 409 or 200 with the existing batch ID. PDF file-level idempotency at the batch layer is not yet implemented (deferred). Also: UI prevents re-uploading the same file by checking the account's import history before submission.
 
 ### 45. Why enforce duplicate detection in database and application?
 
@@ -305,7 +307,7 @@ RAF is the canonical system of record for financial state. When Remi wants to su
 
 ### 50. How do you ensure only one authoritative calculation for remaining buffer?
 
-The calculation is deterministic and lives in one place: `lib/raf/monthlyReview.js` `calculateRemainingBuffer()`. No other route or service recalculates it. The frontend displays it but doesn't re-derive it. If a formula bug is discovered, fix it once, tests verify the fix everywhere. If the frontend ever computes "remaining buffer" for optimistic updates, it must use the same formula as the server (document it as a contract, test both match).
+The buffer remaining calculation is deterministic and lives in one place: `lib/monthlyReviews/monthlyLifecycle.js`, computed inside the month lifecycle state machine. The authoritative surplus snapshot is `computeMonthlyReviewSnapshot()` in `lib/raf/reporting.js`. No other route or service recalculates it. The frontend displays the value returned by the server — it never re-derives the buffer independently. If a formula bug is discovered, fix it once; tests verify the fix everywhere. If the frontend ever computes "remaining buffer" for optimistic updates, it must use the same formula as the server (document it as a contract, test both match).
 
 ### 51. Why is duplicating a financial formula across frontend and backend dangerous?
 
@@ -321,7 +323,7 @@ Client submission can be forged (user modifies the form via DevTools) or stale (
 
 ### 54. How do you handle rounding and monetary precision?
 
-RAF uses cents (integers) throughout. `financial_accounts.current_balance` is stored as `NUMERIC(14,2)` in Postgres but represented as an integer count of cents in application code. Display formatting happens at the view layer (divide by 100, format with 2 decimals). No floating-point arithmetic. Ledger sums are always exact integer arithmetic.
+RAF uses cents (integers) throughout. `financial_accounts.current_balance` is stored as `NUMERIC(12,2)` in Postgres but represented as an integer count of cents in application code. Display formatting happens at the view layer (divide by 100, format with 2 decimals). No floating-point arithmetic. Ledger sums are always exact integer arithmetic.
 
 ### 55. How does RAF distinguish balances, transactions, adjustments, payments, interest, and reconciliations?
 
@@ -725,7 +727,7 @@ Credit-card statement parsing via OCR (extract balance, min payment, due date fr
 
 ### 126. Most important technical debt?
 
-Compat adapter still backing monthly reviews and imports (60 methods). While it works, it adds a ~50ms penalty per operation (serialization lock, full-table hydration). It's not a blocker, but it's the first thing I'd remove post-launch—high-value refactor with clear ROI.
+Compat adapter still backs monthly reviews (6 methods) and imports (24 methods), plus 8 additional methods — 38 total. While it works, it adds serialization overhead via `pg_advisory_xact_lock` and full-table hydration on every compat-backed call (O(rows) per transaction). The penalty is not precisely profiled yet. It's not a blocker, but it's the first thing I'd remove post-launch — high-value refactor with clear ROI and a direct migration path to the direct-SQL repositories already proven in Branch D.
 
 ### 127. If you had two weeks to improve without adding features?
 
@@ -737,7 +739,7 @@ Multi-layer tenant isolation (application auth + SQL WHERE + RLS). Each layer is
 
 ### 129. Least confident?
 
-Import pipeline. It's still compat-backed, so I haven't fully verified it behaves correctly under concurrency or large data volumes. There's a gap where duplicate detection happens at the application layer (check in-memory cache), not the database layer (uniqueness constraint). If two imports arrive concurrently with the same hash, both might be accepted. This needs a database-layer uniqueness constraint to be fully safe.
+Import pipeline. It's still compat-backed, so I haven't fully verified it behaves correctly under concurrency or large data volumes. Database-layer uniqueness constraints now exist at both the batch level (`UNIQUE(workspace_id, file_hash)` on `raf.import_batches`) and the row level (`UNIQUE(workspace_id, fingerprint)` on `raf.imported_transactions`), so the duplicate-import race condition is covered. The remaining gap is behavioral correctness of the multi-step workflow (upload → parse → review → approve) under concurrent access — this hasn't been adversarially tested at high concurrency.
 
 ### 130. Assumption that could become invalid as the product grows?
 

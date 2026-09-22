@@ -1,12 +1,21 @@
-# Nomi — Personal Finance, Intentionally Allocated
+# Nomi — Financial Operating System for Households
 
-Nomi is a multi-tenant personal finance platform for intentional income allocation, planning, debt management, goals, reconciliation, and financial forecasting.
+Nomi is a full-stack, multi-tenant personal finance platform built as an auditable financial system. Unlike conventional budgeting dashboards, Nomi models financial state as deterministic computation: PostgreSQL-backed persistence, row-level tenant isolation, financial-integrity testing, monthly lifecycle management, and an AI assistant intentionally separated from financial authority.
 
-Most financial tools are designed to explain where money went. Nomi starts one step earlier: helping users decide where income should go, then maintaining a trustworthy financial picture as transactions, accounts, debts, goals, and plans change.
-
-Underneath Nomi is **RAF**, a deterministic financial engine responsible for allocation, financial state, forecasting, and monthly lifecycle behavior. **Remi**, Nomi's AI assistant, operates above that financial authority rather than replacing it.
+Underneath is **RAF**, the Resilient Allocation Framework — a financial engine that owns allocation, account state, debt modeling, forecasting, and monthly close semantics. **Remi** is an AI assistant that reads RAF's state to explain and recommend, but never mutates financial truth.
 
 > **AI can explain financial state. It does not define financial truth.**
+
+---
+
+## Engineering Snapshot
+
+| **Architecture** | React + TypeScript · Node.js · PostgreSQL |
+|---|---|
+| **Security & Isolation** | RLS + dedicated non-bypass runtime role · workspace scoping · 3-layer tenant defense |
+| **Financial Domain** | Deterministic allocation · account reconciliation · debt payoff modeling · cash-flow forecasting · month lifecycle |
+| **Testing & Certification** | Unit · integration · PostgreSQL-specific · RLS security · adversarial financial integrity · production certification |
+| **Operations** | Structured logging · Sentry monitoring · database readiness checks · migration auditing · sensitive-data scrubbing |
 
 ---
 
@@ -16,7 +25,7 @@ _Screenshots coming soon._
 
 ---
 
-## What Nomi Does
+## Core Capabilities
 
 - **Income allocation** — Distribute income intentionally before it is spent
 - **Financial accounts** — Account-backed state, balance tracking, and reconciliation
@@ -25,12 +34,12 @@ _Screenshots coming soon._
 - **Debt** — Track obligations, payment pace, and balance trajectory
 - **Cash-flow forecasting** — Deterministic 30/60/90-day projections
 - **Monthly lifecycle** — Review, close, and preserve monthly financial snapshots
-- **Household collaboration** — Multi-user workspaces, roles, invitations, and activity
-- **AI-assisted insights** — Remi explains financial state without becoming its source of truth
+- **Household collaboration** — Multi-user workspaces, roles, invitations, and activity audit
+- **AI-assisted insights** — Remi explains financial state and surfaces patterns without becoming its source of truth
 
 ---
 
-## How It Works
+## Architecture Overview
 
 ```
 React / TypeScript
@@ -38,19 +47,20 @@ React / TypeScript
         ▼
    RAF API (Node.js)
         │
-   ┌────┴────┐
-   ▼         ▼
-PostgreSQL   Remi
-+ RLS        AI layer
+   ┌────┴────────┐
+   ▼             ▼
+PostgreSQL      Remi
++ RLS           AI layer
++ Triggers      (read-only)
    │
    ▼
 Deterministic
 financial state
 ```
 
-**RAF** owns financial authority: allocation calculations, account balances, goal and debt attribution, forecasts, and monthly close state. The database is the single source of truth.
+**RAF** is the authoritative financial engine: allocation calculations, account balances, goal and debt attribution, forecasts, and monthly close state persist in PostgreSQL and are computed deterministically. The database is the single source of truth.
 
-**Remi** reads from that authoritative state to answer questions, explain changes, and surface insights. It never writes financial state directly.
+**Remi** reads pre-computed domain outputs (account summaries, debt snapshots, forecast projections) to answer questions, explain changes, and surface insights. Remi never writes financial state or re-derives financial truth.
 
 ---
 
