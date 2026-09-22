@@ -13,7 +13,7 @@ import { createFixedWindowRateLimiter } from './lib/server/rateLimit.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const { port, dbPath, persistenceDriver, postgresConnectionString, authRequired, sentryDsn, allowedOrigins } = loadServerEnv({ cwd: __dirname });
+const { port, dbPath, persistenceDriver, postgresConnectionString, postgresSsl, authRequired, sentryDsn, allowedOrigins } = loadServerEnv({ cwd: __dirname });
 
 initSentry(sentryDsn);
 
@@ -21,7 +21,7 @@ if (persistenceDriver === 'postgres') {
   await checkRuntimeRolePrivileges({ postgresConnectionString, authRequired });
 }
 
-const db = createServerDb({ persistenceDriver, dbPath, postgresConnectionString });
+const db = createServerDb({ persistenceDriver, dbPath, postgresConnectionString, postgresSsl });
 
 console.log(`[RAF] persistence: ${persistenceDriver}`);
 const app = express();
