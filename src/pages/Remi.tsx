@@ -139,24 +139,14 @@ interface MessageItem {
   loading?: boolean;
 }
 
-function ChatBubble({ msg, onCopy }: { msg: MessageItem; onCopy?: (text: string) => void }) {
-  const [copied, setCopied] = useState(false);
-
+function ChatBubble({ msg }: { msg: MessageItem }) {
   if (msg.loading) return <TypingIndicator />;
 
   const isUser = msg.role === "user";
 
-  function handleCopy() {
-    if (!msg.content) return;
-    void navigator.clipboard.writeText(msg.content).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  }
-
   if (isUser) {
     return (
-      <div className="group flex justify-end">
+      <div className="flex justify-end">
         <div
           className="max-w-[82%] rounded-[1.25rem] rounded-br-[0.35rem] px-4 py-3 text-[14px] leading-[1.65]"
           style={{ background: "var(--theme-primary)", color: "#fff" }}
@@ -170,39 +160,12 @@ function ChatBubble({ msg, onCopy }: { msg: MessageItem; onCopy?: (text: string)
   }
 
   return (
-    <div className="group flex items-end gap-2.5">
-      <RemiAvatar />
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div
-          className="max-w-[86%] rounded-[1.25rem] rounded-bl-[0.35rem] px-4 py-3"
-          style={{ background: "var(--surface-muted)" }}
-        >
-          <RemiMarkdown content={msg.content} />
-        </div>
-        <div className="flex items-center gap-2 pl-1 opacity-0 transition-opacity group-hover:opacity-100">
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-[var(--text-subtle)] transition hover:text-[var(--text-secondary)]"
-          >
-            {copied ? (
-              <>
-                <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <path d="M2 8l4 4 8-8" />
-                </svg>
-                Copied
-              </>
-            ) : (
-              <>
-                <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                  <rect x="4" y="4" width="9" height="9" rx="1.5" />
-                  <path d="M4 4V3a1 1 0 011-1h7a1 1 0 011 1v7a1 1 0 01-1 1h-1" />
-                </svg>
-                Copy
-              </>
-            )}
-          </button>
-        </div>
+    <div className="flex items-start">
+      <div
+        className="max-w-[86%] rounded-[1.25rem] px-4 py-3"
+        style={{ background: "var(--surface-elevated, #f3f4f6)" }}
+      >
+        <RemiMarkdown content={msg.content} />
       </div>
     </div>
   );
@@ -217,39 +180,26 @@ const STARTER_PROMPTS = [
   "Which goal is closest?",
 ];
 
-function StarterPrompts({ onSelect }: { onSelect: (p: string) => void }) {
-  return (
-    <div className="flex flex-col gap-3">
-      {STARTER_PROMPTS.map((p) => (
-        <button
-          key={p}
-          type="button"
-          onClick={() => onSelect(p)}
-          className="w-full rounded-lg bg-[var(--theme-primary)] px-4 py-2.5 text-left text-sm font-medium text-white transition hover:opacity-90"
-        >
-          {p}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 function SuggestedQuestions({ onSelect }: { onSelect: (p: string) => void }) {
   return (
-    <aside className="hidden w-64 shrink-0 space-y-4 lg:block">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-widest text-[var(--text-muted)]">Try asking</p>
-        <p className="mt-1 text-xs text-[var(--text-muted)]">Prototype responses use your local demo state.</p>
+    <aside className="hidden w-60 shrink-0 lg:block">
+      <div className="mb-3">
+        <p className="text-[12px] font-[800] text-[var(--text-strong)]">Try asking</p>
+        <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">Prototype responses use your local demo state.</p>
       </div>
-      <div className="space-y-2">
-        {STARTER_PROMPTS.map((p) => (
+      <div className="rounded-[12px] border border-[var(--border-color)] overflow-hidden">
+        {STARTER_PROMPTS.map((p, i) => (
           <button
             key={p}
             type="button"
             onClick={() => onSelect(p)}
-            className="block w-full text-left text-sm font-medium text-[var(--text-strong)] transition hover:text-[var(--theme-primary)]"
+            className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-[var(--surface-elevated)] ${
+              i > 0 ? "border-t border-[var(--border-color)]" : ""
+            }`}
           >
-            {p}
+            <span className="text-[12px] font-[600] text-[var(--text-primary)]">{p}</span>
+            <span className="shrink-0 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-[var(--border-color)] text-[10px] font-[700] text-[var(--text-subtle)]">+</span>
           </button>
         ))}
       </div>
@@ -326,49 +276,6 @@ function ConversationSidebar({
   );
 }
 
-// ─── Auto-resizing textarea ───────────────────────────────────────────────────
-
-function AutoTextarea({
-  value,
-  onChange,
-  onSubmit,
-  disabled,
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  onSubmit: () => void;
-  disabled: boolean;
-  placeholder: string;
-}) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
-  }, [value]);
-
-  return (
-    <textarea
-      ref={ref}
-      rows={1}
-      value={value}
-      placeholder={placeholder}
-      disabled={disabled}
-      onChange={(e) => onChange(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          onSubmit();
-        }
-      }}
-      className="ui-field flex-1 resize-none overflow-hidden text-[14px] leading-relaxed"
-      style={{ minHeight: "44px", maxHeight: "128px" }}
-    />
-  );
-}
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -384,7 +291,7 @@ export function Remi() {
       id: uid(),
       role: "assistant",
       content:
-        "Hi, I'm Remi — RAF's financial intelligence layer.\n\nI can check your actual plan data, model scenarios, explain variances, and help you think through decisions. Pick a question below or ask me anything.",
+        "Hi — I can help you understand your RAF plan, cash flow, goals, and recent activity.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -396,7 +303,6 @@ export function Remi() {
   const [showSidebar, setShowSidebar] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
-  const hasUserMessage = messages.some((m) => m.role === "user");
 
   // Scroll to bottom on new message
   useEffect(() => {
@@ -446,7 +352,7 @@ export function Remi() {
         id: uid(),
         role: "assistant",
         content:
-          "Hi, I'm Remi — RAF's financial intelligence layer.\n\nI can check your actual plan data, model scenarios, explain variances, and help you think through decisions. Pick a question below or ask me anything.",
+          "Hi — I can help you understand your RAF plan, cash flow, goals, and recent activity.",
       },
     ]);
     setInput("");
@@ -519,11 +425,6 @@ export function Remi() {
               <ChatBubble key={m.id} msg={m} />
             ))}
 
-            {/* Starter prompts — only when no user messages yet */}
-            {!hasUserMessage && (
-              <StarterPrompts onSelect={(p) => void send(p)} />
-            )}
-
             <div ref={bottomRef} />
           </div>
 
@@ -531,37 +432,25 @@ export function Remi() {
           <div className="border-t border-[var(--border-subtle)] px-3 py-3 sm:px-4 sm:py-3.5">
             <form
               onSubmit={(e) => { e.preventDefault(); void send(input); }}
-              className="flex items-end gap-2.5"
+              className="flex items-center gap-2.5"
             >
-              <AutoTextarea
+              <input
+                type="text"
                 value={input}
-                onChange={setInput}
-                onSubmit={() => void send(input)}
+                onChange={(e) => setInput(e.target.value)}
                 disabled={sending}
-                placeholder={sending ? "Remi is thinking…" : "Ask Remi anything…"}
+                placeholder={sending ? "Remi is thinking…" : "Ask Remi about your RAF…"}
+                className="ui-field flex-1 text-[14px]"
               />
               <button
                 type="submit"
                 disabled={sending || !input.trim()}
-                aria-label="Send"
-                className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full transition disabled:opacity-35"
+                className="shrink-0 rounded-[8px] px-5 py-2.5 text-[13px] font-[700] transition disabled:opacity-35"
                 style={{ background: "var(--theme-primary)", color: "#fff" }}
               >
-                {sending ? (
-                  <svg viewBox="0 0 24 24" className="h-4 w-4 animate-spin" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                    <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" opacity=".25" />
-                    <path d="M21 12a9 9 0 00-9-9" />
-                  </svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 2 11 13M22 2 15 22l-4-9-9-4 20-7Z" />
-                  </svg>
-                )}
+                {sending ? "Sending…" : "Send"}
               </button>
             </form>
-            <p className="mt-2 text-center text-[11px] text-[var(--text-subtle)]">
-              Shift+Enter for new line · Enter to send
-            </p>
           </div>
         </div>
 
