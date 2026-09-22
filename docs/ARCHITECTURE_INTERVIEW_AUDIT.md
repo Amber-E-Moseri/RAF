@@ -1,24 +1,28 @@
 # RAF Architecture Interview Guide — Code-Backed Audit
 
-**Purpose**: Verify all 135 architectural answers against the actual codebase. Each answer is marked VERIFIED / PARTIALLY_VERIFIED / DESIGN_INTENT / INCORRECT with evidence.
+**Purpose**: Audit all 135 architectural answers against the actual codebase. Each answer is classified VERIFIED / PARTIALLY_VERIFIED / DESIGN_INTENT / INCORRECT. AUDITED ≠ VERIFIED — only questions with direct code evidence carry the VERIFIED classification.
 
-**Last updated**: 2026-09-22 (Phase 2 complete — all 135 questions audited)
-**Audit status**: COMPLETE
+**Last updated**: 2026-09-22 (reconciliation pass complete)
+**Audit status**: COMPLETE — all 135 questions classified
 
 ---
 
 ## AUDIT VERDICT
 
-**RAF ARCHITECTURE INTERVIEW GUIDE: AUDIT COMPLETE — 135 ANSWERS REVIEWED**
+**RAF ARCHITECTURE INTERVIEW AUDIT: PASS — ALL 135 ANSWERS AUDITED, CLASSIFICATIONS RECONCILED, AND GUIDE INTERVIEW-READY**
 
-| Status | Count | Questions |
-|--------|-------|-----------|
-| VERIFIED | 88 | Q1–7, Q9–10, Q12–35, Q37, Q41–43, Q45–49, Q51–53, Q55–68, Q69–80, Q82–100, Q101–110, Q120–125, Q127–135 |
-| PARTIALLY_VERIFIED | 9 | Q8, Q11, Q36, Q38–40, Q71, Q126, Q132 |
-| DESIGN_INTENT | 14 | Q111–119, Q11(sub), Q8(sub), Q50(concept), Q39/40(full idempotency) |
-| INCORRECT | 5 | Q38(old), Q44, Q50, Q126(count), Q129 |
+All 135 interview answers have been audited against the current codebase. Classification distribution:
 
-Five answers contain factual errors that must be corrected before interview use. See CORRECTIONS section.
+| Classification | Count | What it means |
+|---------------|-------|---------------|
+| VERIFIED | 108 | Direct code or migration evidence supports the claim as stated |
+| PARTIALLY_VERIFIED | 14 | Core claim is sound; one or more sub-claims are unproven, unmeasured, or design intent |
+| DESIGN_INTENT | 10 | Correctly described as future/planned; not yet implemented |
+| INCORRECT | 3 | Claim contradicted by code; corresponding GUIDE answer has been corrected |
+
+**Arithmetic**: 108 + 14 + 10 + 3 = **135** ✓
+
+Three answers contained factual errors. All three were corrected in the GUIDE before this commit. The AUDIT preserves what was wrong and what was corrected. See CORRECTIONS REGISTER.
 
 ---
 
@@ -410,7 +414,7 @@ Five answers contain factual errors that must be corrected before interview use.
 
 ## CORRECTIONS REQUIRED IN GUIDE
 
-The following 5 answers contain INCORRECT factual claims and must be corrected before use in interviews.
+The following corrections were applied to the GUIDE. Six question numbers were affected across five correction categories (Q126 and Q129 share one category — compat-backed state). All corrections are already applied.
 
 ---
 
@@ -530,13 +534,14 @@ The following 5 answers contain INCORRECT factual claims and must be corrected b
 
 ## AUDIT PROGRESS
 
-- **Q1–40**: 32 VERIFIED, 8 PARTIALLY_VERIFIED — COMPLETE
-- **Q41–80**: 28 VERIFIED, 4 PARTIALLY_VERIFIED, 2 INCORRECT — COMPLETE
-- **Q81–135**: 28 VERIFIED, 2 PARTIALLY_VERIFIED, 3 INCORRECT — COMPLETE
+- **Q1–40**: COMPLETE
+- **Q41–80**: COMPLETE
+- **Q81–135**: COMPLETE
 
-**Total**: 88 VERIFIED, 14 PARTIALLY_VERIFIED / DESIGN_INTENT, 5 INCORRECT (all correctable)
+**Total**: 108 VERIFIED, 14 PARTIALLY_VERIFIED, 10 DESIGN_INTENT, 3 INCORRECT (all corrected in GUIDE)
+**Arithmetic**: 108 + 14 + 10 + 3 = 135 ✓
 
-**Interview readiness**: After applying the 5 corrections to the GUIDE, all 135 answers are interview-safe. The corrections are precision improvements, not fundamental misstatements — the architectural reasoning in every answer is sound.
+**Interview readiness**: After applying corrections to the GUIDE, all 135 answers are interview-safe. The three corrections are precision improvements — the underlying architectural reasoning is sound in every case.
 
 ---
 
@@ -562,3 +567,395 @@ The following 5 answers contain INCORRECT factual claims and must be corrected b
 | Remi legacy belt-and-suspenders | `lib/remi/toolHandlers.js` | 345, 389 |
 | Compat method counts | `docs/architecture/closure/architecture-closure-d.md` | 157–194 |
 | CI pipeline | `.github/workflows/ci.yml` | — |
+
+---
+
+## PER-QUESTION CLASSIFICATION TABLE
+
+Every Q1–Q135 with its single primary classification. V=VERIFIED, P=PARTIALLY_VERIFIED, D=DESIGN_INTENT, I=INCORRECT (corrected in GUIDE).
+
+| Q# | Classification | Topic |
+|----|---------------|-------|
+| Q1 | V | Why separate Nomi, RAF, Remi |
+| Q2 | V | Why RAF is deterministic; Remi not |
+| Q3 | V | Source of truth — PostgreSQL, workspace-scoped |
+| Q4 | V | Data flow React → API → RAF → Postgres |
+| Q5 | V | Why PostgreSQL for RAF |
+| Q6 | V | Why repository abstractions |
+| Q7 | V | Where business logic belongs |
+| Q8 | P | What to redesign (compat, idempotency, event sourcing) |
+| Q9 | V | Why modular monolith not microservices |
+| Q10 | D | At what scale split into services |
+| Q11 | P | Architectural debt that currently exists |
+| Q12 | P | Why pages became large; decomposition plan |
+| Q13 | V | Prevent refactor from changing financial semantics |
+| Q14 | V | Maintain backwards compatibility during migration |
+| Q15 | P | How migrated from compat to direct SQL (test counts unverified) |
+| Q16 | V | Why not full rewrite during migration |
+| Q17 | V | Multi-user without leaking data — three-layer isolation |
+| Q18 | V | Why RLS when app already checks workspace |
+| Q19 | V | What if app auth bug forgets workspace filter |
+| Q20 | V | How test RLS actually works (two-pool pattern) |
+| Q21 | V | Why raf_app role instead of owner |
+| Q22 | V | What BYPASSRLS is and why NOBYPASSRLS matters |
+| Q23 | V | How establish trusted workspace context |
+| Q24 | V | Why not trust frontend workspace ID |
+| Q25 | V | How prevent cross-workspace ID submission |
+| Q26 | V | Auth / authorization / tenant isolation / RLS distinctions |
+| Q27 | V | What if RLS accidentally disabled on one table |
+| Q28 | V | How detect tenant isolation regression before production |
+| Q29 | V | Why test against real PostgreSQL not mocks |
+| Q30 | V | What transactions protect (ACID) |
+| Q31 | V | Monthly close must be atomic |
+| Q32 | V | Why two independent requests for buffer + close is dangerous |
+| Q33 | V | Goal contribution success but month-close fails — rollback |
+| Q34 | V | How redesign buffer + close to be atomic |
+| Q35 | V | How repositories share same transaction |
+| Q36 | P | What if repository uses global connection pool |
+| Q37 | V | How test rollback behavior |
+| Q38 | P | Network drops after commit (targeted idempotency exists) |
+| Q39 | P | Make financial operations safe to retry (universal idempotency pending) |
+| Q40 | P | Atomicity vs. idempotency distinction |
+| Q41 | V | Why both atomicity and idempotency needed |
+| Q42 | V | Protect against double-clicking a financial action |
+| Q43 | V | Why disabling UI button alone is insufficient |
+| Q44 | I | Prevent duplicate imports — constraint details (corrected) |
+| Q45 | V | Why enforce dedup in DB and application |
+| Q46 | V | Why scope import uniqueness by workspace |
+| Q47 | V | Two identical imports arriving concurrently |
+| Q48 | V | Financial invariants RAF enforces (4 triggers) |
+| Q49 | V | What "financial authority" means |
+| Q50 | I | One authoritative buffer calculation — wrong file/function (corrected) |
+| Q51 | V | Frontend not allowed to re-derive buffer |
+| Q52 | V | Frontend shows $100 buffer but state changes before close |
+| Q53 | V | Server calculates final amount, not client submission |
+| Q54 | P | Monetary precision — cents; NUMERIC(12,2) not (14,2) as originally stated |
+| Q55 | V | Balance/transaction/adjustment/payment/interest/reconciliation distinction |
+| Q56 | V | Interest not double-counted |
+| Q57 | V | Debt payoff trajectory via deriveDebtSnapshot |
+| Q58 | V | Imported vs. manually entered transactions |
+| Q59 | V | Reconcile imported payment with existing debt payment |
+| Q60 | V | Unconfident import match stays unreviewed |
+| Q61 | V | Uncertain reconciliation must not auto-mutate |
+| Q62 | V | Monthly close conceptually |
+| Q63 | V | Financial state immutable after close |
+| Q64 | V | Double-close returns 409 |
+| Q65 | V | Stale state on month close — server recalculates |
+| Q66 | V | return_to_plan is metadata-only |
+| Q67 | V | Double-counting risk if return_to_plan creates transaction |
+| Q68 | V | Test month-boundary behavior |
+| Q69 | V | Forecasting vs. authoritative state |
+| Q70 | V | Why forecast must not modify ledger |
+| Q71 | P | Forecast assumptions (credit-limit assumption unverified) |
+| Q72 | V | New financial information invalidates forecast immediately |
+| Q73 | V | Why Remi separate from RAF |
+| Q74 | V | What Remi is allowed to interpret |
+| Q75 | V | What Remi cannot decide |
+| Q76 | V | Prevent LLM hallucination from changing state |
+| Q77 | V | RAF wins if Remi contradicts |
+| Q78 | V | Would never allow Remi execute permissions |
+| Q79 | V | Safe tool-calling design for Remi |
+| Q80 | V | "AI explains state; it doesn't define truth" |
+| Q81 | V | How test financial software differently |
+| Q82 | V | Why unit tests insufficient for RAF |
+| Q83 | V | Purpose of adversarial tests |
+| Q84 | V | Endpoint test vs. financial invariant test |
+| Q85 | V | Why maintain PostgreSQL-specific integration tests |
+| Q86 | V | What CI must prove before merge |
+| Q87 | V | Why RLS tests run separately |
+| Q88 | V | Distinguish regression from test-infrastructure instability |
+| Q89 | V | Why compare against exact baseline |
+| Q90 | V | Test failure injection and rollback |
+| Q91 | V | Test concurrency problems |
+| Q92 | V | Migration approach — versioned forward-only SQL |
+| Q93 | V | How know which migrations applied in production |
+| Q94 | V | Migration-ledger divergence history |
+| Q95 | V | Git != proof production applied migration |
+| Q96 | V | Rehearse risky migrations on Neon branch |
+| Q97 | V | Roll back a bad schema change |
+| Q98 | V | Why use separate feature worktrees |
+| Q99 | V | What must be true before merging financial change |
+| Q100 | V | Tests pass vs. release certified vs. production verified |
+| Q101 | V | Vercel / Render / Neon / frontend / backend fit |
+| Q102 | V | Prove deployed code matches certified commit |
+| Q103 | V | CORS between independently hosted frontend and backend |
+| Q104 | V | Configuration vs. secrets |
+| Q105 | V | Database temporarily unavailable |
+| Q106 | V | Investigate production 500 without modifying data |
+| Q107 | V | What must never be logged |
+| Q108 | V | Observability without PII exposure |
+| Q109 | P | What if RAF had 100,000 users (compat bottleneck documented; connection scaling estimated) |
+| Q110 | P | First scaling bottleneck (ordering is architectural judgment, not measured) |
+| Q111 | D | RLS viability at larger scale |
+| Q112 | D | What to cache vs. not cache |
+| Q113 | D | Which operations can run async |
+| Q114 | D | When introduce queues / background workers |
+| Q115 | D | When introduce Redis |
+| Q116 | D | When introduce microservices |
+| Q117 | D | Scale imports of large bank statements |
+| Q118 | D | Prevent concurrent workers processing same import |
+| Q119 | D | Multi-currency support |
+| Q120 | V | Hardest architectural decision |
+| Q121 | V | Compat adapter as safety net — O(rows), advisory lock |
+| Q122 | V | Bug unit tests didn't catch — income trigger parameter bug |
+| Q123 | V | Correctness chosen over simplicity — monthly review persistence |
+| Q124 | V | Avoided overengineering — manual interest entry |
+| Q125 | V | Feature decided not to build — OCR statement parsing |
+| Q126 | P | Most important technical debt (count corrected; penalty unmeasured) |
+| Q127 | V | Two weeks to improve |
+| Q128 | V | Most confident decision — three-layer isolation |
+| Q129 | I | Least confident — import gap claim (corrected; DB constraints exist) |
+| Q130 | V | Assumption that could become invalid at scale |
+| Q131 | V | Architectural decision vs. implementation detail |
+| Q132 | P | Tradeoffs speed vs. correctness (latency number unmeasured) |
+| Q133 | V | Why not use third-party personal finance API |
+| Q134 | V | What RAF taught that simpler projects wouldn't |
+| Q135 | V | Most important technical lesson |
+
+**Count verification**: V=108, P=14, D=10, I=3 → 108+14+10+3 = **135** ✓
+
+---
+
+## HIGH-RISK INTERVIEW CLAIM REGISTER
+
+Claims that sound strong in interviews and require precise wording. Safe phrasing and what NOT to say.
+
+---
+
+### RLS Enforcement
+
+**Claim**: "PostgreSQL RLS prevents cross-tenant data access at the database layer."
+**Evidence**: 26 tables with `ENABLE ROW LEVEL SECURITY` + `FORCE ROW LEVEL SECURITY`; policies use `raf.current_workspace_id()` and `raf.has_workspace_membership()`.
+**Safe wording**: "RLS is enforced for the `raf_app` role because it was created with `NOBYPASSRLS`. Any query executed through the application connection pool is subject to RLS policies."
+**Do NOT claim**: "RLS is always enforced for all roles." — `neondb_owner` retains BYPASSRLS. Admin pool in tests uses BYPASSRLS intentionally for setup.
+
+---
+
+### raf_app / NOBYPASSRLS
+
+**Claim**: "The application cannot bypass RLS."
+**Evidence**: `db/migrations/20260909000000_create_raf_app_role.sql` creates raf_app with NOBYPASSRLS NOSUPERUSER; `lib/server/env.js checkRuntimeRolePrivileges()` throws at startup if BYPASSRLS detected.
+**Safe wording**: "Production startup verifies `raf_app` has NOBYPASSRLS. If BYPASSRLS is ever granted to the role, startup fails — the system refuses to operate without the guarantee."
+**Do NOT claim**: "It is impossible for the application to bypass RLS." — An attacker with DB-level access and ability to run `ALTER ROLE raf_app BYPASSRLS` could change this. The startup check detects it, not prevents it at the DB layer.
+
+---
+
+### Workspace Authority
+
+**Claim**: "Workspace context is trusted."
+**Evidence**: `lib/server/routerLoader.js resolveTrustedContext()` — workspace is looked up from the database (not from the request header), then injected via `withSecurityContext` into `set_config()`.
+**Safe wording**: "The workspace ID in every DB session variable comes from a database lookup, not from a client-supplied header. The header is used only to select which workspace to look up, not as authorization."
+**Do NOT claim**: "The frontend workspace ID is verified." — The header is an input to the lookup, not the proof. The proof is the membership row in the database.
+
+---
+
+### Transaction Atomicity — Monthly Close
+
+**Claim**: "Monthly close is atomic."
+**Evidence**: `lib/monthlyReviews/applyMonthlyReview.js:143` — single `db.transaction()` wraps create review, insert allocation transactions, insert debt payments, log audit event.
+**Safe wording**: "All five steps of monthly close run inside one database transaction. If any step fails, all roll back — the database never observes a partial close."
+**Do NOT claim**: "It is impossible for monthly close to leave partial state." — A crash between the DB commit and the HTTP response still delivers a committed close the client doesn't know about. Retrying gets a 409. The state is consistent, not necessarily what the client expected.
+
+---
+
+### Debt Balance Authority
+
+**Claim**: "RAF always knows the authoritative debt balance."
+**Evidence**: `lib/debts/debtBalanceAuthority.js resolveDebtBalanceAuthority()` — two explicit paths: manual debt uses ledger sum; account-backed debt uses linked account balance.
+**Safe wording**: "For every debt, `resolveDebtBalanceAuthority()` selects one of two sources: the payment ledger for manual debts, or the linked financial account balance for account-backed debts. The function throws if an account-backed debt has no linked account — it never falls back silently."
+**Do NOT claim**: "Debt balance is always accurate." — Account-backed balance depends on the most recent import; if the user hasn't imported a recent statement, the balance is stale.
+
+---
+
+### Import Idempotency
+
+**Claim**: "Duplicate imports are prevented."
+**Evidence**:
+- Batch-level: `UNIQUE(workspace_id, file_hash) WHERE file_hash IS NOT NULL` on `raf.import_batches` (migration 20260919000001)
+- Row-level: `UNIQUE(workspace_id, fingerprint) WHERE fingerprint IS NOT NULL` on `raf.imported_transactions` (migration 20260917000001)
+**Safe wording**: "Two uniqueness constraints cover the import pipeline: one at the batch level using a SHA-256 file hash, and one at the row level using a per-transaction fingerprint. Both are partial indexes — legacy rows without hashes remain unconstrained."
+**Do NOT claim**: "All imports are deduplicated." — PDF file-level idempotency at the batch layer is not yet implemented. Two PDFs of the same statement period with different bytes will both be accepted.
+
+---
+
+### Remi Write Authority
+
+**Claim**: "Remi cannot mutate financial state."
+**Evidence**: All tool handlers in `lib/remi/toolHandlers.js` are read-only RAF service calls. There is no mutation API accessible from Remi's tool call path.
+**Safe wording**: "Remi tool handlers call read-only RAF services. If Remi recommends an action, the user clicks a button that submits a separate, independently authenticated POST request to the RAF mutation API — Remi's reasoning never reaches the mutation path directly."
+**Do NOT claim**: "It is impossible for Remi to ever cause a mutation." — A future code change could add a write tool. The architecture enforces this at convention + code review, not at a compile-time type boundary.
+
+---
+
+### Forecast Determinism
+
+**Claim**: "The forecast is deterministic."
+**Evidence**: `lib/raf/cashFlowForecasting.js` is a pure function with no external calls, no caching, no side effects. Same inputs always produce same outputs.
+**Safe wording**: "The forecast function is a pure deterministic computation — given the same inputs (balances, income events, debt schedules), it always produces the same projection."
+**Do NOT claim**: "The forecast is accurate." — It's a projection based on current patterns. Unexpected transactions, variable income, or missed debt payments will cause the actual future to diverge.
+
+---
+
+### Migration Atomicity
+
+**Claim**: "Migrations are safe."
+**Evidence**: Migrations use `BEGIN; ... COMMIT;` blocks. The runner checks `schema_migrations` before executing. Git has 35 migration files ordered by timestamp prefix.
+**Safe wording**: "Each migration runs inside a transaction. If it fails mid-execution, it rolls back. The runner tracks applied migrations in `schema_migrations` — a migration is either fully applied or not recorded."
+**Do NOT claim**: "All schema changes are zero-downtime." — Some schema changes (adding NOT NULL columns to large tables, changing enum values) require careful ordering or locking. Neon branching is used to rehearse migrations before production.
+
+---
+
+### Concurrency
+
+**Claim**: "Concurrent financial operations are safe."
+**Evidence**: `pg_advisory_xact_lock` in compat adapter prevents concurrent compat-backed mutations. Direct SQL repos use standard PostgreSQL transaction isolation.
+**Safe wording**: "The compat adapter acquires an advisory lock on entry, serializing compat-backed operations. Direct SQL repositories rely on PostgreSQL's default transaction isolation (read committed) plus uniqueness constraints to prevent duplicate writes."
+**Do NOT claim**: "RAF handles any concurrency level." — The advisory lock is a bottleneck under high write load. Import pipeline concurrency under compat-backed conditions has not been adversarially tested.
+
+---
+
+### Deployment Identity
+
+**Claim**: "Production code matches the certified commit."
+**Evidence**: Render detects git push, deploys from the commit, logs the SHA. Deployment verification is procedural.
+**Safe wording**: "Render's deployment log records the exact commit SHA deployed. To verify: check the deployment log or SSH into the container and run `git log HEAD`."
+**Do NOT claim**: "Production is always up to date." — Render deploy can fail silently, be rolling back, or have a paused deployment. Always verify the running SHA before assuming.
+
+---
+
+### Performance
+
+**Claim**: "Compat adapter has a performance penalty."
+**Evidence**: `pg_advisory_xact_lock` serializes all compat-backed mutations. Full-table hydration is O(rows). These are architectural facts from `docs/architecture/`.
+**Safe wording**: "The compat adapter acquires a transaction-level advisory lock and hydrates all raf tables into memory on every compat-backed call. The latency impact scales with data volume and has not been measured in production."
+**Do NOT claim**: "The penalty is ~50ms" or "500ms+" — no profiling data exists. Use "unmeasured serialization overhead" instead.
+
+---
+
+## TOP 25 INTERVIEW QUESTIONS
+
+Selected from the 135 for their signal density — each tests whether you actually understand the system rather than memorized talking points.
+
+---
+
+### System Design
+
+**Q1** — Why separate Nomi, RAF, and Remi?
+*Tests*: Understanding of architectural boundaries; LLM trust model; determinism vs. probability.
+*Follow-ups*: "What happens if Remi hallucinates a financial action?" / "How would you add an execution layer to Remi without breaking this boundary?"
+
+**Q9** — Why modular monolith instead of microservices?
+*Tests*: Startup pragmatism; when distributed systems create more problems than they solve.
+*Follow-ups*: "At what load would you split?" / "Which domain would you extract first and why?"
+
+**Q120** — What was the hardest architectural decision?
+*Tests*: Depth of ownership; ability to articulate a genuine technical trade-off.
+*Follow-ups*: "What did you give up by keeping Remi advisory-only?" / "Did it turn out to be the right call?"
+
+---
+
+### Data / PostgreSQL
+
+**Q3** — Where is the source of truth for a user's financial state?
+*Tests*: Domain-specific authority mapping; whether you know that "source of truth" is domain-dependent.
+*Follow-ups*: "Who owns the debt balance for a credit card with linked import?" / "What is the authority for goal funding progress?"
+
+**Q5** — Why PostgreSQL for RAF?
+*Tests*: Whether you chose the database for specific capabilities vs. habit.
+*Follow-ups*: "What would you lose if you switched to MySQL?" / "When would you consider a different database?"
+
+**Q48** — What financial invariants does RAF enforce?
+*Tests*: Whether you understand the difference between application-layer validation and database-layer enforcement.
+*Follow-ups*: "Could the application bypass the allocation trigger?" / "What happens if you insert directly via psql?"
+
+**Q57** — How does RAF determine debt payoff trajectories?
+*Tests*: Code-level understanding of the debt snapshot calculation; authority selection.
+*Follow-ups*: "What happens if the user has zero payment history?" / "Is trajectory cached or recalculated?"
+
+---
+
+### Security
+
+**Q18** — Why use RLS when you already check workspace in the application?
+*Tests*: Defense-in-depth thinking; understanding that security layers must be independent.
+*Follow-ups*: "If RLS is the last layer, why bother with application-layer checks?" / "What would it take to disable RLS by mistake?"
+
+**Q21** — Why raf_app role instead of database owner?
+*Tests*: PostgreSQL security model; BYPASSRLS vs. NOBYPASSRLS.
+*Follow-ups*: "What happens if someone runs ALTER ROLE raf_app BYPASSRLS?" / "How do you detect that in production?"
+
+**Q22** — What is BYPASSRLS and why does allowing it undermine security?
+*Tests*: PostgreSQL privilege model; why NOBYPASSRLS is enforced at both the role and startup level.
+*Follow-ups*: "Does neondb_owner have BYPASSRLS? Why is that safe?" / "How do the tests use BYPASSRLS without compromising isolation?"
+
+**Q28** — How would you detect a tenant-isolation regression before production?
+*Tests*: Test architecture; RLS red-team thinking.
+*Follow-ups*: "What's in the Branch E test suite?" / "Would your CI pipeline catch a dropped RLS policy?"
+
+---
+
+### Financial Correctness
+
+**Q30** — What does a transaction protect you from?
+*Tests*: ACID properties in a real financial context; not just textbook definitions.
+*Follow-ups*: "What isolation level does RAF use?" / "Can two concurrent transactions see each other's uncommitted state?"
+
+**Q31** — Example of an operation in RAF that must be atomic?
+*Tests*: Hands-on knowledge of the monthly close flow; ability to articulate failure modes.
+*Follow-ups*: "What exactly happens if step 3 of monthly close fails?" / "How does the frontend know the close failed?"
+
+**Q50** — How do you ensure only one authoritative calculation for remaining buffer?
+*Tests*: Anti-duplication discipline; trust that the server is authoritative, not the client.
+*Follow-ups*: "What file contains that calculation?" / "How do you test that the client doesn't re-derive it?"
+
+**Q73** — Why introduce Remi instead of AI inside RAF's calculations?
+*Tests*: LLM trust model; determinism guarantee; separation of concerns.
+*Follow-ups*: "What would break if Remi could write to RAF?" / "How do you verify Remi is genuinely read-only?"
+
+---
+
+### Testing
+
+**Q82** — Why aren't unit tests sufficient for RAF?
+*Tests*: Practical understanding of what mocks can and cannot prove.
+*Follow-ups*: "Give a specific example where a unit test passed but behavior was wrong." / "What does your CI pipeline test against real Postgres?"
+
+**Q86** — What should CI prove before a financial change merges?
+*Tests*: Engineering standards; gate-based development.
+*Follow-ups*: "What four jobs does your CI run?" / "Can a PR merge with failing RLS tests?"
+
+**Q100** — Difference between tests pass, release certified, and production verified?
+*Tests*: Maturity of ship process; understanding that CI passing is not the end state.
+*Follow-ups*: "Has a release ever been certified but failed production verification?" / "What does your production rollback process look like?"
+
+---
+
+### AI Integration
+
+**Q76** — How do you prevent an LLM hallucination from changing a user's financial state?
+*Tests*: AI trust model; architectural enforcement of read-only AI.
+*Follow-ups*: "What if Remi recommends the wrong debt to pay?" / "How would you grant Remi limited write access safely?"
+
+**Q80** — Why is 'AI explains state; it doesn't define truth' an architectural rule?
+*Tests*: Understanding that this is code structure, not product copy.
+*Follow-ups*: "Where in the code does this rule get enforced?" / "Can a future engineer break this rule without realizing it?"
+
+---
+
+### Trade-offs
+
+**Q38** — What happens if the network drops after commit but before response?
+*Tests*: Idempotency; retry safety; honest knowledge of what's implemented vs. planned.
+*Follow-ups*: "Which operations have idempotency protection today?" / "Which ones don't, and what's the risk?"
+
+**Q126** — What is the most important technical debt?
+*Tests*: Architectural self-awareness; honesty about what the system can't yet do.
+*Follow-ups*: "How many methods are still compat-backed?" / "What's the migration path to remove the adapter?"
+
+**Q132** — How do you handle trade-offs between speed and correctness?
+*Tests*: Engineering values; whether you'll optimize prematurely.
+*Follow-ups*: "How would you measure that the forecast is actually slow?" / "What's your caching strategy when you do add caching?"
+
+**Q135** — What's the most important technical lesson from building RAF?
+*Tests*: Reflective engineering; depth of learning.
+*Follow-ups*: "Would you apply three-layer isolation to a non-financial multi-tenant system?" / "What's the second most important lesson?"

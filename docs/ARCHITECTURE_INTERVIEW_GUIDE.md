@@ -147,7 +147,7 @@ Owner role has BYPASSRLS privilege by default—it can read/write any row regard
 
 ### 22. What is BYPASSRLS, and why does allowing it undermine security?
 
-BYPASSRLS allows a role to ignore RLS policies. If the application role had it, a code bug or supply-chain attack could bypass tenant isolation by using raw SQL or forcing a policy-skipping path. NOBYPASSRLS means RLS is *always* enforced, with no escape hatch the application can use. This prevents accidentally hardcoded workarounds.
+BYPASSRLS allows a role to ignore RLS policies. If the application role had it, a code bug or supply-chain attack could bypass tenant isolation by using raw SQL or forcing a policy-skipping path. NOBYPASSRLS means RLS is enforced for the `raf_app` role on every query it executes — there is no application-level escape hatch. The `neondb_owner` role retains BYPASSRLS and is deliberately used only for schema setup and test fixtures, never for application data access. This prevents accidentally hardcoded workarounds.
 
 ### 23. How do you establish trusted workspace context for a request?
 
@@ -751,7 +751,7 @@ That users have <100 debts, <100 accounts, <10k transactions per month. If users
 
 ### 132. Tradeoffs between speed and correctness?
 
-Forecast calculation: correct version calculates on every read (slow, 500ms+). Fast version caches for 1 hour (stale, but fast). Chosen: correct now, optimize with caching later (after measuring production behavior). For financial software, correctness is non-negotiable; speed is an optimization on top.
+Forecast calculation: correct version calculates on every read (adds latency proportional to data volume — unmeasured in production). Fast version caches for 1 hour (stale, but fast). Chosen: correct now, optimize with caching later (after measuring production behavior). For financial software, correctness is non-negotiable; speed is an optimization on top.
 
 ### 133. Why not use a third-party personal finance API?
 
