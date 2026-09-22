@@ -114,6 +114,7 @@ async function seedWorkspaceWithBuffer(label) {
   let bufferCatId;
 
   await ownerDb.transaction(async (tx) => {
+    await tx.createUser({ id: ownerUserId, email: `${label.replace(/[^a-z0-9]/gi, '-')}@test.test`, passwordHash: 'test-hash' });
     workspace = await tx.createWorkspace({ ownerUserId, name: `Test ${label}` });
   });
 
