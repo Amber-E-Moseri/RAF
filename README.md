@@ -1,32 +1,71 @@
-# Nomi — Resource Allocation Framework
+# Nomi — Personal Finance, Intentionally Allocated
 
-A multi-tenant personal finance platform for intentional income allocation, financial planning, and stewardship.
+Nomi is a multi-tenant personal finance platform for intentional income allocation, planning, debt management, goals, reconciliation, and financial forecasting.
 
-Nomi is built around a simple idea: instead of only explaining where money went, help users decide where money should go — then maintain a trustworthy financial picture as income, spending, debt, goals, and accounts change.
+Most financial tools are designed to explain where money went. Nomi starts one step earlier: helping users decide where income should go, then maintaining a trustworthy financial picture as transactions, accounts, debts, goals, and plans change.
 
-At its core is a deterministic allocation engine that keeps financial authority separate from AI-generated guidance.
+Underneath Nomi is **RAF**, a deterministic financial engine responsible for allocation, financial state, forecasting, and monthly lifecycle behavior. **Remi**, Nomi's AI assistant, operates above that financial authority rather than replacing it.
 
-**AI can explain financial state. It does not define financial truth.**
+> **AI can explain financial state. It does not define financial truth.**
 
 ---
 
-## What Nomi Handles
+## Product Preview
 
-- **Income allocation** — Plan how incoming money should be distributed before it is spent
-- **Financial accounts** — Track account-backed financial state and reconciliation
+_Screenshots coming soon._
+
+---
+
+## What Nomi Does
+
+- **Income allocation** — Distribute income intentionally before it is spent
+- **Financial accounts** — Account-backed state, balance tracking, and reconciliation
 - **Transactions** — Import, categorize, review, and attribute financial activity
 - **Goals** — Connect real transactions to savings and financial goals
 - **Debt** — Track obligations, payment pace, and balance trajectory
 - **Cash-flow forecasting** — Deterministic 30/60/90-day projections
-- **Monthly lifecycle** — Review, close, and preserve immutable monthly financial snapshots
+- **Monthly lifecycle** — Review, close, and preserve monthly financial snapshots
 - **Household collaboration** — Multi-user workspaces, roles, invitations, and activity
-- **AI-assisted insights** — Explain financial state without allowing AI to become the financial source of truth
+- **AI-assisted insights** — Remi explains financial state without becoming its source of truth
+
+---
+
+## How It Works
+
+```
+React / TypeScript
+        │
+        ▼
+   RAF API (Node.js)
+        │
+   ┌────┴────┐
+   ▼         ▼
+PostgreSQL   Remi
++ RLS        AI layer
+   │
+   ▼
+Deterministic
+financial state
+```
+
+**RAF** owns financial authority: allocation calculations, account balances, goal and debt attribution, forecasts, and monthly close state. The database is the single source of truth.
+
+**Remi** reads from that authoritative state to answer questions, explain changes, and surface insights. It never writes financial state directly.
 
 ---
 
 ## Architecture
 
-Nomi is designed around financial correctness, tenant isolation, and explicit sources of truth.
+### Financial Authority
+
+- Deterministic Revenue Allocation Formula
+- Account and reconciliation infrastructure
+- Bank-statement import, review, and duplicate-detection workflows
+- Goal and debt transaction attribution
+- Obligation-aware debt payment tracking
+- Independent payment-pace and balance-trajectory modeling
+- Deterministic 30/60/90-day cash-flow forecasting
+- Persisted monthly close snapshots
 
 ### Multi-Tenant Security
 
@@ -36,110 +75,77 @@ Nomi is designed around financial correctness, tenant isolation, and explicit so
 - Workspace membership and role enforcement
 - Layered application + database authorization
 
-### Financial Domain
-
-- Deterministic Revenue Allocation Formula
-- Financial account and reconciliation infrastructure
-- Bank-statement imports with duplicate detection
-- Goal and debt transaction attribution
-- Obligation-aware debt payment tracking
-- Independent payment-pace and balance-trajectory modeling
-- Deterministic cash-flow forecasting
-- Immutable monthly review snapshots
-
 ### Reliability & Operations
 
 - Audit trails
 - Structured request logging
 - Database readiness checks
-- Production error monitoring
+- Production error monitoring (Sentry)
 - Sensitive-data scrubbing
 - Automated financial and tenant-isolation tests
 
 ---
 
-## Certification
+## Engineering Highlights
 
-**Status:** Phase 8 Full-Year Lifecycle Certification Complete ✅
-
-**Certification:** RAF (underlying framework) READY WITH DOCUMENTED LIMITATIONS
-
-**Test Results:** 1,569 passing · 0 failing · 26 skipped
-
-**Documentation:** [RAF_FINAL_CERTIFICATION.md](docs/testing/RAF_FINAL_CERTIFICATION.md)
-
-The certification suite exercises Nomi's core financial engine (RAF) across a full financial-year lifecycle rather than validating features only in isolation.
+- **Deterministic 30/60/90-day forecasting** — cash-flow projections built from allocated income, scheduled obligations, and goal commitments, not statistical inference
+- **PostgreSQL RLS tenant isolation** — every query executes under a trusted workspace context set server-side; no row is visible across tenant boundaries
+- **Month-close lifecycle** — a state machine governs review → close → snapshot; persisted snapshots protect historical financial state
+- **Transaction reconciliation** — import staging, duplicate detection, and manual review before transactions enter authoritative state
+- **Exactly-once protections** — idempotency guards on import and allocation mutations
+- **Financial lifecycle certification** — full-year lifecycle test suite exercises RAF across income, allocation, transactions, goals, debts, forecasts, and monthly close
 
 ---
 
 ## Tech Stack
 
-- **Frontend:** React · Vite · TypeScript
-- **Backend:** Node.js
-- **Database:** PostgreSQL · SQLite for supported local/test workflows
-- **Security:** PostgreSQL RLS · Least-privilege runtime roles
-- **Monitoring:** Sentry · Structured logging
-- **Testing:** Node test infrastructure + financial lifecycle and isolation suites
+| Layer | Technology |
+|---|---|
+| Frontend | React · Vite · TypeScript |
+| Backend | Node.js |
+| Database | PostgreSQL · SQLite (local/test workflows) |
+| Security | PostgreSQL RLS · Least-privilege runtime roles |
+| Monitoring | Sentry · Structured logging |
+| Testing | Node test infrastructure + financial lifecycle and isolation suites |
 
 ---
 
-## Prerequisites
+## Running Locally
+
+### Prerequisites
 
 - Node.js 20+
 - npm
 
----
-
-## Setup
-
-1. Install dependencies:
+### Setup
 
 ```bash
 npm install
-```
-
-2. Create a local environment file:
-
-```bash
 cp .env.example .env
 ```
 
-3. Configure required environment variables (documented in `.env.example`):
-
-For local SQLite-backed workflows:
+Configure required variables (documented in `.env.example`). For local SQLite-backed workflows:
 
 ```env
 RAF_DB_PATH=./path/to/raf.db
 PORT=3000
 ```
 
-`PORT` is optional and defaults to `3000`.
+`PORT` defaults to `3000`. The API validates all required configuration at startup and exits with a clear error if anything is missing.
 
-The API validates required environment configuration at startup and exits with a clear error when configuration is missing or invalid.
-
----
-
-## Run Locally
-
-**Frontend:**
+### Start
 
 ```bash
+# Frontend
 npm run dev
-```
 
-**Backend API:**
-
-```bash
+# Backend API
 npm run dev:api
 ```
 
 The API emits structured JSON request logs for route-level observability.
 
----
-
-## Seed Demo Data
-
-Populate a local database with demo household data:
+### Seed Demo Data
 
 ```bash
 npm run seed:demo
@@ -147,9 +153,7 @@ npm run seed:demo
 
 ---
 
-## Tests
-
-Run the complete test suite:
+## Testing & Certification
 
 ```bash
 npm test
@@ -164,51 +168,25 @@ node --test \
   tests/surplusAllocation.unit.test.js
 ```
 
-**Current certified baseline:**
+**Certification:** Full-year financial lifecycle certification completed — [RAF_FINAL_CERTIFICATION.md](docs/testing/RAF_FINAL_CERTIFICATION.md)
 
-```text
-1,569 passing
-0 failing
-26 skipped
-```
+**Release validation gates:** PostgreSQL, RLS, tenant-isolation, financial lifecycle, typecheck, build, and hosted CI.
 
 ---
 
-## Design Philosophy
-
-Nomi follows a few core principles:
+## Design Principles
 
 **Financial truth should be deterministic.**
 Core financial state comes from explicit domain rules, not probabilistic AI output.
 
 **Security should exist below the UI.**
-Tenant isolation is enforced through trusted server context and PostgreSQL policies rather than relying only on frontend filtering.
+Tenant isolation is enforced through trusted server context and PostgreSQL policies — not frontend filtering.
 
 **Explainability matters.**
 A financial system should be able to explain why balances, forecasts, debt trajectories, and allocations changed.
 
 **Architecture should follow the financial model.**
-The goal isn't to accumulate features. It's to maintain a coherent and trustworthy representation of a household's financial state.
-
----
-
-## Current Direction
-
-Nomi continues to deepen around:
-
-- Financial lifecycle correctness
-- Forecast explainability
-- Debt and goal intelligence
-- Reconciliation
-- Multi-user household collaboration
-- Financial-health modeling
-- AI-assisted interpretation over deterministic financial state
-
----
-
-## Repository
-
-[github.com/Amber-E-Moseri/raf_app](https://github.com/Amber-E-Moseri/raf_app)
+The goal is a coherent and trustworthy representation of a household's financial state, not a growing list of features.
 
 ---
 
@@ -217,4 +195,8 @@ Nomi continues to deepen around:
 - [SPECIFICATION.md](SPECIFICATION.md) — Product specification and feature matrix
 - [RAF_FINAL_CERTIFICATION.md](docs/testing/RAF_FINAL_CERTIFICATION.md) — Phase 8 certification report
 - [docs/financial-authority-map.md](docs/financial-authority-map.md) — Financial authority boundaries
-- [docs/month-lifecycle-authority.md](docs/month-lifecycle-authority.md) — Workflow state machine
+- [docs/month-lifecycle-authority.md](docs/month-lifecycle-authority.md) — Month-close workflow state machine
+
+---
+
+[github.com/Amber-E-Moseri/raf_app](https://github.com/Amber-E-Moseri/raf_app)
