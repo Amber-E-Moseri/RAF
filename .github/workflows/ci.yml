@@ -222,6 +222,24 @@ jobs:
           RAF_CONFIRM_NON_PRODUCTION_DB: 'true'
           RAF_POSTGRES_SSL: 'false'
 
+      - name: Run role topology contracts (C-P1.3 / C-P1.6)
+        run: node --test tests/postgresRoleTopologyContracts.test.js
+        env:
+          DATABASE_URL: ${{ env.OWNER_DATABASE_URL }}
+          POSTGRES_CONNECTION_STRING_APP: ${{ env.APP_DATABASE_URL }}
+          RAF_RUN_POSTGRES_RLS_TESTS: 'true'
+          RAF_CONFIRM_NON_PRODUCTION_DB: 'true'
+          RAF_POSTGRES_SSL: 'false'
+
+      - name: Run invitation resolver catalog proof (C-P1.7)
+        run: node --test tests/postgresInvitationResolverCatalog.test.js
+        env:
+          DATABASE_URL: ${{ env.OWNER_DATABASE_URL }}
+          POSTGRES_CONNECTION_STRING_APP: ${{ env.APP_DATABASE_URL }}
+          RAF_RUN_POSTGRES_RLS_TESTS: 'true'
+          RAF_CONFIRM_NON_PRODUCTION_DB: 'true'
+          RAF_POSTGRES_SSL: 'false'
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
