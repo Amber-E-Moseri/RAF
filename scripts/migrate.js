@@ -5,78 +5,64 @@
 import fs from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import pg from 'pg';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-// Load .env manually (project has no dotenv dep)
-const envPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '../.env');
-try {
-  for (const line of readFileSync(envPath, 'utf8').split(/\r?\n/)) {
-    const l = line.trim();
-    if (!l || l.startsWith('#')) continue;
-    const eq = l.indexOf('=');
-    if (eq < 1) continue;
-    const key = l.slice(0, eq).trim();
-    const val = l.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
-    if (!process.env[key]) process.env[key] = val;
-  }
-} catch {}
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const defaultMigrationsDir = path.join(scriptDir, '../db/migrations');
+const envPath = path.join(scriptDir, '../.env');
 
+export const MIGRATION_FILENAME_RE = /^\d{14}_[a-z0-9_]+\.sql$/;
 
-const { Client } = pg;
-
-const RAF_MIGRATIONS = [
-  '20260903090000_workspace_postgres_persistence.sql',
-  '20260903120000_financial_accounts.sql',
-  '20260904000000_collaboration.sql',
-  '20260905000000_add_token_blacklist.sql',
-  '20260908000000_fix_income_entry_allocation_trigger.sql',
-  '20260908020000_tighten_financial_rls_policies.sql',
-  '20260909000000_create_raf_app_role.sql',
-  '20260909010000_branch_g_activity_category.sql',
-  '20260910000000_fix_signup_rls_bootstrap.sql',
-  '20260910000001_fix_signup_rls_bootstrap_2.sql',
-  '20260910000002_fix_workspace_members_bootstrap.sql',
-  '20260910000003_workspace_members_split_policies.sql',
-  '20260910000004_fix_bootstrap_insert_policies.sql',
-  '20260910000005_tighten_bootstrap_insert_policies.sql',
-  '20260910000006_owner_scoped_signup_bootstrap.sql',
-  '20260910000007_add_upcoming_expenses.sql',
-  '20260910000008_debt_payment_pace_acknowledgements.sql',
-  '20260911000000_import_review_rules_learning.sql',
-  '20260912000001_transaction_splits.sql',
-  '20260912000002_goal_funding_splits.sql',
-  '20260913000000_debt_financial_account_link.sql',
-  '20260914000000_fix_debt_financial_account_fk_no_action.sql',
-  '20260914000001_transaction_canonical_review.sql',
-  '20260916000000_add_monthly_closes.sql',
-];
-
-const migrationsDir = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../db/migrations',
-);
-
-const connStr = process.env.POSTGRES_CONNECTION_STRING;
-if (!connStr) {
-  console.error('POSTGRES_CONNECTION_STRING not set');
-  process.exit(1);
+export function loadDotEnv(filePath = envPath, env = process.env) {
+  try {
+    for (const line of readFileSync(filePath, 'utf8').split(/\r?\n/)) {
+      const l = line.trim();
+      if (!l || l.startsWith('#')) continue;
+      const eq = l.indexOf('=');
+      if (eq < 1) continue;
+      const key = l.slice(0, eq).trim();
+      const val = l.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
+      if (!env[key]) env[key] = val;
+    }
+  } catch {}
 }
 
-const client = new Client({ connectionString: connStr });
+export async function discoverMigrations(migrationsDir = defaultMigrationsDir) {
+  const entries = await fs.readdir(migrationsDir, { withFileTypes: true });
+  const filenames = entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.sql'))
+    .map((entry) => entry.name)
+    .sort((a, b) => a.localeCompare(b));
 
-try {
-  await client.connect();
-  console.log('Connected to Postgres');
+  const invalid = filenames.filter((filename) => !MIGRATION_FILENAME_RE.test(filename));
+  if (invalid.length > 0) {
+    throw new Error(`Invalid migration filename(s): ${invalid.join(', ')}`);
+  }
 
-  // Ensure migration tracking table exists
-  await client.query(`
-    CREATE TABLE IF NOT EXISTS raf.schema_migrations (
-      filename text PRIMARY KEY,
-      applied_at timestamptz NOT NULL DEFAULT now()
-    )
-  `).catch(async () => {
-    // raf schema might not exist yet — create it minimally, then retry
+  const seenIds = new Map();
+  const duplicates = [];
+  for (const filename of filenames) {
+    const id = filename.slice(0, 14);
+    const first = seenIds.get(id);
+    if (first) duplicates.push(`${first}, ${filename}`);
+    seenIds.set(id, filename);
+  }
+  if (duplicates.length > 0) {
+    throw new Error(`Duplicate migration id(s): ${duplicates.join('; ')}`);
+  }
+
+  return filenames;
+}
+
+export async function ensureMigrationLedger(client) {
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS raf.schema_migrations (
+        filename text PRIMARY KEY,
+        applied_at timestamptz NOT NULL DEFAULT now()
+      )
+    `);
+  } catch {
     await client.query('CREATE SCHEMA IF NOT EXISTS raf');
     await client.query(`
       CREATE TABLE IF NOT EXISTS raf.schema_migrations (
@@ -84,30 +70,83 @@ try {
         applied_at timestamptz NOT NULL DEFAULT now()
       )
     `);
-  });
+  }
+}
 
-  const { rows: applied } = await client.query(
+export async function readAppliedMigrations(client) {
+  const { rows } = await client.query(
     'SELECT filename FROM raf.schema_migrations ORDER BY filename',
   );
-  const appliedSet = new Set(applied.map((r) => r.filename));
+  return rows.map((row) => row.filename);
+}
 
-  for (const filename of RAF_MIGRATIONS) {
+export function assertAppliedMigrationsKnown(applied, discovered) {
+  const discoveredSet = new Set(discovered);
+  const unknown = applied.filter((filename) => !discoveredSet.has(filename));
+  if (unknown.length > 0) {
+    throw new Error(
+      `Applied migration(s) are missing from db/migrations: ${unknown.join(', ')}`,
+    );
+  }
+}
+
+export async function applyMigrations({
+  client,
+  migrationsDir = defaultMigrationsDir,
+  logger = console,
+} = {}) {
+  if (!client) throw new Error('client is required');
+
+  const migrations = await discoverMigrations(migrationsDir);
+
+  await ensureMigrationLedger(client);
+
+  const applied = await readAppliedMigrations(client);
+  assertAppliedMigrationsKnown(applied, migrations);
+  const appliedSet = new Set(applied);
+
+  for (const filename of migrations) {
     if (appliedSet.has(filename)) {
-      console.log(`  skip  ${filename} (already applied)`);
+      logger.log(`  skip  ${filename} (already applied)`);
       continue;
     }
 
     const sql = await fs.readFile(path.join(migrationsDir, filename), 'utf8');
-    console.log(`  run   ${filename} ...`);
+    logger.log(`  run   ${filename} ...`);
     await client.query(sql);
     await client.query(
       'INSERT INTO raf.schema_migrations (filename) VALUES ($1)',
       [filename],
     );
-    console.log(`  done  ${filename}`);
+    logger.log(`  done  ${filename}`);
   }
 
-  console.log('\nAll migrations applied.');
-} finally {
-  await client.end();
+  return { discovered: migrations.length, applied: migrations.length - appliedSet.size };
+}
+
+export async function run() {
+  loadDotEnv();
+
+  const connStr = process.env.POSTGRES_CONNECTION_STRING;
+  if (!connStr) {
+    console.error('POSTGRES_CONNECTION_STRING not set');
+    process.exitCode = 1;
+    return;
+  }
+
+  const { default: pg } = await import('pg');
+  const client = new pg.Client({ connectionString: connStr });
+
+  try {
+    await client.connect();
+    console.log('Connected to Postgres');
+    await applyMigrations({ client, migrationsDir: defaultMigrationsDir });
+    console.log('\nAll migrations applied.');
+  } finally {
+    await client.end();
+  }
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await run();
 }

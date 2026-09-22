@@ -11,6 +11,7 @@
     "seed:demo": "node scripts/seedDemoData.js",
     "test": "node --experimental-strip-types --test",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "build": "vite build",
     "preview": "vite preview",
     "migrate": "node scripts/migrate.js"

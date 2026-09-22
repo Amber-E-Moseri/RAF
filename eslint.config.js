@@ -26,7 +26,7 @@ export default [
     }
   },
   {
-    files: ["lib/**/*.js", "db/**/*.js"],
+    files: ["lib/**/*.js", "db/**/*.js", "scripts/**/*.js"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",
