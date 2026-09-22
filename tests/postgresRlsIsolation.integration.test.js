@@ -241,10 +241,11 @@ maybeTest('Postgres RLS blocks cross-workspace reads, writes, joins, and guessed
           VALUES ($1, 'cross account', 'checking', 1.00, '{}'::jsonb)
         `, [workspaceB]),
       );
-      await expectRejectsInSavepoint(
-        appClient,
-        () => appClient.query('UPDATE raf.financial_accounts SET name = $1 WHERE id = $2', ['cross account update', accountB]),
-      );
+      {
+        // UPDATE targets a row invisible to this workspace context: returns 0 rows, no error.
+        const r = await appClient.query('UPDATE raf.financial_accounts SET name = $1 WHERE id = $2', ['cross account update', accountB]);
+        assert.equal(r.rowCount, 0, 'UPDATE on invisible cross-workspace row must affect 0 rows');
+      }
       await expectRejectsInSavepoint(
         appClient,
         () => appClient.query(`
@@ -266,18 +267,19 @@ maybeTest('Postgres RLS blocks cross-workspace reads, writes, joins, and guessed
           VALUES ($1, $2, 'cross.csv', 'uploaded', '{}'::jsonb)
         `, [workspaceB, accountB]),
       );
-      await expectRejectsInSavepoint(
-        appClient,
-        () => appClient.query('UPDATE raf.transactions SET description = $1 WHERE id = $2', ['cross update', transactionB]),
-      );
-      await expectRejectsInSavepoint(
-        appClient,
-        () => appClient.query('DELETE FROM raf.transactions WHERE id = $1', [transactionB]),
-      );
-      await expectRejectsInSavepoint(
-        appClient,
-        () => appClient.query('UPDATE raf.workspace_members SET role = $1 WHERE workspace_id = $2 AND user_id = $3', ['owner', workspaceB, memberA]),
-      );
+      {
+        // UPDATE/DELETE targeting invisible rows returns 0 rows, no error.
+        const r = await appClient.query('UPDATE raf.transactions SET description = $1 WHERE id = $2', ['cross update', transactionB]);
+        assert.equal(r.rowCount, 0, 'UPDATE on invisible cross-workspace transaction must affect 0 rows');
+      }
+      {
+        const r = await appClient.query('DELETE FROM raf.transactions WHERE id = $1', [transactionB]);
+        assert.equal(r.rowCount, 0, 'DELETE on invisible cross-workspace transaction must affect 0 rows');
+      }
+      {
+        const r = await appClient.query('UPDATE raf.workspace_members SET role = $1 WHERE workspace_id = $2 AND user_id = $3', ['owner', workspaceB, memberA]);
+        assert.equal(r.rowCount, 0, 'UPDATE on invisible cross-workspace member must affect 0 rows');
+      }
 
       const guessed = await appClient.query('SELECT count(*)::int AS count FROM raf.transactions WHERE id = $1', [transactionB]);
       assert.equal(guessed.rows[0].count, 0);
