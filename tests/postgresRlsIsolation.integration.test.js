@@ -117,7 +117,7 @@ maybeTest('Postgres RLS blocks cross-workspace reads, writes, joins, and guessed
       VALUES ($1, 'B Visa', 500.00, '{}'::jsonb)
     `, [workspaceB]);
     await client.query(`
-      INSERT INTO raf.fixed_bills (workspace_id, name, amount, due_day, category_slug, raw_json)
+      INSERT INTO raf.fixed_bills (workspace_id, name, expected_amount, due_day_of_month, category_slug, raw_json)
       VALUES ($1, 'B Rent', 900.00, 1, 'fixed_bills', '{}'::jsonb)
     `, [workspaceB]);
     await client.query(`
