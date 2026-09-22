@@ -55,6 +55,11 @@ export interface BufferDisposition {
   targetId?: string | null;
 }
 
+export interface BufferDispositionCommand {
+  type: "apply_to_goal" | "apply_to_debt" | "return_to_plan";
+  targetId?: string | null;
+}
+
 export interface MonthCloseRecord {
   id: string;
   period: string;
@@ -76,6 +81,7 @@ export interface CloseReadinessResponse {
     unreviewedTransactions: number;
     hasMonthlyReview: boolean;
     bufferCategory: { id: string; label: string } | null;
+    bufferRemaining: string | null;
     goalContributionsTotal: string;
     debtPaymentsTotal: string;
     goalCount: number;
@@ -115,7 +121,7 @@ export function getCloseReadiness(period: string) {
   return getJson<CloseReadinessResponse>("/monthly-reviews/close-readiness", { period });
 }
 
-export function closeMonth(payload: { period: string; bufferDisposition?: BufferDisposition | null }) {
+export function closeMonth(payload: { period: string; bufferDisposition?: BufferDispositionCommand | null }) {
   return postJson<CloseMonthResponse>("/monthly-reviews/close", payload);
 }
 
