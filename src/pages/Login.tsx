@@ -53,9 +53,8 @@ export function Login() {
 
           {/* Brand header */}
           <div className="mb-6 flex flex-col items-center gap-1.5">
-            <div className="flex items-center gap-2">
-              <img src={rafLogo} alt="NOMI" className="h-9 w-9 object-contain" />
-              <span className="text-[20px] font-[900] tracking-[-0.02em] text-[#111]">NOMI</span>
+            <div className="flex items-center justify-center">
+              <img src={rafLogo} alt="RAF" className="h-12 w-12 object-contain" />
             </div>
             <h1 className="mt-2 text-[24px] font-[900] tracking-[-0.03em] text-[#111]">
               {isLogin ? "Welcome back" : "Create account"}

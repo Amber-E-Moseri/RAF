@@ -76,6 +76,7 @@ export interface CloseReadinessResponse {
     unreviewedTransactions: number;
     hasMonthlyReview: boolean;
     bufferCategory: { id: string; label: string } | null;
+    bufferRemaining: string | null;
     goalContributionsTotal: string;
     debtPaymentsTotal: string;
     goalCount: number;

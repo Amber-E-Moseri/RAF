@@ -3,6 +3,7 @@ import { getAllocationCategories } from "../api/allocationCategoriesApi";
 import { getDebts } from "../api/debtsApi";
 import { getGoals } from "../api/goalsApi";
 import {
+  applyBufferDisposition,
   closeMonth,
   getCloseReadiness,
   getMonthLifecycle,
@@ -205,6 +206,12 @@ export function MonthlyReview() {
   const [lifecycleActionError, setLifecycleActionError] = useState<string | null>(null);
   const lifecyclePeriodRef = useRef<string | null>(null);
 
+  // ── Buffer disposition state ────────────────────────────────────────────────
+  type DispositionType = "apply_to_goal" | "apply_to_debt" | "return_to_plan";
+  const [dispositionType, setDispositionType] = useState<DispositionType | null>(null);
+  const [dispositionGoalId, setDispositionGoalId] = useState<string | null>(null);
+  const [dispositionDebtId, setDispositionDebtId] = useState<string | null>(null);
+
   const lifecyclePeriod = useMemo(() => activeMonth ? `${activeMonth}-01` : null, [activeMonth]);
 
   const loadLifecycle = useCallback(async (period: string) => {
@@ -247,13 +254,34 @@ export function MonthlyReview() {
 
   async function handleCloseMonth() {
     if (!lifecyclePeriod) return;
+    const bufferAmt = closeReadiness?.summary.bufferRemaining ?? "0.00";
+    const hasBudgetBuffer = parseFloat(bufferAmt) > 0;
+
     setIsClosingMonth(true);
     setLifecycleActionError(null);
     try {
-      const result = await closeMonth({ period: lifecyclePeriod });
+      if (hasBudgetBuffer && (dispositionType === "apply_to_goal" || dispositionType === "apply_to_debt")) {
+        const targetId = dispositionType === "apply_to_goal" ? dispositionGoalId : dispositionDebtId;
+        if (!targetId) throw new Error("Please select a destination.");
+        await applyBufferDisposition({
+          period: lifecyclePeriod,
+          disposition: { type: dispositionType, amount: bufferAmt, targetId },
+        });
+      }
+
+      const result = await closeMonth({
+        period: lifecyclePeriod,
+        bufferDisposition:
+          hasBudgetBuffer && dispositionType === "return_to_plan"
+            ? { type: "return_to_plan", amount: bufferAmt, targetId: null }
+            : undefined,
+      });
       setCloseResult(result);
       setShowCloseConfirm(false);
       setShowCloseSummary(true);
+      setDispositionType(null);
+      setDispositionGoalId(null);
+      setDispositionDebtId(null);
       await loadLifecycle(lifecyclePeriod);
       await monthWorkflow.reload();
     } catch (e) {
@@ -311,6 +339,9 @@ export function MonthlyReview() {
     setShowCloseConfirm(false);
     setShowReopenConfirm(false);
     setLifecycleActionError(null);
+    setDispositionType(null);
+    setDispositionGoalId(null);
+    setDispositionDebtId(null);
   }, [activeMonth]);
 
   useEffect(() => {
@@ -780,22 +811,127 @@ export function MonthlyReview() {
           )}
 
           {/* Close confirmation dialog */}
-          {showCloseConfirm && (
-            <div className="mt-4 rounded-2xl border p-4 space-y-3" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
-              <p className="text-sm font-semibold text-[var(--text-strong)]">Close {activeMonthLabel}?</p>
-              <p className="text-sm text-[var(--text-muted)]">
-                NOMI will preserve an immutable historical snapshot of this period — income, spending, allocations, buffer, goal contributions, and debt payments captured at this exact moment. The snapshot cannot be modified after closing.
-              </p>
-              <div className="flex gap-3">
-                <Button type="button" disabled={isClosingMonth} onClick={() => void handleCloseMonth()}>
-                  {isClosingMonth ? <LoadingSpinner inline size="sm" label="Closing…" /> : `Confirm — close ${activeMonthLabel}`}
-                </Button>
-                <Button type="button" variant="secondary" disabled={isClosingMonth} onClick={() => setShowCloseConfirm(false)}>
-                  Cancel
-                </Button>
+          {showCloseConfirm && (() => {
+            const bufferAmt = closeReadiness?.summary.bufferRemaining ?? "0.00";
+            const hasBudgetBuffer = parseFloat(bufferAmt) > 0;
+            const goals = destinationData.data?.goals ?? [];
+            const debts = destinationData.data?.debts ?? [];
+            const dispositionValid =
+              !hasBudgetBuffer ||
+              dispositionType === "return_to_plan" ||
+              (dispositionType === "apply_to_goal" && dispositionGoalId !== null) ||
+              (dispositionType === "apply_to_debt" && dispositionDebtId !== null);
+            const bufferLabel = closeReadiness?.summary.bufferCategory?.label ?? "Buffer";
+            return (
+              <div className="mt-4 rounded-2xl border p-5 space-y-4" style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}>
+                <div>
+                  <p className="text-sm font-semibold text-[var(--text-strong)]">Close {activeMonthLabel}?</p>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">
+                    NOMI will preserve an immutable historical snapshot of this period — income, spending, allocations, buffer, goal contributions, and debt payments captured at this exact moment. The snapshot cannot be modified after closing.
+                  </p>
+                </div>
+
+                {hasBudgetBuffer && (
+                  <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--border-color)", background: "var(--surface-elevated)" }}>
+                    <div>
+                      <p className="text-[13px] font-[700] text-[var(--text-strong)]">
+                        {bufferLabel} — <Money value={bufferAmt} /> remaining
+                      </p>
+                      <p className="mt-0.5 text-[12px] text-[var(--text-muted)]">
+                        You have unused buffer this month. Choose what to do with it before closing.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      {goals.length > 0 && (
+                        <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition hover:bg-[var(--surface-plain)]" style={{ borderColor: dispositionType === "apply_to_goal" ? "var(--theme-primary)" : "var(--border-color)" }}>
+                          <input
+                            type="radio"
+                            name="bufferDisposition"
+                            value="apply_to_goal"
+                            checked={dispositionType === "apply_to_goal"}
+                            onChange={() => { setDispositionType("apply_to_goal"); setDispositionDebtId(null); }}
+                            className="mt-0.5 shrink-0"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[13px] font-[600] text-[var(--text-primary)]">Put toward a goal</p>
+                            <p className="text-[11px] text-[var(--text-muted)]">Apply unused buffer as a contribution to one of your savings goals.</p>
+                            {dispositionType === "apply_to_goal" && (
+                              <select
+                                className="mt-2 w-full rounded-lg border bg-[var(--surface-plain)] px-3 py-1.5 text-[12px] text-[var(--text-primary)] focus:outline-none"
+                                style={{ borderColor: "var(--border-color)" }}
+                                value={dispositionGoalId ?? ""}
+                                onChange={(e) => setDispositionGoalId(e.target.value || null)}
+                              >
+                                <option value="">Select a goal…</option>
+                                {goals.map((g) => (
+                                  <option key={g.id} value={g.id}>{g.name}</option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
+                        </label>
+                      )}
+
+                      {debts.length > 0 && (
+                        <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition hover:bg-[var(--surface-plain)]" style={{ borderColor: dispositionType === "apply_to_debt" ? "var(--theme-primary)" : "var(--border-color)" }}>
+                          <input
+                            type="radio"
+                            name="bufferDisposition"
+                            value="apply_to_debt"
+                            checked={dispositionType === "apply_to_debt"}
+                            onChange={() => { setDispositionType("apply_to_debt"); setDispositionGoalId(null); }}
+                            className="mt-0.5 shrink-0"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[13px] font-[600] text-[var(--text-primary)]">Make an extra debt payment</p>
+                            <p className="text-[11px] text-[var(--text-muted)]">Apply unused buffer as an extra payment toward a debt.</p>
+                            {dispositionType === "apply_to_debt" && (
+                              <select
+                                className="mt-2 w-full rounded-lg border bg-[var(--surface-plain)] px-3 py-1.5 text-[12px] text-[var(--text-primary)] focus:outline-none"
+                                style={{ borderColor: "var(--border-color)" }}
+                                value={dispositionDebtId ?? ""}
+                                onChange={(e) => setDispositionDebtId(e.target.value || null)}
+                              >
+                                <option value="">Select a debt…</option>
+                                {debts.map((d) => (
+                                  <option key={d.id} value={d.id}>{d.name}</option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
+                        </label>
+                      )}
+
+                      <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition hover:bg-[var(--surface-plain)]" style={{ borderColor: dispositionType === "return_to_plan" ? "var(--theme-primary)" : "var(--border-color)" }}>
+                        <input
+                          type="radio"
+                          name="bufferDisposition"
+                          value="return_to_plan"
+                          checked={dispositionType === "return_to_plan"}
+                          onChange={() => { setDispositionType("return_to_plan"); setDispositionGoalId(null); setDispositionDebtId(null); }}
+                          className="mt-0.5 shrink-0"
+                        />
+                        <div>
+                          <p className="text-[13px] font-[600] text-[var(--text-primary)]">Add to this month&apos;s surplus</p>
+                          <p className="text-[11px] text-[var(--text-muted)]">The unused buffer will be counted as part of this month&apos;s available surplus.</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <Button type="button" disabled={isClosingMonth || !dispositionValid} onClick={() => void handleCloseMonth()}>
+                    {isClosingMonth ? <LoadingSpinner inline size="sm" label="Closing…" /> : `Confirm — close ${activeMonthLabel}`}
+                  </Button>
+                  <Button type="button" variant="secondary" disabled={isClosingMonth} onClick={() => { setShowCloseConfirm(false); setDispositionType(null); setDispositionGoalId(null); setDispositionDebtId(null); }}>
+                    Cancel
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Reopen confirmation dialog */}
           {showReopenConfirm && (
