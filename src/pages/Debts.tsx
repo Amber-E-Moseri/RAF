@@ -1,11 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
-import { acknowledgePaceInsight, createDebt, getDebts, updateDebt } from "../api/debtsApi";
+import { createDebt, deleteDebt, getDebts, updateDebt } from "../api/debtsApi";
 import { getTransactions } from "../api/transactionsApi";
-import { DebtActivityFeed } from "../components/debt/DebtActivityFeed";
-import { ReconciliationPanel } from "../components/debt/ReconciliationPanel";
-import type { DebtActivityFull } from "../lib/types";
-import { PaymentPaceInsight } from "../components/debt/PaymentPaceInsight";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingSpinner } from "../components/feedback/LoadingSpinner";
 import { LoadingState } from "../components/feedback/LoadingState";
@@ -21,7 +17,7 @@ import { MoneyInput } from "../components/ui/MoneyInput";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { formatIsoDate } from "../lib/format";
 import { Money } from "../components/ui/Money";
-import type { DebtPaymentPaceAcknowledgement, Transaction } from "../lib/types";
+import type { Transaction } from "../lib/types";
 import { normalizeMoneyInput, validateApr, validateNonNegativeMoney, validatePositiveMoney, validateRequiredText } from "../lib/validation";
 
 function paymentStatusLabel(status?: string) {
@@ -152,57 +148,24 @@ export function Debts() {
   const [editFieldErrors, setEditFieldErrors] = useState<Record<string, string | null>>({});
   const [editError, setEditError] = useState<string | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [expandedSections, setExpandedSections] = useState<Record<string, { month: boolean; payoff: boolean; transactions: boolean; activity: boolean; matching: boolean }>>({});
-  const [activityDataByDebt, setActivityDataByDebt] = useState<Record<string, DebtActivityFull>>({});
+  const [expandedSections, setExpandedSections] = useState<Record<string, { month: boolean; payoff: boolean; transactions: boolean }>>({});
   const [showCreateDebtForm, setShowCreateDebtForm] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [paceAction, setPaceAction] = useState<{ debtId: string; action: DebtPaymentPaceAcknowledgement["action"] } | null>(null);
+  const [isDeletingDebtId, setIsDeletingDebtId] = useState<string | null>(null);
 
-  function isSectionExpanded(debtId: string, section: "month" | "payoff" | "transactions" | "activity" | "matching") {
+  function isSectionExpanded(debtId: string, section: "month" | "payoff" | "transactions") {
     return expandedSections[debtId]?.[section] ?? false;
   }
 
-  function toggleSection(debtId: string, section: "month" | "payoff" | "transactions" | "activity" | "matching") {
+  function toggleSection(debtId: string, section: "month" | "payoff" | "transactions") {
     setExpandedSections((current) => ({
       ...current,
       [debtId]: {
         month: current[debtId]?.month ?? false,
         payoff: current[debtId]?.payoff ?? false,
         transactions: current[debtId]?.transactions ?? false,
-        activity: current[debtId]?.activity ?? false,
-        matching: current[debtId]?.matching ?? false,
         [section]: !(current[debtId]?.[section] ?? false),
       },
     }));
-  }
-
-  const handleMatchesAvailable = useCallback((debtId: string, data: DebtActivityFull) => {
-    setActivityDataByDebt((current) => ({ ...current, [debtId]: data }));
-  }, []);
-
-  async function handlePaceAction(
-    debt: NonNullable<typeof data>["items"][number],
-    action: DebtPaymentPaceAcknowledgement["action"],
-  ) {
-    const paymentPeriodMonth = debt.paymentInsight?.actionablePaymentPeriod;
-    if (!paymentPeriodMonth) return;
-
-    setPaceAction({ debtId: debt.id, action });
-    setActionError(null);
-    try {
-      await acknowledgePaceInsight(debt.id, {
-        action,
-        paymentPeriodMonth,
-        ...(action === "update_plan" && debt.paymentInsight?.suggestedRecurringPayment
-          ? { newMonthlyPayment: debt.paymentInsight.suggestedRecurringPayment }
-          : {}),
-      });
-      await reload();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Could not save payment pace choice.");
-    } finally {
-      setPaceAction(null);
-    }
   }
 
   function openEditModal(debt: NonNullable<typeof data>["items"][number]) {
@@ -227,6 +190,25 @@ export function Debts() {
     setEditingDebtId(null);
     setEditError(null);
     setEditFieldErrors({});
+  }
+
+  async function handleDeleteDebt(debt: NonNullable<typeof data>["items"][number]) {
+    const confirmed = window.confirm(
+      `Delete "${debt.name}"? This cannot be undone. Debts with linked payments cannot be deleted — disable them instead.`,
+    );
+    if (!confirmed) return;
+
+    setIsDeletingDebtId(debt.id);
+    setSubmitError(null);
+    try {
+      await deleteDebt(debt.id);
+      setSubmitSuccess(`"${debt.name}" deleted.`);
+      await reload();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Debt could not be deleted.");
+    } finally {
+      setIsDeletingDebtId(null);
+    }
   }
 
   function validateEditForm() {
@@ -578,135 +560,88 @@ export function Debts() {
           </section>
 
           {data.items.length ? (
-            <section className="grid gap-6 sm:grid-cols-2 xl:grid-cols-2">
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {data.items.map((debt) => {
                 const trajectory = debt.balanceTrajectory;
                 const trajectoryLabel = trajectory?.trajectory === "increasing" ? "increasing" : trajectory?.trajectory === "decreasing" ? "decreasing" : "stable";
                 const trajectoryDelta = trajectory ? (trajectory.absoluteChange / 100).toFixed(2) : null;
-                const trajectoryCopy = trajectory?.trajectory === "increasing"
-                  ? "Balance is rising despite payments. New charges, interest or fees may be offsetting progress."
-                  : trajectory?.trajectory === "decreasing"
-                    ? "Balance is decreasing over the measured period."
-                    : "Balance is broadly stable over the measured period.";
                 const linkedTxs = transactionsByDebtId.get(debt.id) ?? [];
                 const statusTone = paymentStatusTone(debt.status === "paid_off" ? "paid_off" : debt.paymentStatus);
+                const paceCopy = debt.paymentPace?.pace === "above_plan"
+                  ? "Payments above plan this month"
+                  : debt.paymentPace?.pace === "no_payment"
+                    ? "No payment recorded yet"
+                    : "On track with the payment plan";
+                const shortTrajectoryCopy = trajectory?.trajectory === "increasing"
+                  ? "Balance rising despite payments"
+                  : trajectory?.trajectory === "decreasing"
+                    ? "Balance trending downward"
+                    : "Balance broadly stable";
 
                 return (
-                  <Card key={debt.id} className="flex flex-col">
-                    <div className="space-y-5 flex-1">
-                      <div className="flex items-start justify-between gap-4 border-b border-[var(--border-color)] pb-4">
-                        <div className="min-w-0 flex-1">
-                          <h3 className="text-2xl font-black tracking-tight text-[var(--text-strong)]">{debt.name}</h3>
-                          <p className="mt-2 text-sm text-[var(--text-muted)]">
-                            APR <span className="font-semibold text-[var(--text-strong)]">{debt.apr}%</span> · Minimum <span className="font-semibold text-[var(--text-strong)]"><Money value={debt.minimumPayment} /></span>
-                          </p>
-                        </div>
-                        <div className="flex-shrink-0">
-                          <Badge tone={statusTone}>
-                            {paymentStatusLabel(debt.status === "paid_off" ? "paid_off" : debt.paymentStatus)}
-                          </Badge>
-                        </div>
+                  <div key={debt.id} className="flex flex-col rounded-[16px] border border-[var(--border-color)] bg-[var(--surface-color)] p-4 shadow-[var(--shadow-sm)]">
+                    {/* entity-top */}
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="min-w-0">
+                        <div className="text-[12px] font-[900] text-[var(--text-strong)]">{debt.name}</div>
+                        <div className="mt-[3px] text-[9.5px] text-[var(--text-muted)]">APR {debt.apr}% · Minimum <Money value={debt.minimumPayment} /></div>
                       </div>
-
-                      <div>
-                        <p className="text-xs font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">Current balance</p>
-                        <p className="mt-2 text-3xl font-black tracking-tight text-[var(--text-strong)]"><Money value={debt.currentBalance} /></p>
-                      </div>
-
-                      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-                        <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-4">
-                          <div className="space-y-2">
-                            <div>
-                              <p className="text-[7.5px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">Payment pace</p>
-                              <p className="mt-2 text-base font-black text-[var(--text-strong)]"><Money value={debt.paymentsThisMonth ?? "0"} /> <span className="text-xs font-semibold text-[var(--text-muted)]">/ <Money value={debt.monthlyPayment} /></span></p>
-                            </div>
-                            <p className="text-[8.5px] leading-relaxed text-[var(--text-muted)]">
-                              {debt.paymentPace?.pace === "above_plan" ? "Payments are above plan" : debt.paymentPace?.pace === "no_payment" ? "No payment recorded yet" : "On track with plan"}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-4">
-                          <div className="space-y-2">
-                            <div>
-                              <p className="text-[7.5px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">Balance trajectory</p>
-                              <p className="mt-2 text-base font-black text-[var(--text-strong)]">
-                                {trajectoryLabel}{trajectoryDelta && Number(trajectoryDelta) !== 0 ? ` · ${Number(trajectoryDelta) > 0 ? "+" : ""}` : ""}
-                                {trajectoryDelta && Number(trajectoryDelta) !== 0 ? <Money value={trajectoryDelta} /> : null}
-                              </p>
-                            </div>
-                            <p className="text-[8.5px] leading-relaxed text-[var(--text-muted)]">{trajectoryCopy.split(" ").slice(0, 4).join(" ")}…</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <PaymentPaceInsight
-                        debt={debt}
-                        acknowledged={debt.insightAcknowledged}
-                        pendingAction={paceAction?.debtId === debt.id ? paceAction.action : null}
-                        onUpdatePlan={() => void handlePaceAction(debt, "update_plan")}
-                        onKeepPlan={() => void handlePaceAction(debt, "keep_plan")}
-                        onAcknowledgeOnetime={() => void handlePaceAction(debt, "acknowledge_onetime")}
-                      />
-
-                      {linkedTxs.length > 0 ? (
-                        <div className="border-t border-[var(--border-color)] pt-4">
-                          <p className="text-[7.5px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">Recent linked payments</p>
-                          {linkedTxs.slice(0, 3).map((tx) => (
-                            <div key={tx.id} className="flex items-center justify-between gap-3 py-2 text-[9.5px]">
-                              <span className="text-[var(--text-muted)]">{formatIsoDate(tx.transactionDate)} · {tx.description}</span>
-                              <span className="font-semibold text-[var(--text-strong)]"><Money value={tx.amount} /></span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-
-                      {isSectionExpanded(debt.id, "activity") ? (
-                        <div className="border-t border-[var(--border-color)] pt-4">
-                          <DebtActivityFeed
-                            debtId={debt.id}
-                            onMatchesAvailable={(data) => handleMatchesAvailable(debt.id, data)}
-                          />
-                        </div>
-                      ) : null}
-
-                      {isSectionExpanded(debt.id, "matching") ? (
-                        <div className="border-t border-[var(--border-color)] pt-4">
-                          <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)] mb-3">Payment matching</p>
-                          <ReconciliationPanel
-                            debtId={debt.id}
-                            activityData={activityDataByDebt[debt.id] ?? null}
-                            onMutated={() => {
-                              setActivityDataByDebt((current) => {
-                                const next = { ...current };
-                                delete next[debt.id];
-                                return next;
-                              });
-                            }}
-                          />
-                        </div>
-                      ) : null}
-
-                      <p className="text-[8px] leading-relaxed text-[var(--text-muted)]">Payoff projection assumes no additional borrowing unless an explicit spending assumption is introduced.</p>
+                      <Badge tone={statusTone}>{paymentStatusLabel(debt.status === "paid_off" ? "paid_off" : debt.paymentStatus)}</Badge>
                     </div>
-
-                    <div className="flex flex-wrap gap-3 pt-5 border-t border-[var(--border-color)]">
-                      <Button type="button" onClick={() => openEditModal(debt)}>
-                        Record payment
-                      </Button>
-                      <Button type="button" variant="secondary" onClick={() => toggleSection(debt.id, "transactions")}>
-                        Link transaction
-                      </Button>
-                      <Button type="button" variant="secondary" onClick={() => toggleSection(debt.id, "activity")}>
-                        {isSectionExpanded(debt.id, "activity") ? "Hide activity" : "Activity"}
-                      </Button>
-                      <Button type="button" variant="secondary" onClick={() => toggleSection(debt.id, "matching")}>
-                        {isSectionExpanded(debt.id, "matching") ? "Hide matching" : "Matching"}
-                      </Button>
-                      <Button type="button" variant="secondary" onClick={() => openEditModal(debt)}>
-                        Edit
-                      </Button>
+                    {/* entity-value */}
+                    <div className="my-[15px] text-[22px] font-[900] tracking-[-0.04em] text-[var(--text-strong)]">
+                      <Money value={debt.currentBalance} />
                     </div>
-                  </Card>
+                    {/* intelligence-grid */}
+                    <div className="mb-3 grid grid-cols-2 gap-2.5">
+                      <div className="rounded-[12px] border border-[var(--border-color)] bg-[var(--surface-elevated)] p-[11px]">
+                        <p className="text-[8.5px] font-[900] uppercase tracking-[0.07em] text-[var(--text-muted)]">Payment pace</p>
+                        <p className="mt-[5px] text-[12px] font-[900] text-[var(--text-strong)]">
+                          <Money value={debt.paymentsThisMonth ?? "0"} /> / <Money value={debt.monthlyPayment} /> planned
+                        </p>
+                        <p className="mt-1 text-[9px] leading-snug text-[var(--text-muted)]">{paceCopy}</p>
+                      </div>
+                      <div className="rounded-[12px] border border-[var(--border-color)] bg-[var(--surface-elevated)] p-[11px]">
+                        <p className="text-[8.5px] font-[900] uppercase tracking-[0.07em] text-[var(--text-muted)]">Balance trajectory</p>
+                        <p className="mt-[5px] text-[12px] font-[900] text-[var(--text-strong)]">
+                          {trajectoryLabel}{trajectoryDelta && Number(trajectoryDelta) !== 0 ? " · " : ""}
+                          {trajectoryDelta && Number(trajectoryDelta) !== 0 ? <Money value={trajectoryDelta} /> : null}
+                        </p>
+                        <p className="mt-1 text-[9px] leading-snug text-[var(--text-muted)]">{shortTrajectoryCopy}</p>
+                      </div>
+                    </div>
+                    {/* linked payments */}
+                    {linkedTxs.length > 0 ? (
+                      <div className="mb-3 border-t border-[var(--border-color)] pt-[10px]">
+                        <p className="text-[8.5px] font-[900] uppercase tracking-[0.07em] text-[var(--text-muted)]">Linked payments</p>
+                        {linkedTxs.slice(0, 3).map((tx) => (
+                          <div key={tx.id} className="flex justify-between gap-2.5 py-[7px] text-[9.5px]">
+                            <span className="truncate text-[var(--text-muted)]">{formatIsoDate(tx.transactionDate)} · {tx.description}</span>
+                            <b className="shrink-0 text-[var(--text-strong)]"><Money value={tx.amount} /></b>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {/* entity-foot */}
+                    <p className="mt-auto mb-[14px] text-[9.5px] text-[var(--text-muted)]">
+                      Payoff projection assumes no additional borrowing unless an explicit spending assumption is introduced.
+                    </p>
+                    {/* entity-actions */}
+                    <div className="flex gap-[7px]">
+                      <Button type="button" className="rounded-[8px] px-[9px] py-[6px] text-[10px] font-[900] min-h-0" onClick={() => openEditModal(debt)}>Record payment</Button>
+                      <Button type="button" variant="secondary" className="rounded-[8px] px-[9px] py-[6px] text-[10px] font-[900] min-h-0" onClick={() => toggleSection(debt.id, "transactions")}>Link transaction</Button>
+                      <Button type="button" variant="secondary" className="rounded-[8px] px-[9px] py-[6px] text-[10px] font-[900] min-h-0" onClick={() => openEditModal(debt)}>Edit</Button>
+                      <button
+                        type="button"
+                        aria-label="Delete debt"
+                        disabled={isDeletingDebtId === debt.id}
+                        className="ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-[var(--text-muted)] transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40"
+                        onClick={() => void handleDeleteDebt(debt)}
+                      >
+                        {isDeletingDebtId === debt.id ? "…" : "🗑"}
+                      </button>
+                    </div>
+                  </div>
                 );
               })}
             </section>

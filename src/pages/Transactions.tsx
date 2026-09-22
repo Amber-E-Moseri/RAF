@@ -329,7 +329,7 @@ export function Transactions() {
   const [categoryFilter, setCategoryFilter] = useState(categorySlugFilterFromUrl ? "" : categoryFilterFromUrl);
   const [sortKey, setSortKey] = useState<SortKey>("transactionDate");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [quickFilter, setQuickFilter] = useState<"all" | "spend" | "income" | "transfer" | "debt">("all");
+  const [quickFilter, setQuickFilter] = useState<"all" | "needs_review" | "spend" | "income" | "transfer" | "debt">("all");
   const [form, setForm] = useState({
     transactionDate: initialTo,
     description: "",
@@ -535,6 +535,10 @@ export function Transactions() {
 
       if (!matchesSearch) {
         return false;
+      }
+
+      if (quickFilter === "needs_review") {
+        return !transaction.categoryId && !transaction.isImportOnly;
       }
 
       if (quickFilter === "spend") {
@@ -1381,7 +1385,7 @@ export function Transactions() {
     }
   }
 
-  function applyQuickFilter(nextFilter: "all" | "spend" | "income" | "transfer" | "debt") {
+  function applyQuickFilter(nextFilter: "all" | "needs_review" | "spend" | "income" | "transfer" | "debt") {
     setQuickFilter(nextFilter);
   }
 
@@ -1705,8 +1709,9 @@ export function Transactions() {
                 <div className="inline-flex overflow-hidden rounded-[10px] border border-[var(--border-color)]">
                   {[
                     ["all", "All"],
-                    ["spend", "Spend"],
+                    ["needs_review", "Needs review"],
                     ["income", "Income"],
+                    ["spend", "Spending"],
                     ["transfer", "Transfer"],
                     ["debt", "Debt Payoff"],
                   ].map(([value, label]) => (
@@ -1718,7 +1723,7 @@ export function Transactions() {
                           ? "bg-[var(--primary-color)] text-[var(--primary-contrast)]"
                           : "bg-[var(--surface-color)] text-[var(--text-muted)] hover:bg-[var(--surface-plain)]"
                       }`}
-                      onClick={() => applyQuickFilter(value as "all" | "spend" | "income" | "transfer" | "debt")}
+                      onClick={() => applyQuickFilter(value as "all" | "needs_review" | "spend" | "income" | "transfer" | "debt")}
                     >
                       {label}
                     </button>
@@ -1742,11 +1747,11 @@ export function Transactions() {
               <Table
                 headers={[
                   <span className="inline-block w-20 text-[8.5px] uppercase tracking-[0.06em] font-[900] text-[var(--text-muted)]">Date</span>,
-                  <span className="text-[8.5px] uppercase tracking-[0.06em] font-[900] text-[var(--text-muted)]">{sortableHeader("Description", "description")}</span>,
+                  <span className="text-[8.5px] uppercase tracking-[0.06em] font-[900] text-[var(--text-muted)]">{sortableHeader("Merchant", "description")}</span>,
                   <span className="inline-block w-[140px] text-[8.5px] uppercase tracking-[0.06em] font-[900] text-[var(--text-muted)]">Category / purpose</span>,
-                  <span className="inline-block w-[110px] text-[8.5px] uppercase tracking-[0.06em] font-[900] text-[var(--text-muted)]">Type</span>,
+                  <span className="inline-block w-[100px] text-[8.5px] uppercase tracking-[0.06em] font-[900] text-[var(--text-muted)]">Status</span>,
                   <span className="inline-block w-[88px] text-[8.5px] uppercase tracking-[0.06em] font-[900] text-[var(--text-muted)] text-right">Amount</span>,
-                  <span className="inline-block w-[150px] text-[8.5px] uppercase tracking-[0.06em] font-[900] text-[var(--text-muted)]">Actions</span>,
+                  <span className="inline-block w-[200px] text-[8.5px] uppercase tracking-[0.06em] font-[900] text-[var(--text-muted)]">Actions</span>,
                 ]}
                 thClassNames={[
                   undefined,
@@ -1767,27 +1772,22 @@ export function Transactions() {
                   const categoryLabel = transaction.categoryId
                     ? categoryLookup.get(transaction.categoryId) ?? transaction.categoryId
                     : "";
-                  const typeLabel = transaction.isImportOnly
-                    ? (transaction.importedClassificationType === "income"
-                      ? "income import"
-                      : transaction.importedClassificationType === "duplicate"
-                        ? "duplicate"
-                        : transaction.importedClassificationType === "transfer"
-                          ? "transfer"
-                          : transaction.importedClassificationType === "ignore"
-                            ? "ignored"
-                            : transaction.direction)
-                    : transaction.direction;
-                  const typeSummary = transaction.source === "import"
-                    ? `${typeLabel} • Imported`
-                    : typeLabel;
-
                   return (
                     <tr key={transaction.id} className="transition hover:bg-[var(--surface-plain)]">
                       <td className="w-20 px-[13px] py-[11px] text-[10.5px] text-[var(--text-muted)]">{formatIsoDate(transaction.transactionDate)}</td>
                       <td className="px-[13px] py-[11px] text-[10.5px] font-[850] text-[var(--text-strong)]">
                         <div className="flex items-center gap-2">
-                          <div className="min-w-0 flex-1 max-w-[420px] whitespace-normal break-words">{transaction.description}</div>
+                          <div className="min-w-0 flex-1 max-w-[420px]">
+                            <div className="whitespace-normal break-words">{transaction.merchant ?? transaction.description}</div>
+                            {transaction.merchant ? (
+                              <div className="mt-[2px] whitespace-normal break-words text-[9px] font-normal text-[var(--text-muted)]">{transaction.description}</div>
+                            ) : null}
+                            {transaction.source === "import" && transaction.categoryId ? (
+                              <span className="mt-[4px] inline-flex items-center rounded-full bg-blue-50 px-[7px] py-[2px] text-[8px] font-[700] text-blue-600">
+                                ↺ {categoryLookup.get(transaction.categoryId) ?? "category"} remembered
+                              </span>
+                            ) : null}
+                          </div>
                           {!transaction.isImportOnly ? (
                             <button
                               type="button"
@@ -1810,22 +1810,40 @@ export function Transactions() {
                         ) : null}
                       </td>
                       <td className="hidden sm:table-cell w-[100px] px-[13px] py-[11px] text-[10.5px]">
-                        <div className="text-[11px] text-[var(--text-muted)]">{typeSummary}</div>
+                        {transaction.isImportOnly ? (
+                          <Badge tone="neutral" className="px-2 py-0 text-[9.5px] font-[700] leading-5">Import</Badge>
+                        ) : transaction.categoryId ? (
+                          <Badge tone="success" className="px-2 py-0 text-[9.5px] font-[700] leading-5">Reviewed</Badge>
+                        ) : (
+                          <Badge tone="warning" className="px-2 py-0 text-[9.5px] font-[700] leading-5">Needs review</Badge>
+                        )}
                       </td>
                       <td className={`w-[88px] px-[13px] py-[11px] text-right text-[10.5px] font-[900] ${amountClassName(transaction.direction)}`}>
                         {<Money value={transaction.amount} />}
                       </td>
                       {/* Desktop actions column */}
-                      <td className="hidden sm:table-cell w-[150px] px-[13px] py-[11px] text-[10.5px]">
+                      <td className="hidden sm:table-cell w-[200px] px-[13px] py-[11px] text-[10.5px]">
                         {transaction.isImportOnly ? (
                           <div className="text-right text-xs text-[var(--text-muted)]">Review row</div>
                         ) : (
-                          <div className="flex flex-col items-end gap-1">
-                            <div className="flex flex-wrap items-center justify-end gap-2">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex flex-wrap items-center gap-[5px]">
+                              {!transaction.categoryId ? (
+                                <Button
+                                  type="button"
+                                  className="min-h-7 rounded-[7px] px-[9px] py-[4px] text-[10px] font-[900]"
+                                  onClick={() => {
+                                    setSplitOnEditOpen(false);
+                                    setEditingTransaction(mapTransactionToEditState(transaction as Transaction));
+                                  }}
+                                >
+                                  ✓ Review
+                                </Button>
+                              ) : null}
                               <Button
                                 type="button"
                                 variant="secondary"
-                                className="min-h-8 rounded-full px-3 py-1.5 text-xs"
+                                className="min-h-7 rounded-[7px] px-[9px] py-[4px] text-[10px] font-[900]"
                                 onClick={() => {
                                   setSplitOnEditOpen(false);
                                   setEditingTransaction(mapTransactionToEditState(transaction as Transaction));
@@ -1833,11 +1851,11 @@ export function Transactions() {
                               >
                                 Edit
                               </Button>
-                              {transaction.direction === "debit" ? (
+                              {transaction.direction === "debit" && !transaction.linkedGoalId && !transaction.linkedDebtId ? (
                                 <Button
                                   type="button"
                                   variant="secondary"
-                                  className="min-h-8 rounded-full px-3 py-1.5 text-xs"
+                                  className="min-h-7 rounded-[7px] px-[9px] py-[4px] text-[10px] font-[900]"
                                   onClick={() => {
                                     setSplitOnEditOpen(true);
                                     setEditingTransaction(mapTransactionToEditState(transaction as Transaction));
@@ -1846,15 +1864,6 @@ export function Transactions() {
                                   Split
                                 </Button>
                               ) : null}
-                              <button
-                                type="button"
-                                aria-label="Delete transaction"
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-muted)] transition hover:bg-rose-50 hover:text-rose-600"
-                                disabled={isDeletingTransaction === transaction.id}
-                                onClick={() => void handleDeleteTransaction(transaction as Transaction)}
-                              >
-                                {isDeletingTransaction === transaction.id ? "…" : "🗑"}
-                              </button>
                             </div>
                             <TransactionRowActions
                               transaction={transaction}

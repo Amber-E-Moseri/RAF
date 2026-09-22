@@ -21,6 +21,10 @@ export function updateDebt(debtId: string, payload: Partial<DebtCreateRequest> &
   return patchJson<Debt>(`/debts/${debtId}`, payload);
 }
 
+export function deleteDebt(debtId: string) {
+  return deleteJson<void>(`/debts/${debtId}`);
+}
+
 export function getDebtActivity(debtId: string, params?: { view?: "economic" | "raw"; month?: string }) {
   return getJson<DebtActivity>(`/debts/${debtId}/activity`, params as Record<string, string | undefined>);
 }
