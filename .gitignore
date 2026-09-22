@@ -17,3 +17,4 @@ coverage/
 .DS_Store
 .neon
 __p0_*/
+test-run.log
