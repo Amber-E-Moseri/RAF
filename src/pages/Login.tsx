@@ -5,7 +5,7 @@ import { apiLogin, apiSignup } from "../api/authApi";
 import { ApiError } from "../api/client";
 import rafLogo from "../assets/raf-logo.png";
 
-type Tab = "login" | "signup";
+type Mode = "login" | "signup";
 
 export function Login() {
   const { setSession } = useAuth();
@@ -13,22 +13,28 @@ export function Login() {
   const location = useLocation();
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? "/dashboard";
 
-  const [tab, setTab] = useState<Tab>("login");
+  const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [householdName, setHouseholdName] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  function switchMode(next: Mode) {
+    setMode(next);
+    setError(null);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
-
     try {
-      const session = tab === "login"
-        ? await apiLogin(email, password)
-        : await apiSignup(email, password, householdName || undefined);
+      const session =
+        mode === "login"
+          ? await apiLogin(email, password)
+          : await apiSignup(email, password, householdName || undefined);
       setSession(session);
       navigate(from, { replace: true });
     } catch (err) {
@@ -38,47 +44,34 @@ export function Login() {
     }
   }
 
+  const isLogin = mode === "login";
+
   return (
-    <div
-      className="flex min-h-screen flex-col items-center justify-center px-4"
-      style={{ background: "var(--surface-app)" }}
-    >
-      <div className="w-full max-w-sm">
-        {/* Brand */}
-        <div className="mb-8 flex flex-col items-center gap-4">
-          <img src={rafLogo} alt="RAF" className="brand-logo brand-logo-lg" />
-          <div className="text-center">
-            <p className="text-[22px] font-bold tracking-[-0.02em] text-[var(--text-strong)]">RAF</p>
-            <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-muted)]">Resource Allocation Framework</p>
-          </div>
-        </div>
+    <div className="flex min-h-screen flex-col items-center justify-center px-4" style={{ background: "#f0ece6" }}>
+      <div className="w-full max-w-[360px]">
+        <div className="rounded-[1.75rem] bg-white p-8 shadow-[0_8px_40px_rgba(0,0,0,0.10)]">
 
-        {/* Card */}
-        <div
-          className="rounded-[1.75rem] border border-[var(--border-color)] p-6 shadow-panel"
-          style={{ background: "var(--surface-color)" }}
-        >
-          {/* Tab switcher */}
-          <div className="mb-6 flex gap-1 rounded-[1rem] border border-[var(--border-color)] p-1" style={{ background: "var(--surface-elevated)" }}>
-            {(["login", "signup"] as Tab[]).map((t) => (
-              <button
-                key={t}
-                type="button"
-                className="flex-1 rounded-[0.75rem] py-2 text-sm font-semibold transition duration-150"
-                style={tab === t
-                  ? { background: "var(--surface-color)", color: "var(--text-strong)", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }
-                  : { color: "var(--text-muted)" }}
-                onClick={() => { setTab(t); setError(null); }}
-              >
-                {t === "login" ? "Sign in" : "Create account"}
-              </button>
-            ))}
+          {/* Brand header */}
+          <div className="mb-6 flex flex-col items-center gap-1.5">
+            <div className="flex items-center gap-2">
+              <img src={rafLogo} alt="NOMI" className="h-9 w-9 object-contain" />
+              <span className="text-[20px] font-[900] tracking-[-0.02em] text-[#111]">NOMI</span>
+            </div>
+            <h1 className="mt-2 text-[24px] font-[900] tracking-[-0.03em] text-[#111]">
+              {isLogin ? "Welcome back" : "Create account"}
+            </h1>
+            <p className="text-center text-[13px] text-[#667085]">
+              {isLogin
+                ? <>Sign in to your NOMI account{" "}<span style={{ color: "var(--theme-primary)" }}>to manage your finances.</span></>
+                : "Set up your household to get started."}
+            </p>
           </div>
 
+          {/* Form */}
           <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
-            {tab === "signup" && (
+            {!isLogin && (
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-[var(--text-strong)]">
+                <label className="mb-1.5 block text-[12px] font-[700] text-[#111]">
                   Household name
                 </label>
                 <input
@@ -93,7 +86,7 @@ export function Login() {
             )}
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-[var(--text-strong)]">
+              <label className="mb-1.5 block text-[12px] font-[700] text-[#111]">
                 Email
               </label>
               <input
@@ -109,22 +102,44 @@ export function Login() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-[var(--text-strong)]">
+              <label className="mb-1.5 block text-[12px] font-[700] text-[#111]">
                 Password
               </label>
               <input
                 type="password"
                 className="ui-field"
-                placeholder={tab === "signup" ? "At least 8 characters" : "Your password"}
+                placeholder={isLogin ? "••••••••" : "At least 8 characters"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                autoComplete={tab === "login" ? "current-password" : "new-password"}
+                autoComplete={isLogin ? "current-password" : "new-password"}
               />
             </div>
 
+            {/* Remember me + forgot */}
+            {isLogin && (
+              <div className="flex items-center justify-between">
+                <label className="flex cursor-pointer items-center gap-2 text-[13px] text-[#667085]">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="h-4 w-4 rounded border-[#d4d8d4]"
+                  />
+                  Remember me
+                </label>
+                <button
+                  type="button"
+                  className="text-[13px] font-[700] transition hover:opacity-75"
+                  style={{ color: "var(--theme-primary)" }}
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
+
             {error && (
-              <p className="rounded-[0.75rem] border border-[var(--badge-danger-ring)] bg-[var(--badge-danger-bg)] px-4 py-3 text-sm text-[var(--badge-danger-text)]">
+              <p className="rounded-[0.75rem] border border-[#fecaca] bg-[#fff0f0] px-4 py-3 text-[13px] text-[#c84848]">
                 {error}
               </p>
             )}
@@ -132,20 +147,44 @@ export function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="mt-1 w-full rounded-full bg-[var(--primary-color)] py-2.5 text-sm font-semibold text-[var(--primary-contrast)] shadow-sm transition hover:opacity-90 disabled:opacity-50"
+              className="mt-1 w-full rounded-full py-3 text-[14px] font-[800] text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
+              style={{ background: "var(--theme-primary)" }}
             >
               {loading
-                ? (tab === "login" ? "Signing in…" : "Creating account…")
-                : (tab === "login" ? "Sign in" : "Create account")}
+                ? (isLogin ? "Signing in…" : "Creating account…")
+                : (isLogin ? "Sign in" : "Create account")}
             </button>
           </form>
-        </div>
 
-        <p className="mt-5 text-center text-[12px] text-[var(--text-muted)]">
-          {tab === "login"
-            ? "Don't have an account? Switch to Create account above."
-            : "Already have an account? Switch to Sign in above."}
-        </p>
+          {/* Switch mode */}
+          <p className="mt-5 text-center text-[13px] text-[#667085]">
+            {isLogin ? (
+              <>
+                Don&apos;t have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => switchMode("signup")}
+                  className="font-[800] transition hover:opacity-75"
+                  style={{ color: "var(--theme-primary)" }}
+                >
+                  Create one
+                </button>
+              </>
+            ) : (
+              <>
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => switchMode("login")}
+                  className="font-[800] transition hover:opacity-75"
+                  style={{ color: "var(--theme-primary)" }}
+                >
+                  Sign in
+                </button>
+              </>
+            )}
+          </p>
+        </div>
       </div>
     </div>
   );
