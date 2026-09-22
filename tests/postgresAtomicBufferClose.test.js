@@ -141,6 +141,7 @@ async function seedWorkspaceWithBuffer(label) {
       incomeEntryId: entry.id,
       allocationCategoryId: bufferCatId,
       allocatedAmount: '100.00',
+      allocationPercent: '1.0000',
     }]);
   });
 
