@@ -169,8 +169,8 @@ maybeTest('Postgres RLS blocks cross-workspace reads, writes, joins, and guessed
       `, [invitationB, workspaceB, ownerB]);
       await client.query(`
         INSERT INTO raf.workspace_activity (workspace_id, actor_user_id, action, entity_type, entity_id, metadata)
-        VALUES ($1, $2, 'test.private_action', 'workspace', $1::text, '{}'::jsonb)
-      `, [workspaceB, ownerB]);
+        VALUES ($1, $2, 'test.private_action', 'workspace', $3, '{}'::jsonb)
+      `, [workspaceB, ownerB, String(workspaceB)]);
     });
 
     await asAuthenticated(client, { userId: ownerA, workspaceId: workspaceA }, async () => {
