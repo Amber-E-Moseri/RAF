@@ -87,6 +87,7 @@ jobs:
         run: |
           docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "CREATE ROLE neondb_owner LOGIN PASSWORD 'owner' CREATEROLE CREATEDB BYPASSRLS"
           docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE raf_ci OWNER neondb_owner"
+          docker exec ${{ job.services.postgres.id }} psql -U postgres -d raf_ci -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS auth; CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS \$\$ SELECT NULL::uuid \$\$;"
 
       - name: Run schema migrations
         run: node scripts/migrate.js
@@ -172,6 +173,7 @@ jobs:
         run: |
           docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "CREATE ROLE neondb_owner LOGIN PASSWORD 'owner' CREATEROLE CREATEDB BYPASSRLS"
           docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE raf_ci OWNER neondb_owner"
+          docker exec ${{ job.services.postgres.id }} psql -U postgres -d raf_ci -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS auth; CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS \$\$ SELECT NULL::uuid \$\$;"
 
       - name: Run schema migrations
         run: node scripts/migrate.js
