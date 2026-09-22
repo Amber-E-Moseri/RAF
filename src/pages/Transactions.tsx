@@ -1063,17 +1063,16 @@ export function Transactions() {
       const result = await importBankStatement(selectedImportFile);
       setImportSuccess(`Imported ${result.extracted} row${result.extracted === 1 ? "" : "s"} for review.`);
       setIsImportsExpanded(true);
+      setSelectedImportFile(null);
+      const fileInput = (event.currentTarget?.querySelector('input[type="file"]') as HTMLInputElement | null);
+      if (fileInput) {
+        fileInput.value = "";
+      }
       await reload();
     } catch (requestError) {
       setImportError(requestError instanceof Error ? requestError.message : "Bank statement import failed.");
     } finally {
       setIsImporting(false);
-      setSelectedImportFile(null);
-      // Reset file input element to allow re-uploading the same file
-      const fileInput = (event.currentTarget?.querySelector('input[type="file"]') as HTMLInputElement | null);
-      if (fileInput) {
-        fileInput.value = "";
-      }
     }
   }
 
