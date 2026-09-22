@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, track-c-release-infra]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 env:
   NODE_VERSION: '22'
@@ -84,7 +85,7 @@ jobs:
 
       - name: Create CI owner database
         run: |
-          docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "CREATE ROLE neondb_owner LOGIN PASSWORD 'owner' CREATEROLE CREATEDB"
+          docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "CREATE ROLE neondb_owner LOGIN PASSWORD 'owner' CREATEROLE CREATEDB BYPASSRLS"
           docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE raf_ci OWNER neondb_owner"
 
       - name: Run schema migrations
@@ -95,14 +96,48 @@ jobs:
       - name: Set runtime role password
         run: docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "ALTER ROLE raf_app PASSWORD 'app'"
 
+      - name: Certify role topology (TC-AUD-002 / C-P1.6)
+        run: |
+          docker exec ${{ job.services.postgres.id }} psql -U postgres -d raf_ci -v ON_ERROR_STOP=1 -c "
+            SELECT rolname, rolsuper, rolbypassrls, rolcreaterole
+            FROM pg_roles WHERE rolname IN ('neondb_owner','raf_app') ORDER BY rolname;
+          "
+          docker exec ${{ job.services.postgres.id }} psql -U postgres -d raf_ci -v ON_ERROR_STOP=1 -c "
+            DO \$\$ BEGIN
+              IF NOT (SELECT rolbypassrls FROM pg_roles WHERE rolname = 'neondb_owner') THEN
+                RAISE EXCEPTION 'neondb_owner must have BYPASSRLS (TC-AUD-002)';
+              END IF;
+              IF (SELECT COALESCE(rolbypassrls,false) OR COALESCE(rolsuper,false) OR COALESCE(rolcreaterole,false)
+                  FROM pg_roles WHERE rolname = 'raf_app') THEN
+                RAISE EXCEPTION 'raf_app must be NOBYPASSRLS NOSUPERUSER NOCREATEROLE (C-P1.6)';
+              END IF;
+            END \$\$;
+          "
+          echo "Role topology certified: neondb_owner=BYPASSRLS, raf_app=NOBYPASSRLS NOSUPERUSER NOCREATEROLE"
+
+      - name: Assert contract env vars cannot silently skip (TC-AUD-004)
+        run: |
+          [ -n "$DATABASE_URL" ] || { echo "ERROR: DATABASE_URL not set — contract tests would silently skip"; exit 1; }
+          [ "$RAF_RUN_POSTGRES_RLS_TESTS" = "true" ] || { echo "ERROR: RAF_RUN_POSTGRES_RLS_TESTS != true"; exit 1; }
+          [ "$RAF_CONFIRM_NON_PRODUCTION_DB" = "true" ] || { echo "ERROR: RAF_CONFIRM_NON_PRODUCTION_DB != true"; exit 1; }
+          echo "Contract env vars confirmed — tests cannot silently skip"
+        env:
+          DATABASE_URL: ${{ env.OWNER_DATABASE_URL }}
+          RAF_RUN_POSTGRES_RLS_TESTS: 'true'
+          RAF_CONFIRM_NON_PRODUCTION_DB: 'true'
+
       - name: Run Postgres integration tests
         run: npm test
         env:
           PERSISTENCE_DRIVER: postgres
           POSTGRES_CONNECTION_STRING: ${{ env.OWNER_DATABASE_URL }}
           POSTGRES_CONNECTION_STRING_APP: ${{ env.APP_DATABASE_URL }}
+          DATABASE_URL: ${{ env.OWNER_DATABASE_URL }}
           JWT_SECRET: ${{ env.CI_JWT_SECRET }}
           RAF_AUTH_REQUIRED: 'true'
+          RAF_RUN_POSTGRES_RLS_TESTS: 'true'
+          RAF_CONFIRM_NON_PRODUCTION_DB: 'true'
+          RAF_POSTGRES_SSL: 'false'
 
   rls:
     name: RLS enforcement tests (raf_app)
@@ -135,7 +170,7 @@ jobs:
 
       - name: Create CI owner database
         run: |
-          docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "CREATE ROLE neondb_owner LOGIN PASSWORD 'owner' CREATEROLE CREATEDB"
+          docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "CREATE ROLE neondb_owner LOGIN PASSWORD 'owner' CREATEROLE CREATEDB BYPASSRLS"
           docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE raf_ci OWNER neondb_owner"
 
       - name: Run schema migrations
@@ -146,6 +181,38 @@ jobs:
       - name: Set runtime role password
         run: docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "ALTER ROLE raf_app PASSWORD 'app'"
 
+      - name: Certify role topology (TC-AUD-002 / C-P1.6)
+        run: |
+          docker exec ${{ job.services.postgres.id }} psql -U postgres -d raf_ci -v ON_ERROR_STOP=1 -c "
+            SELECT rolname, rolsuper, rolbypassrls, rolcreaterole
+            FROM pg_roles WHERE rolname IN ('neondb_owner','raf_app') ORDER BY rolname;
+          "
+          docker exec ${{ job.services.postgres.id }} psql -U postgres -d raf_ci -v ON_ERROR_STOP=1 -c "
+            DO \$\$ BEGIN
+              IF NOT (SELECT rolbypassrls FROM pg_roles WHERE rolname = 'neondb_owner') THEN
+                RAISE EXCEPTION 'neondb_owner must have BYPASSRLS (TC-AUD-002)';
+              END IF;
+              IF (SELECT COALESCE(rolbypassrls,false) OR COALESCE(rolsuper,false) OR COALESCE(rolcreaterole,false)
+                  FROM pg_roles WHERE rolname = 'raf_app') THEN
+                RAISE EXCEPTION 'raf_app must be NOBYPASSRLS NOSUPERUSER NOCREATEROLE (C-P1.6)';
+              END IF;
+            END \$\$;
+          "
+          echo "Role topology certified: neondb_owner=BYPASSRLS, raf_app=NOBYPASSRLS NOSUPERUSER NOCREATEROLE"
+
+      - name: Assert RLS contract env vars cannot silently skip (TC-AUD-004)
+        run: |
+          [ -n "$DATABASE_URL" ] || { echo "ERROR: DATABASE_URL not set — RLS tests would silently skip"; exit 1; }
+          [ -n "$POSTGRES_CONNECTION_STRING_APP" ] || { echo "ERROR: POSTGRES_CONNECTION_STRING_APP not set"; exit 1; }
+          [ "$RAF_RUN_POSTGRES_RLS_TESTS" = "true" ] || { echo "ERROR: RAF_RUN_POSTGRES_RLS_TESTS != true"; exit 1; }
+          [ "$RAF_CONFIRM_NON_PRODUCTION_DB" = "true" ] || { echo "ERROR: RAF_CONFIRM_NON_PRODUCTION_DB != true"; exit 1; }
+          echo "RLS contract env vars confirmed — tests cannot silently skip"
+        env:
+          DATABASE_URL: ${{ env.OWNER_DATABASE_URL }}
+          POSTGRES_CONNECTION_STRING_APP: ${{ env.APP_DATABASE_URL }}
+          RAF_RUN_POSTGRES_RLS_TESTS: 'true'
+          RAF_CONFIRM_NON_PRODUCTION_DB: 'true'
+
       - name: Run RLS enforcement tests via raf_app role
         run: node --test tests/branchERlsEnforcement.test.js
         env:
@@ -153,6 +220,7 @@ jobs:
           POSTGRES_CONNECTION_STRING_APP: ${{ env.APP_DATABASE_URL }}
           RAF_RUN_POSTGRES_RLS_TESTS: 'true'
           RAF_CONFIRM_NON_PRODUCTION_DB: 'true'
+          RAF_POSTGRES_SSL: 'false'
 
   lint:
     name: Lint
