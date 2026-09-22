@@ -69,14 +69,15 @@ after(async () => {
 function uuid() { return crypto.randomUUID(); }
 
 /**
- * Returns an app-role db whose transaction() injects workspaceId into the
+ * Returns an app-role db whose transaction() injects workspaceId + userId into the
  * security context. This mirrors what withSecurityContext() does in routerLoader.js
- * for production route handlers.
+ * for production route handlers. Both are required: RLS has_workspace_membership()
+ * checks raf.user_id AND raf.workspace_id.
  */
-function withSecurity(db, workspaceId) {
+function withSecurity(db, workspaceId, userId) {
   return {
     ...db,
-    transaction: (callback) => db.transaction(callback, { workspaceId }),
+    transaction: (callback) => db.transaction(callback, { workspaceId, userId }),
   };
 }
 
@@ -99,9 +100,12 @@ function withInjectFailAtClose(db) {
 }
 
 /**
- * Seeds a disposable workspace and returns the ownerDb + householdId.
+ * Seeds a disposable workspace and returns ownerDb + householdId + ownerUserId.
  * The buffer allocation category is seeded with $100 income → $0 spent,
  * so remainingCents = 100_00.
+ *
+ * A workspace_members record is created for ownerUserId so that the raf_app role
+ * can satisfy has_workspace_membership() when running closeMonth with security context.
  *
  * Caller must call ownerDb.close() when done.
  */
@@ -112,10 +116,14 @@ async function seedWorkspaceWithBuffer(label) {
 
   let workspace;
   let bufferCatId;
+  let savingsCatId;
 
   await ownerDb.transaction(async (tx) => {
     await tx.createUser({ id: ownerUserId, email: `${label.replace(/[^a-z0-9]/gi, '-')}@test.test`, passwordHash: 'test-hash' });
     workspace = await tx.createWorkspace({ ownerUserId, name: `Test ${label}` });
+    // Create workspace membership so raf_app role passes has_workspace_membership() RLS check.
+    // The production flow always creates a member record (createWorkspace does not do this).
+    await tx.createWorkspaceMember({ workspaceId: workspace.id, userId: ownerUserId, role: 'owner', status: 'active' });
   });
 
   const householdId = workspace.id;
@@ -124,6 +132,7 @@ async function seedWorkspaceWithBuffer(label) {
     const cats = await tx.listAllocationCategories({ householdId, asOf: period });
     const buf = cats.find((c) => c.isBuffer === true && c.isActive !== false);
     bufferCatId = buf?.id ?? null;
+    savingsCatId = cats.find((c) => c.slug === 'savings')?.id ?? null;
   });
 
   if (!bufferCatId) throw new Error(`No buffer category for workspace ${householdId}`);
@@ -145,7 +154,7 @@ async function seedWorkspaceWithBuffer(label) {
     }]);
   });
 
-  return { householdId, bufferCatId, period, ownerDb };
+  return { householdId, bufferCatId, savingsCatId, period, ownerDb, ownerUserId };
 }
 
 // ── Phase C: Role & version ───────────────────────────────────────────────────
@@ -172,17 +181,17 @@ maybeTest('C-PG-0: Record PostgreSQL version and raf_app role posture', async ()
 // ── Phase D: Goal commit ──────────────────────────────────────────────────────
 
 maybeTest('C-PG-1: Goal disposition commits atomically with month close', async () => {
-  const { householdId, period, ownerDb } = await seedWorkspaceWithBuffer('pg-goal-commit');
+  const { householdId, savingsCatId, period, ownerDb, ownerUserId } = await seedWorkspaceWithBuffer('pg-goal-commit');
   let goalId;
   try {
     // Seed goal using owner connection
     await ownerDb.transaction(async (tx) => {
-      const g = await tx.insertGoal({ householdId, name: 'Vacation', targetAmount: '2000.00', active: true });
+      const g = await tx.insertGoal({ householdId, name: 'Vacation', targetAmount: '2000.00', active: true, bucketId: savingsCatId });
       goalId = g.id;
     });
 
     // Close using app role + security context — no client-supplied amount
-    const securedDb = withSecurity(appDb, householdId);
+    const securedDb = withSecurity(appDb, householdId, ownerUserId);
     const result = await closeMonth({
       db: securedDb,
       householdId,
@@ -228,17 +237,17 @@ maybeTest('C-PG-1: Goal disposition commits atomically with month close', async 
 // ── Phase D: Goal rollback ────────────────────────────────────────────────────
 
 maybeTest('C-PG-2: Goal disposition rolls back atomically when close persistence fails', async () => {
-  const { householdId, period, ownerDb } = await seedWorkspaceWithBuffer('pg-goal-rollback');
+  const { householdId, savingsCatId, period, ownerDb, ownerUserId } = await seedWorkspaceWithBuffer('pg-goal-rollback');
   let goalId;
   try {
     await ownerDb.transaction(async (tx) => {
-      const g = await tx.insertGoal({ householdId, name: 'Vacation', targetAmount: '2000.00', active: true });
+      const g = await tx.insertGoal({ householdId, name: 'Vacation', targetAmount: '2000.00', active: true, bucketId: savingsCatId });
       goalId = g.id;
     });
 
     // Failure injection: insertMonthClose throws AFTER financial write
     // createPostgresDb.transaction() catch block issues real PostgreSQL ROLLBACK
-    const failDb = withInjectFailAtClose(withSecurity(appDb, householdId));
+    const failDb = withInjectFailAtClose(withSecurity(appDb, householdId, ownerUserId));
     const err = await closeMonth({
       db: failDb,
       householdId,
@@ -275,7 +284,7 @@ maybeTest('C-PG-2: Goal disposition rolls back atomically when close persistence
     }
 
     // Verify month remains open via application path
-    const securedDb = withSecurity(appDb, householdId);
+    const securedDb = withSecurity(appDb, householdId, ownerUserId);
     const state = await getMonthLifecycleState({ db: securedDb, householdId, period });
     assert.strictEqual(state.state, LifecycleState.OPEN, 'Month must remain OPEN after rollback');
 
@@ -315,7 +324,7 @@ maybeTest('C-PG-2: Goal disposition rolls back atomically when close persistence
 // ── Phase E: Debt commit ──────────────────────────────────────────────────────
 
 maybeTest('C-PG-3: Debt disposition commits atomically with month close', async () => {
-  const { householdId, period, ownerDb } = await seedWorkspaceWithBuffer('pg-debt-commit');
+  const { householdId, period, ownerDb, ownerUserId } = await seedWorkspaceWithBuffer('pg-debt-commit');
   let debtId;
   try {
     await ownerDb.transaction(async (tx) => {
@@ -323,7 +332,7 @@ maybeTest('C-PG-3: Debt disposition commits atomically with month close', async 
       debtId = d.id;
     });
 
-    const securedDb = withSecurity(appDb, householdId);
+    const securedDb = withSecurity(appDb, householdId, ownerUserId);
     const result = await closeMonth({
       db: securedDb,
       householdId,
@@ -371,7 +380,7 @@ maybeTest('C-PG-3: Debt disposition commits atomically with month close', async 
 // ── Phase E: Debt rollback ────────────────────────────────────────────────────
 
 maybeTest('C-PG-4: Debt disposition + payment roll back when close persistence fails', async () => {
-  const { householdId, period, ownerDb } = await seedWorkspaceWithBuffer('pg-debt-rollback');
+  const { householdId, period, ownerDb, ownerUserId } = await seedWorkspaceWithBuffer('pg-debt-rollback');
   let debtId;
   try {
     await ownerDb.transaction(async (tx) => {
@@ -379,7 +388,7 @@ maybeTest('C-PG-4: Debt disposition + payment roll back when close persistence f
       debtId = d.id;
     });
 
-    const failDb = withInjectFailAtClose(withSecurity(appDb, householdId));
+    const failDb = withInjectFailAtClose(withSecurity(appDb, householdId, ownerUserId));
     const err = await closeMonth({
       db: failDb,
       householdId,
@@ -415,7 +424,7 @@ maybeTest('C-PG-4: Debt disposition + payment roll back when close persistence f
       client.release();
     }
 
-    const securedDb = withSecurity(appDb, householdId);
+    const securedDb = withSecurity(appDb, householdId, ownerUserId);
     const state = await getMonthLifecycleState({ db: securedDb, householdId, period });
     assert.strictEqual(state.state, LifecycleState.OPEN, 'Month remains OPEN after rollback');
 
@@ -454,9 +463,9 @@ maybeTest('C-PG-4: Debt disposition + payment roll back when close persistence f
 // ── Phase F: return_to_plan ───────────────────────────────────────────────────
 
 maybeTest('C-PG-5: return_to_plan is metadata-only — no financial transaction created', async () => {
-  const { householdId, period, ownerDb } = await seedWorkspaceWithBuffer('pg-return-to-plan');
+  const { householdId, period, ownerDb, ownerUserId } = await seedWorkspaceWithBuffer('pg-return-to-plan');
   try {
-    const securedDb = withSecurity(appDb, householdId);
+    const securedDb = withSecurity(appDb, householdId, ownerUserId);
     const result = await closeMonth({
       db: securedDb,
       householdId,
@@ -499,21 +508,26 @@ maybeTest('C-PG-5: return_to_plan is metadata-only — no financial transaction 
 // ── Phase G: Cross-workspace security ────────────────────────────────────────
 
 maybeTest('C-PG-6: WS_A month cannot dispose to WS_B goal (cross-workspace rejection)', async () => {
-  const { householdId: wsA, period, ownerDb: ownerDbA } = await seedWorkspaceWithBuffer('pg-xws-goal-a');
+  const { householdId: wsA, period, ownerDb: ownerDbA, ownerUserId: ownerUserIdA } = await seedWorkspaceWithBuffer('pg-xws-goal-a');
   const ownerDbB = createPostgresDb({ connectionString: ownerUrl, ssl: ssl === false ? false : true });
   let wsBId;
   let foreignGoalId;
   try {
     // Create workspace B with a goal
     await ownerDbB.transaction(async (tx) => {
-      const ws = await tx.createWorkspace({ ownerUserId: uuid(), name: 'Test WS-B-Goal' });
+      const ownerUserIdB = uuid();
+      await tx.createUser({ id: ownerUserIdB, email: 'xws-goal-b@test.test', passwordHash: 'test-hash' });
+      const ws = await tx.createWorkspace({ ownerUserId: ownerUserIdB, name: 'Test WS-B-Goal' });
       wsBId = ws.id;
-      const g = await tx.insertGoal({ householdId: wsBId, name: 'Foreign Goal', targetAmount: '500.00', active: true });
+      await tx.createWorkspaceMember({ workspaceId: wsBId, userId: ownerUserIdB, role: 'owner', status: 'active' });
+      const cats = await tx.listAllocationCategories({ householdId: wsBId, asOf: period });
+      const savingsCat = cats.find((c) => c.slug === 'savings');
+      const g = await tx.insertGoal({ householdId: wsBId, name: 'Foreign Goal', targetAmount: '500.00', active: true, bucketId: savingsCat?.id ?? null });
       foreignGoalId = g.id;
     });
 
     // Attempt: WS_A close using WS_B goal — must be rejected
-    const securedDbA = withSecurity(appDb, wsA);
+    const securedDbA = withSecurity(appDb, wsA, ownerUserIdA);
     const err = await closeMonth({
       db: securedDbA,
       householdId: wsA,
@@ -526,7 +540,7 @@ maybeTest('C-PG-6: WS_A month cannot dispose to WS_B goal (cross-workspace rejec
     assert.strictEqual(err.status, 422, 'Must reject with 422');
 
     // WS_A month remains open
-    const stateA = await getMonthLifecycleState({ db: securedDbA, householdId: wsA, period });
+    const stateA = await getMonthLifecycleState({ db: withSecurity(appDb, wsA, ownerUserIdA), householdId: wsA, period });
     assert.strictEqual(stateA.state, LifecycleState.OPEN, 'WS_A month remains OPEN after cross-workspace rejection');
 
     // No financial mutation in either workspace
@@ -553,14 +567,17 @@ maybeTest('C-PG-6: WS_A month cannot dispose to WS_B goal (cross-workspace rejec
 });
 
 maybeTest('C-PG-7: WS_A month cannot dispose to WS_B debt (cross-workspace rejection)', async () => {
-  const { householdId: wsA, period, ownerDb: ownerDbA } = await seedWorkspaceWithBuffer('pg-xws-debt-a');
+  const { householdId: wsA, period, ownerDb: ownerDbA, ownerUserId: ownerUserIdA } = await seedWorkspaceWithBuffer('pg-xws-debt-a');
   const ownerDbB = createPostgresDb({ connectionString: ownerUrl, ssl: ssl === false ? false : true });
   let wsBId;
   let foreignDebtId;
   try {
     await ownerDbB.transaction(async (tx) => {
-      const ws = await tx.createWorkspace({ ownerUserId: uuid(), name: 'Test WS-B-Debt' });
+      const ownerUserIdB = uuid();
+      await tx.createUser({ id: ownerUserIdB, email: 'xws-debt-b@test.test', passwordHash: 'test-hash' });
+      const ws = await tx.createWorkspace({ ownerUserId: ownerUserIdB, name: 'Test WS-B-Debt' });
       wsBId = ws.id;
+      await tx.createWorkspaceMember({ workspaceId: wsBId, userId: ownerUserIdB, role: 'owner', status: 'active' });
       const d = await tx.insertDebt({
         householdId: wsBId,
         name: 'Foreign Debt',
@@ -570,7 +587,7 @@ maybeTest('C-PG-7: WS_A month cannot dispose to WS_B debt (cross-workspace rejec
       foreignDebtId = d.id;
     });
 
-    const securedDbA = withSecurity(appDb, wsA);
+    const securedDbA = withSecurity(appDb, wsA, ownerUserIdA);
     const err = await closeMonth({
       db: securedDbA,
       householdId: wsA,
@@ -582,7 +599,7 @@ maybeTest('C-PG-7: WS_A month cannot dispose to WS_B debt (cross-workspace rejec
     assert.ok(err instanceof MonthlyReviewHttpError);
     assert.strictEqual(err.status, 422);
 
-    const stateA = await getMonthLifecycleState({ db: securedDbA, householdId: wsA, period });
+    const stateA = await getMonthLifecycleState({ db: withSecurity(appDb, wsA, ownerUserIdA), householdId: wsA, period });
     assert.strictEqual(stateA.state, LifecycleState.OPEN, 'WS_A remains OPEN');
 
     const client = await ownerPool.connect();
@@ -610,15 +627,15 @@ maybeTest('C-PG-7: WS_A month cannot dispose to WS_B debt (cross-workspace rejec
 // ── Phase H: Server amount authority ─────────────────────────────────────────
 
 maybeTest('C-PG-8: Client-supplied amount is ignored — server derives $100 from authoritative buffer', async () => {
-  const { householdId, period, ownerDb } = await seedWorkspaceWithBuffer('pg-srv-amount');
+  const { householdId, savingsCatId, period, ownerDb, ownerUserId } = await seedWorkspaceWithBuffer('pg-srv-amount');
   let goalId;
   try {
     await ownerDb.transaction(async (tx) => {
-      const g = await tx.insertGoal({ householdId, name: 'Test Goal', targetAmount: '5000.00', active: true });
+      const g = await tx.insertGoal({ householdId, name: 'Test Goal', targetAmount: '5000.00', active: true, bucketId: savingsCatId });
       goalId = g.id;
     });
 
-    const securedDb = withSecurity(appDb, householdId);
+    const securedDb = withSecurity(appDb, householdId, ownerUserId);
 
     // Client attempts to send amount=$500 — but BufferDispositionCommand has no amount field
     // and closeMonth ignores it; server derives $100 from authoritative state
