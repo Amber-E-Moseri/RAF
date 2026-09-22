@@ -867,3 +867,18 @@ test('C.perm6 — cross-workspace close attempt is rejected (no householdId in c
   // Without a householdId, the service will throw a 400 (householdId required)
   assert.ok(res.status === 400 || res.status === 403 || res.status === 500, 'missing workspace context is rejected');
 });
+
+// ─── Section 10: Readiness / close buffer authority parity ───────────────────
+
+test('AT.14 — close-readiness bufferRemaining matches close authority', async () => {
+  const { db, hh } = await makDbWithBuffer('_at14', '500.00', '100.00');
+  const readiness = await getCloseReadiness({ db, householdId: hh, period: PERIOD });
+  assert.strictEqual(readiness.summary.bufferRemaining, '400.00',
+    'readiness must report $400 (allocated 500 - spent 100)');
+  const result = await closeMonth({ db, householdId: hh, period: PERIOD, userId: 'u1' });
+  assert.strictEqual(
+    result.snapshot.buffer?.remaining,
+    readiness.summary.bufferRemaining,
+    'displayed bufferRemaining equals authoritative close buffer',
+  );
+});
