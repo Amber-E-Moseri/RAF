@@ -8,6 +8,8 @@ import { AuthProvider } from "./context/AuthContext";
 import { PlanProvider } from "./context/PlanContext";
 import { AcceptInvitation } from "./pages/AcceptInvitation";
 import { Accounts } from "./pages/Accounts";
+import { ForgotPassword } from "./pages/ForgotPassword";
+import { ResetPassword } from "./pages/ResetPassword";
 import { AddIncome } from "./pages/AddIncome";
 import { AllocationPreferences } from "./pages/AllocationPreferences";
 import { Dashboard } from "./pages/Dashboard";
@@ -36,6 +38,8 @@ export default function App() {
             <BrowserRouter>
               <Routes>
                 <Route path="/login" element={<Login />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/invite/:token" element={<AcceptInvitation />} />
                 <Route
                   path="/"
