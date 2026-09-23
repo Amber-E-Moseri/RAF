@@ -85,49 +85,51 @@ maybeTest('PG-MIG-1: historical hole (M2 UNEXPECTED_HISTORICAL) fails before DDL
       });
       await testClient.connect();
 
-      let thrownError = null;
       try {
-        await applyMigrations({
-          client: testClient,
-          migrationsDir: tmpDir,
-          ledgerSchema: schemaName,
-          logger: { log: () => {} },
-        });
-      } catch (err) {
-        thrownError = err;
+        let thrownError = null;
+        try {
+          await applyMigrations({
+            client: testClient,
+            migrationsDir: tmpDir,
+            ledgerSchema: schemaName,
+            logger: { log: () => {} },
+          });
+        } catch (err) {
+          thrownError = err;
+        }
+
+        assert.ok(
+          thrownError && thrownError.message.includes('Unexpected historical migrations'),
+          'Should throw on unexpected historical (M2)',
+        );
+
+        // Verify no DDL was executed
+        const { rows: m2Check } = await client.query(
+          `SELECT EXISTS(SELECT 1 FROM information_schema.tables
+           WHERE table_schema = $1 AND table_name = 'sentinel_m2') AS exists`,
+          [schemaName],
+        );
+        assert.equal(m2Check[0].exists, false, 'M2 sentinel must not exist');
+
+        const { rows: m4Check } = await client.query(
+          `SELECT EXISTS(SELECT 1 FROM information_schema.tables
+           WHERE table_schema = $1 AND table_name = 'sentinel_m4') AS exists`,
+          [schemaName],
+        );
+        assert.equal(m4Check[0].exists, false, 'M4 sentinel must not exist');
+
+        // Verify ledger unchanged
+        const { rows: ledgerRows } = await client.query(
+          `SELECT filename FROM ${schemaName}.schema_migrations ORDER BY filename`,
+        );
+        assert.deepEqual(
+          ledgerRows.map((r) => r.filename),
+          ['20000101000000_m1.sql', '20000101000002_m3.sql'],
+          'Ledger must remain unchanged',
+        );
+      } finally {
+        await testClient.end();
       }
-
-      assert.ok(
-        thrownError && thrownError.message.includes('Unexpected historical migrations'),
-        'Should throw on unexpected historical (M2)',
-      );
-
-      // Verify no DDL was executed
-      const { rows: m2Check } = await client.query(
-        `SELECT EXISTS(SELECT 1 FROM information_schema.tables
-         WHERE table_schema = $1 AND table_name = 'sentinel_m2') AS exists`,
-        [schemaName],
-      );
-      assert.equal(m2Check[0].exists, false, 'M2 sentinel must not exist');
-
-      const { rows: m4Check } = await client.query(
-        `SELECT EXISTS(SELECT 1 FROM information_schema.tables
-         WHERE table_schema = $1 AND table_name = 'sentinel_m4') AS exists`,
-        [schemaName],
-      );
-      assert.equal(m4Check[0].exists, false, 'M4 sentinel must not exist');
-
-      // Verify ledger unchanged
-      const { rows: ledgerRows } = await client.query(
-        `SELECT filename FROM ${schemaName}.schema_migrations ORDER BY filename`,
-      );
-      assert.deepEqual(
-        ledgerRows.map((r) => r.filename),
-        ['20000101000000_m1.sql', '20000101000002_m3.sql'],
-        'Ledger must remain unchanged',
-      );
-
-      await testClient.end();
     } finally {
       await fs.rm(tmpDir, { recursive: true, force: true });
     }
@@ -176,42 +178,44 @@ maybeTest('PG-MIG-2: check mode does not mutate database or ledger', async () =>
       });
       await testClient.connect();
 
-      const result = await applyMigrations({
-        client: testClient,
-        migrationsDir: tmpDir,
-        ledgerSchema: schemaName,
-        logger: { log: () => {} },
-        checkMode: true,
-      });
+      try {
+        const result = await applyMigrations({
+          client: testClient,
+          migrationsDir: tmpDir,
+          ledgerSchema: schemaName,
+          logger: { log: () => {} },
+          checkMode: true,
+        });
 
-      assert.equal(result.ok, false, 'Check mode should report not-ok due to unexpected historical');
+        assert.equal(result.ok, false, 'Check mode should report not-ok due to unexpected historical');
 
-      // Verify no DDL executed
-      const { rows: m2Check } = await client.query(
-        `SELECT EXISTS(SELECT 1 FROM information_schema.tables
-         WHERE table_schema = $1 AND table_name = 'sentinel_m2') AS exists`,
-        [schemaName],
-      );
-      assert.equal(m2Check[0].exists, false, 'M2 sentinel must not exist (check mode)');
+        // Verify no DDL executed
+        const { rows: m2Check } = await client.query(
+          `SELECT EXISTS(SELECT 1 FROM information_schema.tables
+           WHERE table_schema = $1 AND table_name = 'sentinel_m2') AS exists`,
+          [schemaName],
+        );
+        assert.equal(m2Check[0].exists, false, 'M2 sentinel must not exist (check mode)');
 
-      const { rows: m4Check } = await client.query(
-        `SELECT EXISTS(SELECT 1 FROM information_schema.tables
-         WHERE table_schema = $1 AND table_name = 'sentinel_m4') AS exists`,
-        [schemaName],
-      );
-      assert.equal(m4Check[0].exists, false, 'M4 sentinel must not exist (check mode)');
+        const { rows: m4Check } = await client.query(
+          `SELECT EXISTS(SELECT 1 FROM information_schema.tables
+           WHERE table_schema = $1 AND table_name = 'sentinel_m4') AS exists`,
+          [schemaName],
+        );
+        assert.equal(m4Check[0].exists, false, 'M4 sentinel must not exist (check mode)');
 
-      // Verify ledger unchanged
-      const { rows: ledgerRows } = await client.query(
-        `SELECT filename FROM ${schemaName}.schema_migrations ORDER BY filename`,
-      );
-      assert.deepEqual(
-        ledgerRows.map((r) => r.filename),
-        ['20000101000000_m1.sql', '20000101000002_m3.sql'],
-        'Ledger must remain unchanged (check mode)',
-      );
-
-      await testClient.end();
+        // Verify ledger unchanged
+        const { rows: ledgerRows } = await client.query(
+          `SELECT filename FROM ${schemaName}.schema_migrations ORDER BY filename`,
+        );
+        assert.deepEqual(
+          ledgerRows.map((r) => r.filename),
+          ['20000101000000_m1.sql', '20000101000002_m3.sql'],
+          'Ledger must remain unchanged (check mode)',
+        );
+      } finally {
+        await testClient.end();
+      }
     } finally {
       await fs.rm(tmpDir, { recursive: true, force: true });
     }
@@ -262,41 +266,44 @@ maybeTest('PG-MIG-3: clean incremental migration applies exactly once', async ()
       });
       await testClient.connect();
 
-      // First run
-      const result1 = await applyMigrations({
-        client: testClient,
-        migrationsDir: tmpDir,
-        ledgerSchema: schemaName,
-        logger: { log: () => {} },
-      });
-      assert.equal(result1.applied, 1, 'First run should apply 1 migration');
+      try {
+        // First run
+        const result1 = await applyMigrations({
+          client: testClient,
+          migrationsDir: tmpDir,
+          ledgerSchema: schemaName,
+          logger: { log: () => {} },
+        });
+        assert.equal(result1.applied, 1, 'First run should apply 1 migration');
 
-      const { rows: countAfterFirst } = await client.query(
-        `SELECT COUNT(*) FROM ${schemaName}.m4_counter`,
-      );
-      assert.equal(countAfterFirst[0].count, 2, 'M4 should have executed once (1 + 1)');
+        const { rows: countAfterFirst } = await client.query(
+          `SELECT COUNT(*) FROM ${schemaName}.m4_counter`,
+        );
+        // COUNT(*) returns bigint which node-postgres serializes as string
+        assert.equal(Number(countAfterFirst[0].count), 2, 'M4 should have executed once (1 + 1)');
 
-      // Second run
-      const result2 = await applyMigrations({
-        client: testClient,
-        migrationsDir: tmpDir,
-        ledgerSchema: schemaName,
-        logger: { log: () => {} },
-      });
-      assert.equal(result2.applied, 0, 'Second run should apply 0 migrations');
+        // Second run
+        const result2 = await applyMigrations({
+          client: testClient,
+          migrationsDir: tmpDir,
+          ledgerSchema: schemaName,
+          logger: { log: () => {} },
+        });
+        assert.equal(result2.applied, 0, 'Second run should apply 0 migrations');
 
-      const { rows: countAfterSecond } = await client.query(
-        `SELECT COUNT(*) FROM ${schemaName}.m4_counter`,
-      );
-      assert.equal(countAfterSecond[0].count, 2, 'M4 count must remain 2 (not 3)');
+        const { rows: countAfterSecond } = await client.query(
+          `SELECT COUNT(*) FROM ${schemaName}.m4_counter`,
+        );
+        assert.equal(Number(countAfterSecond[0].count), 2, 'M4 count must remain 2 (not 3)');
 
-      // Verify ledger has M4 exactly once
-      const { rows: ledgerRows } = await client.query(
-        `SELECT filename FROM ${schemaName}.schema_migrations WHERE filename LIKE '%m4%'`,
-      );
-      assert.equal(ledgerRows.length, 1, 'M4 must appear in ledger exactly once');
-
-      await testClient.end();
+        // Verify ledger has M4 exactly once
+        const { rows: ledgerRows } = await client.query(
+          `SELECT filename FROM ${schemaName}.schema_migrations WHERE filename LIKE '%m4%'`,
+        );
+        assert.equal(ledgerRows.length, 1, 'M4 must appear in ledger exactly once');
+      } finally {
+        await testClient.end();
+      }
     } finally {
       await fs.rm(tmpDir, { recursive: true, force: true });
     }
@@ -343,33 +350,35 @@ maybeTest('PG-MIG-4: LEDGER_ONLY migration detected and normal mode fails', asyn
       });
       await testClient.connect();
 
-      // Normal mode should fail (LEDGER_ONLY phantom.sql)
-      let thrownError = null;
       try {
-        await applyMigrations({
-          client: testClient,
-          migrationsDir: tmpDir,
-          ledgerSchema: schemaName,
-          logger: { log: () => {} },
-        });
-      } catch (err) {
-        thrownError = err;
+        // Normal mode should fail (LEDGER_ONLY phantom.sql)
+        let thrownError = null;
+        try {
+          await applyMigrations({
+            client: testClient,
+            migrationsDir: tmpDir,
+            ledgerSchema: schemaName,
+            logger: { log: () => {} },
+          });
+        } catch (err) {
+          thrownError = err;
+        }
+
+        assert.ok(
+          thrownError && thrownError.message.includes('missing from db/migrations'),
+          'Should throw on LEDGER_ONLY (phantom.sql)',
+        );
+
+        // Verify no new DDL
+        const { rows: m2Check } = await client.query(
+          `SELECT EXISTS(SELECT 1 FROM information_schema.tables
+           WHERE table_schema = $1 AND table_name = 'm2_table') AS exists`,
+          [schemaName],
+        );
+        assert.equal(m2Check[0].exists, false, 'M2 must not execute when LEDGER_ONLY blocks');
+      } finally {
+        await testClient.end();
       }
-
-      assert.ok(
-        thrownError && thrownError.message.includes('missing from db/migrations'),
-        'Should throw on LEDGER_ONLY (phantom.sql)',
-      );
-
-      // Verify no new DDL
-      const { rows: m2Check } = await client.query(
-        `SELECT EXISTS(SELECT 1 FROM information_schema.tables
-         WHERE table_schema = $1 AND table_name = 'm2_table') AS exists`,
-        [schemaName],
-      );
-      assert.equal(m2Check[0].exists, false, 'M2 must not execute when LEDGER_ONLY blocks');
-
-      await testClient.end();
     } finally {
       await fs.rm(tmpDir, { recursive: true, force: true });
     }
@@ -410,39 +419,41 @@ maybeTest('PG-MIG-5: empty ledger fails closed before migration execution', asyn
       });
       await testClient.connect();
 
-      // Normal mode against empty ledger should fail
-      let thrownError = null;
       try {
-        await applyMigrations({
-          client: testClient,
-          migrationsDir: tmpDir,
-          ledgerSchema: schemaName,
-          logger: { log: () => {} },
-        });
-      } catch (err) {
-        thrownError = err;
+        // Normal mode against empty ledger should fail
+        let thrownError = null;
+        try {
+          await applyMigrations({
+            client: testClient,
+            migrationsDir: tmpDir,
+            ledgerSchema: schemaName,
+            logger: { log: () => {} },
+          });
+        } catch (err) {
+          thrownError = err;
+        }
+
+        assert.ok(
+          thrownError && thrownError.message.includes('Fresh database'),
+          'Should throw on empty ledger',
+        );
+
+        // Verify no DDL executed
+        const { rows: m1Check } = await client.query(
+          `SELECT EXISTS(SELECT 1 FROM information_schema.tables
+           WHERE table_schema = $1 AND table_name = 'sentinel_m1') AS exists`,
+          [schemaName],
+        );
+        assert.equal(m1Check[0].exists, false, 'M1 sentinel must not exist');
+
+        // Verify ledger remains empty (COUNT(*) returns bigint as string in node-postgres)
+        const { rows: ledgerRows } = await client.query(
+          `SELECT COUNT(*) FROM ${schemaName}.schema_migrations`,
+        );
+        assert.equal(Number(ledgerRows[0].count), 0, 'Ledger must remain empty');
+      } finally {
+        await testClient.end();
       }
-
-      assert.ok(
-        thrownError && thrownError.message.includes('Fresh database'),
-        'Should throw on empty ledger',
-      );
-
-      // Verify no DDL executed
-      const { rows: m1Check } = await client.query(
-        `SELECT EXISTS(SELECT 1 FROM information_schema.tables
-         WHERE table_schema = $1 AND table_name = 'sentinel_m1') AS exists`,
-        [schemaName],
-      );
-      assert.equal(m1Check[0].exists, false, 'M1 sentinel must not exist');
-
-      // Verify ledger remains empty
-      const { rows: ledgerRows } = await client.query(
-        `SELECT COUNT(*) FROM ${schemaName}.schema_migrations`,
-      );
-      assert.equal(ledgerRows[0].count, 0, 'Ledger must remain empty');
-
-      await testClient.end();
     } finally {
       await fs.rm(tmpDir, { recursive: true, force: true });
     }
