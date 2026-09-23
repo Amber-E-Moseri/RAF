@@ -2,6 +2,7 @@
 // Run raf-schema migrations against the configured Postgres database.
 // Usage: node scripts/migrate.js
 
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -10,6 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultMigrationsDir = path.join(scriptDir, '../db/migrations');
 const envPath = path.join(scriptDir, '../.env');
+export const SUPERSESSION_RECORD_PATH = path.join(scriptDir, '../db/migration-supersessions.json');
 
 export const MIGRATION_FILENAME_RE = /^\d{14}_[a-z0-9_]+\.sql$/;
 
@@ -54,6 +56,93 @@ export async function discoverMigrations(migrationsDir = defaultMigrationsDir) {
   return filenames;
 }
 
+const SUPPORTED_SUPERSEDED_LEDGER_STATES = new Set(['absent']);
+const SUPERSESSION_ENTRY_KEYS = ['filename', 'sha256', 'expectedLedgerState', 'supersededBy', 'reason'];
+
+// SHA-256 of migration content with line endings normalised to LF, so the pinned hash
+// matches the committed bytes on checkouts that rewrite line endings (e.g. core.autocrlf).
+export function hashMigrationContent(content) {
+  const text = Buffer.isBuffer(content) ? content.toString('utf8') : String(content);
+  return createHash('sha256').update(text.replace(/\r\n/g, '\n'), 'utf8').digest('hex');
+}
+
+// Loads and strictly validates the supersession record. A superseded migration is retained
+// in db/migrations but intentionally not part of the production migration chain. Matching is
+// by exact filename only: no patterns, ranges, or wildcards.
+export async function loadSupersessions({
+  recordPath = SUPERSESSION_RECORD_PATH,
+  migrationsDir = defaultMigrationsDir,
+  discovered,
+} = {}) {
+  const discoveredSet = new Set(discovered ?? (await discoverMigrations(migrationsDir)));
+
+  let record;
+  try {
+    record = JSON.parse(await fs.readFile(recordPath, 'utf8'));
+  } catch (err) {
+    throw new Error(`Supersession record unreadable (${recordPath}): ${err.message}`);
+  }
+  if (!record || typeof record !== 'object' || !Array.isArray(record.supersessions)) {
+    throw new Error('Supersession record must be an object with a "supersessions" array');
+  }
+
+  const seen = new Set();
+  const entries = [];
+  for (const entry of record.supersessions) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new Error('Supersession entry must be an object');
+    }
+    const { filename } = entry;
+    const label = `Supersession entry ${JSON.stringify(filename)}`;
+
+    const unknownKeys = Object.keys(entry).filter((key) => !SUPERSESSION_ENTRY_KEYS.includes(key));
+    if (unknownKeys.length > 0) throw new Error(`${label}: unsupported field(s): ${unknownKeys.join(', ')}`);
+    if (typeof filename !== 'string' || !MIGRATION_FILENAME_RE.test(filename)) {
+      throw new Error(`${label}: filename must be an exact migration filename (no patterns or ranges)`);
+    }
+    if (seen.has(filename)) throw new Error(`${label}: duplicate supersession entry`);
+    seen.add(filename);
+    if (!discoveredSet.has(filename)) {
+      throw new Error(`${label}: superseded migration does not exist in db/migrations`);
+    }
+    if (!SUPPORTED_SUPERSEDED_LEDGER_STATES.has(entry.expectedLedgerState)) {
+      throw new Error(`${label}: unsupported expectedLedgerState ${JSON.stringify(entry.expectedLedgerState)}`);
+    }
+    if (typeof entry.reason !== 'string' || entry.reason.trim() === '') {
+      throw new Error(`${label}: reason is required`);
+    }
+    if (
+      !Array.isArray(entry.supersededBy) ||
+      entry.supersededBy.length === 0 ||
+      entry.supersededBy.some((name) => typeof name !== 'string' || !discoveredSet.has(name) || name === filename)
+    ) {
+      throw new Error(`${label}: supersededBy must list existing migrations other than itself`);
+    }
+    if (typeof entry.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(entry.sha256)) {
+      throw new Error(`${label}: sha256 must be a lowercase hex SHA-256`);
+    }
+    const actual = hashMigrationContent(await fs.readFile(path.join(migrationsDir, filename)));
+    if (actual !== entry.sha256) {
+      throw new Error(`${label}: SHA-256 mismatch (declared ${entry.sha256}, actual ${actual})`);
+    }
+    entries.push(entry);
+  }
+  return entries;
+}
+
+export function assertSupersededNotLedgered(applied, supersessions) {
+  const appliedSet = new Set(applied);
+  const ledgered = supersessions
+    .filter((entry) => entry.expectedLedgerState === 'absent' && appliedSet.has(entry.filename))
+    .map((entry) => entry.filename);
+  if (ledgered.length > 0) {
+    throw new Error(
+      `SUPERSEDED_BUT_LEDGERED: migration(s) declared superseded (expected absent from ledger) ` +
+      `are present in the migration ledger: ${ledgered.join(', ')}`,
+    );
+  }
+}
+
 export async function ensureMigrationLedger(client, ledgerSchema = 'raf') {
   try {
     await client.query(`
@@ -96,15 +185,16 @@ export function calculateMigrationFrontier(applied) {
   return applied[applied.length - 1].slice(0, 14);
 }
 
-export function validateMigrationOrder(discovered, applied) {
+export function validateMigrationOrder(discovered, applied, supersededFilenames = []) {
   const frontier = calculateMigrationFrontier(applied);
   const appliedSet = new Set(applied);
+  const supersededSet = new Set(supersededFilenames);
 
   // Find unexpected historical migrations: discovered but not applied, and before frontier
   const unexpectedHistorical = [];
   for (const filename of discovered) {
     const id = filename.slice(0, 14);
-    if (!appliedSet.has(filename) && frontier && id < frontier) {
+    if (!appliedSet.has(filename) && !supersededSet.has(filename) && frontier && id < frontier) {
       unexpectedHistorical.push(filename);
     }
   }
@@ -112,10 +202,11 @@ export function validateMigrationOrder(discovered, applied) {
   return { frontier, unexpectedHistorical };
 }
 
-export async function printPreflight(discovered, applied, logger = console) {
-  const { frontier, unexpectedHistorical } = validateMigrationOrder(discovered, applied);
+export async function printPreflight(discovered, applied, logger = console, superseded = []) {
+  const { frontier, unexpectedHistorical } = validateMigrationOrder(discovered, applied, superseded);
   const appliedSet = new Set(applied);
-  const pending = discovered.filter((f) => !appliedSet.has(f));
+  const supersededSet = new Set(superseded);
+  const pending = discovered.filter((f) => !appliedSet.has(f) && !supersededSet.has(f));
 
   logger.log('\n═══════════════════════════════════════════════════════════════');
   logger.log('MIGRATION PREFLIGHT REPORT');
@@ -123,6 +214,12 @@ export async function printPreflight(discovered, applied, logger = console) {
   logger.log(`Frontier: ${frontier || '(none - fresh database)'}`);
   logger.log(`Applied: ${applied.length}`);
   logger.log(`Pending: ${pending.length}`);
+  logger.log(`Superseded (validated, will not run): ${superseded.length}`);
+
+  if (superseded.length > 0) {
+    logger.log('\nℹ️  SUPERSEDED (declared, hash-verified, absent from ledger):');
+    superseded.forEach((f) => logger.log(`     ${f}`));
+  }
 
   if (unexpectedHistorical.length > 0) {
     logger.log('\n🔴 UNEXPECTED HISTORICAL MIGRATIONS:');
@@ -156,18 +253,29 @@ export async function applyMigrations({
   checkMode = false,
   allowBootstrap = false,
   ledgerSchema = 'raf',
+  supersessionRecordPath = null,
 } = {}) {
   if (!client) throw new Error('client is required');
 
   const migrations = await discoverMigrations(migrationsDir);
 
+  // Validate the supersession record before any database access.
+  const supersessions = supersessionRecordPath
+    ? await loadSupersessions({ recordPath: supersessionRecordPath, migrationsDir, discovered: migrations })
+    : [];
+  const superseded = supersessions.map((entry) => entry.filename);
+  const supersededSet = new Set(superseded);
+  // Only reported when a supersession record is active, preserving the result shape otherwise.
+  const supersededResult = supersessions.length > 0 ? { superseded } : {};
+
   await ensureMigrationLedger(client, ledgerSchema);
 
   const applied = await readAppliedMigrations(client, ledgerSchema);
   assertAppliedMigrationsKnown(applied, migrations);
+  assertSupersededNotLedgered(applied, supersessions);
 
   // Preflight: validate migration order and print report
-  const { frontier, unexpectedHistorical } = validateMigrationOrder(migrations, applied);
+  const { frontier, unexpectedHistorical } = validateMigrationOrder(migrations, applied, superseded);
 
   // Fail closed on empty ledger unless explicitly approved for bootstrap
   if (applied.length === 0 && !allowBootstrap) {
@@ -182,8 +290,8 @@ export async function applyMigrations({
   }
 
   if (checkMode) {
-    const ok = await printPreflight(migrations, applied, logger);
-    return { discovered: migrations.length, applied: 0, ok };
+    const ok = await printPreflight(migrations, applied, logger, superseded);
+    return { discovered: migrations.length, applied: 0, ...supersededResult, ok };
   }
 
   // Fail-closed on empty ledger: fresh database initialization is not automatically supported
@@ -191,9 +299,9 @@ export async function applyMigrations({
   // Production (Render) never sets allowBootstrap, preserving fail-closed safety.
   if (frontier === null && migrations.length > 0 && !allowBootstrap) {
     const appliedSet = new Set(applied);
-    const pending = migrations.filter((f) => !appliedSet.has(f));
+    const pending = migrations.filter((f) => !appliedSet.has(f) && !supersededSet.has(f));
     if (pending.length > 0) {
-      await printPreflight(migrations, applied, logger);
+      await printPreflight(migrations, applied, logger, superseded);
       throw new Error(
         `Fresh database (empty migration ledger) is not supported for automatic initialization. ` +
         `This usually indicates a new Neon branch or empty database. ` +
@@ -205,7 +313,7 @@ export async function applyMigrations({
 
   // Before applying any migrations, fail if unexpected historical migrations are detected
   if (unexpectedHistorical.length > 0) {
-    await printPreflight(migrations, applied, logger);
+    await printPreflight(migrations, applied, logger, superseded);
     throw new Error(
       `Unexpected historical migrations detected: ${unexpectedHistorical.join(', ')}. ` +
       'Review the frontier and validate the repository state before proceeding.'
@@ -213,10 +321,15 @@ export async function applyMigrations({
   }
 
   const appliedSet = new Set(applied);
+  let executed = 0;
 
   for (const filename of migrations) {
     if (appliedSet.has(filename)) {
       logger.log(`  skip  ${filename} (already applied)`);
+      continue;
+    }
+    if (supersededSet.has(filename)) {
+      logger.log(`  skip  ${filename} (superseded, not executed, not ledgered)`);
       continue;
     }
 
@@ -227,10 +340,11 @@ export async function applyMigrations({
       `INSERT INTO ${ledgerSchema}.schema_migrations (filename) VALUES ($1)`,
       [filename],
     );
+    executed += 1;
     logger.log(`  done  ${filename}`);
   }
 
-  return { discovered: migrations.length, applied: migrations.length - appliedSet.size, ok: true };
+  return { discovered: migrations.length, applied: executed, ...supersededResult, ok: true };
 }
 
 export async function run() {
@@ -258,6 +372,7 @@ export async function run() {
       migrationsDir: defaultMigrationsDir,
       checkMode,
       allowBootstrap,
+      supersessionRecordPath: SUPERSESSION_RECORD_PATH,
     });
 
     if (checkMode) {

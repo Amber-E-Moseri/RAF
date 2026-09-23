@@ -69,24 +69,38 @@ These migrations exist in current code and have been applied to production. Thei
 
 **Effect:** Pure schema validation (widens CHECK constraint on raf.debt_adjustments.adjustment_type). Zero financial-row mutations.
 
-## 20260313170000 OBSOLETE MIGRATION
+## 20260313170000 SUPERSEDED MIGRATION
+
+> Updated by the superseded-migration reconciliation. The original section described
+> this file as "unapplied, no change". It is now explicitly reconciled as follows.
 
 **File:** 20260313170000_harden_backend_integrity.sql
 
-**Status:** Exists in code, not applied to production
+**Status:** Retained byte-for-byte in `db/migrations`. Semantically superseded. Explicitly excluded from the
+production migration chain through a hash-pinned supersession record.
 
-**Classification:** UNEXPECTED_HISTORICAL (behind current frontier in production)
+- Git blob: `222f4b76279d409cb20fcf6dd8aa2e29bb59b39f` (unchanged since it was introduced in `af15ebc`)
+- Content SHA-256 (committed LF bytes): `94480db159b089a18672f23ee32cb73b23d60719a9b828d9bfd6506e8ac69c3f`
+- Record: `db/migration-supersessions.json` (exactly one entry; adding another requires changing `tests/migrationSupersession.test.js`)
+- Expected production ledger state: **absent**. It is verified at run time; a superseded file found in a ledger
+  fails closed with `SUPERSEDED_BUT_LEDGERED`.
+- No manual ledger mutation was used. The migration was not executed and was not marked applied.
 
-**Behavior with PR #33:** This migration will be correctly classified as UNEXPECTED_HISTORICAL and fail-closed. If a fresh Neon branch or restore attempt tries to apply it, the runner will block before execution and report:
+**Why it is superseded:** it targets the legacy `public.*` schema, its 12 RLS policies depend on the Supabase
+`auth.uid()` function (which does not exist on Neon PostgreSQL), and its allocation trigger contains the historical
+`NEW.income_entry_id` defect on `income_entries`. The current runtime uses the `raf.*` schema with workspace-context
+isolation, and its requirements are represented by `20260903090000_workspace_postgres_persistence.sql` and the later
+migrations listed in the record. Some legacy `imported_transaction_rows` foreign-key columns were intentionally
+abandoned during that redesign rather than mapped one-to-one.
 
-```
-Unexpected historical migrations detected: 20260313170000_harden_backend_integrity.sql.
-Review the frontier and validate the repository state before proceeding.
-```
+**Runner behavior:** a superseded migration is not pending and not `UNEXPECTED_HISTORICAL`, but only when the record
+validates (exact filename, file exists, SHA-256 matches, `supersededBy` files exist, ledger state is `absent`). Any
+other historical file below the frontier still fails closed, and `LEDGER_ONLY`, empty-ledger and explicit-bootstrap
+behavior are unchanged. `--check` lists the validated superseded migration(s) explicitly. Disposable CI bootstrap does
+not execute the file either.
 
-**Why:** This is a Supabase-era migration referencing auth.uid() function that does not exist in the RAF PostgreSQL schema. It is unapplied and safe, but its presence behind the frontier indicates code committed during development before migration to Neon.
-
-**Action:** No change. The runner correctly fails closed. This is not a defect; it is a safety feature.
+**Historical production attempt / failure:** UNKNOWN. This record makes no claim that the migration was ever attempted,
+failed or rolled back in production.
 
 ## PR #33 CERTIFICATION
 
@@ -124,7 +138,7 @@ no ledger writes
 
 ### Current State
 - 20260910010000: **Recovered** — identity reconciled
-- 20260313170000: **Unapplied, correctly fail-closed** — no change required
+- 20260313170000: **Superseded, explicitly declared** — retained unmodified, excluded through the hash-pinned record `db/migration-supersessions.json`; expected ledger state absent
 
 ### Known Production History
 If production ledger contains the 6 accidentally ledgered migrations plus 20260910010000, and all are discoverable in the code tree, Render startup preflight will:
