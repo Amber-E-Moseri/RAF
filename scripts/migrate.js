@@ -185,6 +185,22 @@ export async function applyMigrations({
     return { discovered: migrations.length, applied: 0, ok };
   }
 
+  // Fail-closed on empty ledger: fresh database initialization is not automatically supported.
+  // Database initialization must use an explicit safe bootstrap procedure.
+  if (frontier === null && migrations.length > 0) {
+    const appliedSet = new Set(applied);
+    const pending = migrations.filter((f) => !appliedSet.has(f));
+    if (pending.length > 0) {
+      await printPreflight(migrations, applied, logger);
+      throw new Error(
+        `Fresh database (empty migration ledger) is not supported for automatic initialization. ` +
+        `This usually indicates a new Neon branch or empty database. ` +
+        `Initialize the database using an explicit supported bootstrap procedure, ` +
+        `or restore a database snapshot with known migration history.`
+      );
+    }
+  }
+
   // Before applying any migrations, fail if unexpected historical migrations are detected
   if (unexpectedHistorical.length > 0) {
     await printPreflight(migrations, applied, logger);
