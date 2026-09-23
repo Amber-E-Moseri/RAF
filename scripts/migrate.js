@@ -186,9 +186,9 @@ export async function applyMigrations({
     return { discovered: migrations.length, applied: 0, ok };
   }
 
-  // Secondary guard (reached only when allowBootstrap=true bypasses the primary check above).
-  // Even with bootstrap permission, fail if frontier is null and there are pending migrations —
-  // this path would apply all migrations blindly which is intentional for bootstrap only.
+  // Fail-closed on empty ledger: fresh database initialization is not automatically supported
+  // unless the caller explicitly opts in via allowBootstrap (used by CI setup only).
+  // Production (Render) never sets allowBootstrap, preserving fail-closed safety.
   if (frontier === null && migrations.length > 0 && !allowBootstrap) {
     const appliedSet = new Set(applied);
     const pending = migrations.filter((f) => !appliedSet.has(f));
@@ -252,6 +252,7 @@ export async function run() {
   try {
     await client.connect();
     console.log('Connected to Postgres');
+    const allowBootstrap = process.env.RAF_ALLOW_BOOTSTRAP === 'true';
     const result = await applyMigrations({
       client,
       migrationsDir: defaultMigrationsDir,

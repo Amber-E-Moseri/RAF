@@ -93,6 +93,7 @@ jobs:
         run: node scripts/migrate.js --bootstrap
         env:
           POSTGRES_CONNECTION_STRING: ${{ env.OWNER_DATABASE_URL }}
+          RAF_ALLOW_BOOTSTRAP: 'true'
 
       - name: Set runtime role password
         run: docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "ALTER ROLE raf_app PASSWORD 'app'"
@@ -179,6 +180,7 @@ jobs:
         run: node scripts/migrate.js --bootstrap
         env:
           POSTGRES_CONNECTION_STRING: ${{ env.OWNER_DATABASE_URL }}
+          RAF_ALLOW_BOOTSTRAP: 'true'
 
       - name: Set runtime role password
         run: docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "ALTER ROLE raf_app PASSWORD 'app'"
