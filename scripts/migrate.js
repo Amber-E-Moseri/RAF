@@ -154,6 +154,7 @@ export async function applyMigrations({
   migrationsDir = defaultMigrationsDir,
   logger = console,
   checkMode = false,
+  allowBootstrap = false,
 } = {}) {
   if (!client) throw new Error('client is required');
 
@@ -166,6 +167,18 @@ export async function applyMigrations({
 
   // Preflight: validate migration order and print report
   const { frontier, unexpectedHistorical } = validateMigrationOrder(migrations, applied);
+
+  // Fail closed on empty ledger unless explicitly approved for bootstrap
+  if (applied.length === 0 && !allowBootstrap) {
+    logger.log('\n🔴 ERROR: Empty migration ledger detected.');
+    logger.log('   This may be a fresh database or lost migration history.');
+    logger.log('   Starting bootstrap without confirmation is unsafe.');
+    logger.log('');
+    logger.log('   To intentionally initialize a new database, use:');
+    logger.log('   node scripts/migrate.js --bootstrap');
+    logger.log('');
+    throw new Error('Empty migration ledger detected. Use --bootstrap for fresh database initialization.');
+  }
 
   if (checkMode) {
     const ok = await printPreflight(migrations, applied, logger);
@@ -213,6 +226,7 @@ export async function run() {
   }
 
   const checkMode = process.argv.includes('--check');
+  const allowBootstrap = process.argv.includes('--bootstrap');
 
   const { default: pg } = await import('pg');
   const client = new pg.Client({ connectionString: connStr });
@@ -224,6 +238,7 @@ export async function run() {
       client,
       migrationsDir: defaultMigrationsDir,
       checkMode,
+      allowBootstrap,
     });
 
     if (checkMode) {
