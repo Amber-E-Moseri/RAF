@@ -1,0 +1,17 @@
+{
+  "supersessions": [
+    {
+      "filename": "20260313170000_harden_backend_integrity.sql",
+      "sha256": "94480db159b089a18672f23ee32cb73b23d60719a9b828d9bfd6506e8ac69c3f",
+      "expectedLedgerState": "absent",
+      "supersededBy": [
+        "20260903090000_workspace_postgres_persistence.sql",
+        "20260908000000_fix_income_entry_allocation_trigger.sql",
+        "20260908020000_tighten_financial_rls_policies.sql",
+        "20260909000000_create_raf_app_role.sql",
+        "20260919000000_invitation_security_resolver.sql"
+      ],
+      "reason": "Retained byte-for-byte as source history but not part of the current production migration chain. It targets the legacy public.* schema and its 12 RLS policies depend on the Supabase auth.uid() function, which does not exist on Neon PostgreSQL. The current runtime uses the raf.* schema with workspace-context isolation, and its integrity and security requirements are represented by the raf.* architecture in the superseding migrations. Some legacy imported_transaction_rows foreign-key columns were intentionally abandoned during that redesign rather than mapped one-to-one. The old allocation-trigger implementation also contains the historical NEW.income_entry_id defect on income_entries. Whether this migration was ever attempted in production is not independently established here; the declared expectation is only that it is absent from the migration ledger."
+    }
+  ]
+}

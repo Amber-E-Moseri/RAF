@@ -19,6 +19,7 @@ import { Pool } from 'pg';
 
 import {
   applyMigrations,
+  hashMigrationContent,
 } from '../scripts/migrate.js';
 
 const adminUrl = process.env.DATABASE_URL?.replace(/^["']|["']$/g, '');
@@ -462,4 +463,224 @@ maybeTest('PG-MIG-5: empty ledger fails closed before migration execution', asyn
     client.release();
     await pool.end();
   }
+});
+
+// ── PG-MIG-6 … PG-MIG-10: EXPLICIT HASH-PINNED SUPERSESSION ────────────
+//
+// A superseded migration is retained in the migrations directory but is not part of the
+// migration chain: never pending, never a historical hole, and it must not be in the ledger.
+// These cases run the real runner against real PostgreSQL and prove the declared exception
+// is distinguishable from an accidental historical hole (PG-MIG-1 / PG-MIG-7).
+
+async function withSupersessionFixture(schemaName, { files, ledger, record }, fn) {
+  const pool = new Pool({ connectionString: adminUrl, ssl: sslOption });
+  const client = await pool.connect();
+  let tmpDir = null;
+  let recordPath = null;
+  let testClient = null;
+
+  try {
+    await cleanupTestSchema(client, schemaName);
+    await client.query(`CREATE SCHEMA ${schemaName}`);
+    tmpDir = await createTestFixture(schemaName, files);
+
+    if (record) {
+      recordPath = `${tmpDir}.supersessions.json`;
+      await fs.writeFile(recordPath, JSON.stringify({ supersessions: record(files) }), 'utf8');
+    }
+
+    await client.query(`
+      CREATE TABLE ${schemaName}.schema_migrations (
+        filename text PRIMARY KEY,
+        applied_at timestamptz DEFAULT now()
+      )
+    `);
+    for (const filename of ledger) {
+      await client.query(`INSERT INTO ${schemaName}.schema_migrations (filename) VALUES ($1)`, [filename]);
+    }
+
+    testClient = new (await import('pg')).Client({ connectionString: adminUrl, ssl: sslOption });
+    await testClient.connect();
+
+    const run = (options = {}) =>
+      applyMigrations({
+        client: testClient,
+        migrationsDir: tmpDir,
+        ledgerSchema: schemaName,
+        logger: { log: () => {} },
+        supersessionRecordPath: recordPath,
+        ...options,
+      });
+    const tableExists = async (table) => {
+      const { rows } = await client.query(
+        `SELECT EXISTS(SELECT 1 FROM information_schema.tables
+         WHERE table_schema = $1 AND table_name = $2) AS exists`,
+        [schemaName, table],
+      );
+      return rows[0].exists;
+    };
+    const ledgerFiles = async () => {
+      const { rows } = await client.query(
+        `SELECT filename FROM ${schemaName}.schema_migrations ORDER BY filename`,
+      );
+      return rows.map((r) => r.filename);
+    };
+    const rejection = async (options) => {
+      try {
+        await run(options);
+      } catch (err) {
+        return err;
+      }
+      return null;
+    };
+
+    await fn({ run, rejection, tableExists, ledgerFiles, client });
+  } finally {
+    if (testClient) await testClient.end();
+    if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
+    if (recordPath) await fs.rm(recordPath, { force: true });
+    await cleanupTestSchema(client, schemaName);
+    client.release();
+    await pool.end();
+  }
+}
+
+function supersessionEntry(files, filename, overrides = {}) {
+  return {
+    filename,
+    sha256: hashMigrationContent(files[filename]),
+    expectedLedgerState: 'absent',
+    supersededBy: ['20000101000002_m3.sql'],
+    reason: 'PG-MIG test fixture: intentionally not part of the migration chain',
+    ...overrides,
+  };
+}
+
+function supersessionFiles(schemaName) {
+  return {
+    '20000101000000_m1.sql': `CREATE TABLE ${schemaName}.m1_table AS SELECT 1;`,
+    '20000101000001_m2.sql': `CREATE TABLE ${schemaName}.sentinel_m2 AS SELECT 2;`,
+    '20000101000002_m3.sql': `CREATE TABLE ${schemaName}.m3_table AS SELECT 3;`,
+    '20000101000003_m4.sql': `CREATE TABLE ${schemaName}.m4_table AS SELECT 4 AS n;`,
+  };
+}
+
+const LEDGER_M1_M3 = ['20000101000000_m1.sql', '20000101000002_m3.sql'];
+
+maybeTest('PG-MIG-6: declared superseded historical migration is skipped; later pending migration applies exactly once', async () => {
+  const schemaName = 'pgmig6_test';
+  const files = supersessionFiles(schemaName);
+  await withSupersessionFixture(
+    schemaName,
+    { files, ledger: LEDGER_M1_M3, record: (f) => [supersessionEntry(f, '20000101000001_m2.sql')] },
+    async ({ run, tableExists, ledgerFiles, client }) => {
+      const first = await run();
+      assert.equal(first.applied, 1, 'only M4 executes');
+      assert.deepEqual(first.superseded, ['20000101000001_m2.sql']);
+
+      assert.equal(await tableExists('sentinel_m2'), false, 'M2 must not execute');
+      assert.equal(await tableExists('m4_table'), true, 'M4 must execute');
+      assert.deepEqual(
+        await ledgerFiles(),
+        ['20000101000000_m1.sql', '20000101000002_m3.sql', '20000101000003_m4.sql'],
+        'M2 never enters the ledger; M4 enters once',
+      );
+
+      const second = await run();
+      assert.equal(second.applied, 0, 'second run applies nothing');
+      const { rows } = await client.query(`SELECT COUNT(*) FROM ${schemaName}.m4_table`);
+      assert.equal(Number(rows[0].count), 1, 'M4 executed exactly once');
+      assert.equal(await tableExists('sentinel_m2'), false, 'M2 still never executed');
+    },
+  );
+});
+
+maybeTest('PG-MIG-7: same topology WITHOUT a supersession declaration fails closed as UNEXPECTED_HISTORICAL', async () => {
+  const schemaName = 'pgmig7_test';
+  const files = supersessionFiles(schemaName);
+  await withSupersessionFixture(
+    schemaName,
+    { files, ledger: LEDGER_M1_M3, record: null },
+    async ({ rejection, tableExists, ledgerFiles }) => {
+      const err = await rejection();
+      assert.ok(
+        err && /Unexpected historical migrations detected: 20000101000001_m2\.sql/.test(err.message),
+        'must fail closed on M2',
+      );
+      assert.equal(await tableExists('sentinel_m2'), false);
+      assert.equal(await tableExists('m4_table'), false, 'no DDL: pending M4 must not run');
+      assert.deepEqual(await ledgerFiles(), LEDGER_M1_M3);
+    },
+  );
+});
+
+maybeTest('PG-MIG-8: migration declared superseded but present in the ledger fails closed (SUPERSEDED_BUT_LEDGERED)', async () => {
+  const schemaName = 'pgmig8_test';
+  const files = supersessionFiles(schemaName);
+  const ledger = ['20000101000000_m1.sql', '20000101000001_m2.sql', '20000101000002_m3.sql'];
+  await withSupersessionFixture(
+    schemaName,
+    { files, ledger, record: (f) => [supersessionEntry(f, '20000101000001_m2.sql')] },
+    async ({ rejection, tableExists, ledgerFiles }) => {
+      const err = await rejection();
+      assert.ok(err && /SUPERSEDED_BUT_LEDGERED/.test(err.message), 'must fail closed');
+      assert.equal(await tableExists('m4_table'), false, 'no DDL: pending M4 must not run');
+      assert.equal(await tableExists('sentinel_m2'), false);
+      assert.deepEqual(await ledgerFiles(), ledger, 'ledger not modified');
+    },
+  );
+});
+
+maybeTest('PG-MIG-9: declared superseded migration with a different content hash fails closed', async () => {
+  const schemaName = 'pgmig9_test';
+  const files = supersessionFiles(schemaName);
+  await withSupersessionFixture(
+    schemaName,
+    {
+      files,
+      ledger: LEDGER_M1_M3,
+      record: (f) => [supersessionEntry(f, '20000101000001_m2.sql', { sha256: 'a'.repeat(64) })],
+    },
+    async ({ rejection, tableExists, ledgerFiles }) => {
+      const err = await rejection();
+      assert.ok(err && /SHA-256 mismatch/.test(err.message), 'must fail closed on hash mismatch');
+      assert.equal(await tableExists('sentinel_m2'), false);
+      assert.equal(await tableExists('m4_table'), false, 'no DDL: pending M4 must not run');
+      assert.deepEqual(await ledgerFiles(), LEDGER_M1_M3);
+    },
+  );
+});
+
+maybeTest('PG-MIG-10: valid supersession plus a separate undeclared historical hole fails closed on the real hole', async () => {
+  const schemaName = 'pgmig10_test';
+  const files = {
+    '20000101000000_m1.sql': `CREATE TABLE ${schemaName}.m1_table AS SELECT 1;`,
+    '20000101000001_m2.sql': `CREATE TABLE ${schemaName}.sentinel_m2 AS SELECT 2;`,
+    '20000101000002_hole.sql': `CREATE TABLE ${schemaName}.sentinel_hole AS SELECT 22;`,
+    '20000101000003_m3.sql': `CREATE TABLE ${schemaName}.m3_table AS SELECT 3;`,
+    '20000101000004_m4.sql': `CREATE TABLE ${schemaName}.m4_table AS SELECT 4;`,
+  };
+  const ledger = ['20000101000000_m1.sql', '20000101000003_m3.sql'];
+  await withSupersessionFixture(
+    schemaName,
+    {
+      files,
+      ledger,
+      record: (f) => [
+        supersessionEntry(f, '20000101000001_m2.sql', { supersededBy: ['20000101000003_m3.sql'] }),
+      ],
+    },
+    async ({ rejection, tableExists, ledgerFiles }) => {
+      const err = await rejection();
+      assert.ok(
+        err && /Unexpected historical migrations detected: 20000101000002_hole\.sql/.test(err.message),
+        'must fail closed on the undeclared hole',
+      );
+      assert.ok(!/m2\.sql/.test(err.message), 'declared M2 is not reported as a hole');
+      assert.equal(await tableExists('sentinel_hole'), false);
+      assert.equal(await tableExists('sentinel_m2'), false);
+      assert.equal(await tableExists('m4_table'), false, 'no DDL: pending M4 must not run');
+      assert.deepEqual(await ledgerFiles(), ledger);
+    },
+  );
 });
