@@ -90,9 +90,10 @@ jobs:
           docker exec ${{ job.services.postgres.id }} psql -U postgres -d raf_ci -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS auth; GRANT USAGE ON SCHEMA auth TO PUBLIC; CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS \$\$ SELECT NULL::uuid \$\$; GRANT EXECUTE ON FUNCTION auth.uid() TO PUBLIC;"
 
       - name: Run schema migrations
-        run: node scripts/migrate.js
+        run: node scripts/migrate.js --bootstrap
         env:
           POSTGRES_CONNECTION_STRING: ${{ env.OWNER_DATABASE_URL }}
+          RAF_ALLOW_BOOTSTRAP: 'true'
 
       - name: Set runtime role password
         run: docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "ALTER ROLE raf_app PASSWORD 'app'"
@@ -176,9 +177,10 @@ jobs:
           docker exec ${{ job.services.postgres.id }} psql -U postgres -d raf_ci -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS auth; GRANT USAGE ON SCHEMA auth TO PUBLIC; CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS \$\$ SELECT NULL::uuid \$\$; GRANT EXECUTE ON FUNCTION auth.uid() TO PUBLIC;"
 
       - name: Run schema migrations
-        run: node scripts/migrate.js
+        run: node scripts/migrate.js --bootstrap
         env:
           POSTGRES_CONNECTION_STRING: ${{ env.OWNER_DATABASE_URL }}
+          RAF_ALLOW_BOOTSTRAP: 'true'
 
       - name: Set runtime role password
         run: docker exec ${{ job.services.postgres.id }} psql -U postgres -v ON_ERROR_STOP=1 -c "ALTER ROLE raf_app PASSWORD 'app'"

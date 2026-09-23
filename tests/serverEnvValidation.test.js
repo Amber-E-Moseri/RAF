@@ -112,3 +112,78 @@ test('isolated SQLite server helper fails before startup when Postgres is reques
     /isolated helper requires PERSISTENCE_DRIVER=sqlite/,
   );
 });
+
+// ── Phase 1 runtime-db security tests ────────────────────────────────────────
+
+// ENV-1: postgres + RAF_AUTH_REQUIRED=true + owner URL present + app URL missing → THROW
+test('ENV-1: postgres + auth required + app URL absent → throws (no owner fallback)', () => withIsolatedEnv(() => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'raf-env-'));
+  try {
+    process.env.PERSISTENCE_DRIVER = 'postgres';
+    process.env.POSTGRES_CONNECTION_STRING = 'postgres://owner:secret@example.invalid/neondb';
+    process.env.RAF_AUTH_REQUIRED = 'true';
+    // POSTGRES_CONNECTION_STRING_APP intentionally absent
+
+    assert.throws(
+      () => loadServerEnv({ cwd }),
+      /POSTGRES_CONNECTION_STRING_APP is required when PERSISTENCE_DRIVER=postgres and RAF_AUTH_REQUIRED=true/,
+    );
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}));
+
+// ENV-2: postgres + RAF_AUTH_REQUIRED=false + owner URL present + app URL missing → ALLOWED (dev fallback)
+test('ENV-2: postgres + auth NOT required + app URL absent → owner fallback permitted', () => withIsolatedEnv(() => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'raf-env-'));
+  try {
+    process.env.PERSISTENCE_DRIVER = 'postgres';
+    process.env.POSTGRES_CONNECTION_STRING = 'postgres://owner:secret@example.invalid/neondb';
+    process.env.RAF_AUTH_REQUIRED = 'false';
+    // POSTGRES_CONNECTION_STRING_APP intentionally absent
+
+    const result = loadServerEnv({ cwd });
+    // Falls back to the owner URL — acceptable for local dev
+    assert.equal(result.persistenceDriver, 'postgres');
+    assert.equal(result.postgresConnectionString, 'postgres://owner:secret@example.invalid/neondb');
+    assert.equal(result.authRequired, false);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}));
+
+// ENV-3: postgres + RAF_AUTH_REQUIRED=true + owner URL present + app URL present → app URL selected
+test('ENV-3: postgres + auth required + both URLs present → app URL selected', () => withIsolatedEnv(() => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'raf-env-'));
+  try {
+    process.env.PERSISTENCE_DRIVER = 'postgres';
+    process.env.POSTGRES_CONNECTION_STRING = 'postgres://owner:secret@example.invalid/neondb';
+    process.env.POSTGRES_CONNECTION_STRING_APP = 'postgres://raf_app:appsecret@example.invalid/neondb';
+    process.env.RAF_AUTH_REQUIRED = 'true';
+
+    const result = loadServerEnv({ cwd });
+    assert.equal(result.persistenceDriver, 'postgres');
+    assert.equal(result.postgresConnectionString, 'postgres://raf_app:appsecret@example.invalid/neondb');
+    assert.equal(result.authRequired, true);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}));
+
+// ENV-4: postgres + RAF_AUTH_REQUIRED=true + app URL present but empty/whitespace → THROW
+test('ENV-4: postgres + auth required + app URL whitespace-only → throws', () => withIsolatedEnv(() => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'raf-env-'));
+  try {
+    process.env.PERSISTENCE_DRIVER = 'postgres';
+    process.env.POSTGRES_CONNECTION_STRING = 'postgres://owner:secret@example.invalid/neondb';
+    process.env.POSTGRES_CONNECTION_STRING_APP = '   ';
+    process.env.RAF_AUTH_REQUIRED = 'true';
+
+    assert.throws(
+      () => loadServerEnv({ cwd }),
+      /POSTGRES_CONNECTION_STRING_APP is required when PERSISTENCE_DRIVER=postgres and RAF_AUTH_REQUIRED=true/,
+    );
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}));

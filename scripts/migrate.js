@@ -54,18 +54,18 @@ export async function discoverMigrations(migrationsDir = defaultMigrationsDir) {
   return filenames;
 }
 
-export async function ensureMigrationLedger(client) {
+export async function ensureMigrationLedger(client, ledgerSchema = 'raf') {
   try {
     await client.query(`
-      CREATE TABLE IF NOT EXISTS raf.schema_migrations (
+      CREATE TABLE IF NOT EXISTS ${ledgerSchema}.schema_migrations (
         filename text PRIMARY KEY,
         applied_at timestamptz NOT NULL DEFAULT now()
       )
     `);
   } catch {
-    await client.query('CREATE SCHEMA IF NOT EXISTS raf');
+    await client.query(`CREATE SCHEMA IF NOT EXISTS ${ledgerSchema}`);
     await client.query(`
-      CREATE TABLE IF NOT EXISTS raf.schema_migrations (
+      CREATE TABLE IF NOT EXISTS ${ledgerSchema}.schema_migrations (
         filename text PRIMARY KEY,
         applied_at timestamptz NOT NULL DEFAULT now()
       )
@@ -73,9 +73,9 @@ export async function ensureMigrationLedger(client) {
   }
 }
 
-export async function readAppliedMigrations(client) {
+export async function readAppliedMigrations(client, ledgerSchema = 'raf') {
   const { rows } = await client.query(
-    'SELECT filename FROM raf.schema_migrations ORDER BY filename',
+    `SELECT filename FROM ${ledgerSchema}.schema_migrations ORDER BY filename`,
   );
   return rows.map((row) => row.filename);
 }
@@ -90,19 +90,128 @@ export function assertAppliedMigrationsKnown(applied, discovered) {
   }
 }
 
+export function calculateMigrationFrontier(applied) {
+  if (applied.length === 0) return null;
+  // Frontier is the ID (first 14 chars) of the last applied migration
+  return applied[applied.length - 1].slice(0, 14);
+}
+
+export function validateMigrationOrder(discovered, applied) {
+  const frontier = calculateMigrationFrontier(applied);
+  const appliedSet = new Set(applied);
+
+  // Find unexpected historical migrations: discovered but not applied, and before frontier
+  const unexpectedHistorical = [];
+  for (const filename of discovered) {
+    const id = filename.slice(0, 14);
+    if (!appliedSet.has(filename) && frontier && id < frontier) {
+      unexpectedHistorical.push(filename);
+    }
+  }
+
+  return { frontier, unexpectedHistorical };
+}
+
+export async function printPreflight(discovered, applied, logger = console) {
+  const { frontier, unexpectedHistorical } = validateMigrationOrder(discovered, applied);
+  const appliedSet = new Set(applied);
+  const pending = discovered.filter((f) => !appliedSet.has(f));
+
+  logger.log('\n═══════════════════════════════════════════════════════════════');
+  logger.log('MIGRATION PREFLIGHT REPORT');
+  logger.log('═══════════════════════════════════════════════════════════════');
+  logger.log(`Frontier: ${frontier || '(none - fresh database)'}`);
+  logger.log(`Applied: ${applied.length}`);
+  logger.log(`Pending: ${pending.length}`);
+
+  if (unexpectedHistorical.length > 0) {
+    logger.log('\n🔴 UNEXPECTED HISTORICAL MIGRATIONS:');
+    unexpectedHistorical.forEach((f) => logger.log(`     ${f}`));
+  }
+
+  if (pending.length > 0) {
+    logger.log('\n✅ PENDING (will apply):');
+    pending.forEach((f) => logger.log(`     ${f}`));
+  } else if (unexpectedHistorical.length === 0) {
+    logger.log('\n✅ No pending migrations.');
+  }
+
+  if (unexpectedHistorical.length > 0) {
+    logger.log('\n🔴 FAIL: Unexpected historical migrations detected.');
+    logger.log('   This usually means a migration was deleted from the code');
+    logger.log('   and then restored, or the database state is inconsistent.');
+    logger.log('   Review the frontier and validate the repository state.');
+    return false;
+  }
+
+  logger.log('\n✅ Status: OK - Ready to apply.');
+  logger.log('═══════════════════════════════════════════════════════════════\n');
+  return true;
+}
+
 export async function applyMigrations({
   client,
   migrationsDir = defaultMigrationsDir,
   logger = console,
+  checkMode = false,
+  allowBootstrap = false,
+  ledgerSchema = 'raf',
 } = {}) {
   if (!client) throw new Error('client is required');
 
   const migrations = await discoverMigrations(migrationsDir);
 
-  await ensureMigrationLedger(client);
+  await ensureMigrationLedger(client, ledgerSchema);
 
-  const applied = await readAppliedMigrations(client);
+  const applied = await readAppliedMigrations(client, ledgerSchema);
   assertAppliedMigrationsKnown(applied, migrations);
+
+  // Preflight: validate migration order and print report
+  const { frontier, unexpectedHistorical } = validateMigrationOrder(migrations, applied);
+
+  // Fail closed on empty ledger unless explicitly approved for bootstrap
+  if (applied.length === 0 && !allowBootstrap) {
+    logger.log('\n🔴 ERROR: Fresh database detected — migration ledger is empty.');
+    logger.log('   This may be a fresh database or lost migration history.');
+    logger.log('   Starting bootstrap without confirmation is unsafe.');
+    logger.log('');
+    logger.log('   To intentionally initialize a new database, use:');
+    logger.log('   node scripts/migrate.js --bootstrap');
+    logger.log('');
+    throw new Error('Fresh database detected: migration ledger is empty. Use --bootstrap for fresh database initialization.');
+  }
+
+  if (checkMode) {
+    const ok = await printPreflight(migrations, applied, logger);
+    return { discovered: migrations.length, applied: 0, ok };
+  }
+
+  // Fail-closed on empty ledger: fresh database initialization is not automatically supported
+  // unless the caller explicitly opts in via allowBootstrap (used by CI setup only).
+  // Production (Render) never sets allowBootstrap, preserving fail-closed safety.
+  if (frontier === null && migrations.length > 0 && !allowBootstrap) {
+    const appliedSet = new Set(applied);
+    const pending = migrations.filter((f) => !appliedSet.has(f));
+    if (pending.length > 0) {
+      await printPreflight(migrations, applied, logger);
+      throw new Error(
+        `Fresh database (empty migration ledger) is not supported for automatic initialization. ` +
+        `This usually indicates a new Neon branch or empty database. ` +
+        `Initialize the database using an explicit supported bootstrap procedure, ` +
+        `or restore a database snapshot with known migration history.`
+      );
+    }
+  }
+
+  // Before applying any migrations, fail if unexpected historical migrations are detected
+  if (unexpectedHistorical.length > 0) {
+    await printPreflight(migrations, applied, logger);
+    throw new Error(
+      `Unexpected historical migrations detected: ${unexpectedHistorical.join(', ')}. ` +
+      'Review the frontier and validate the repository state before proceeding.'
+    );
+  }
+
   const appliedSet = new Set(applied);
 
   for (const filename of migrations) {
@@ -115,13 +224,13 @@ export async function applyMigrations({
     logger.log(`  run   ${filename} ...`);
     await client.query(sql);
     await client.query(
-      'INSERT INTO raf.schema_migrations (filename) VALUES ($1)',
+      `INSERT INTO ${ledgerSchema}.schema_migrations (filename) VALUES ($1)`,
       [filename],
     );
     logger.log(`  done  ${filename}`);
   }
 
-  return { discovered: migrations.length, applied: migrations.length - appliedSet.size };
+  return { discovered: migrations.length, applied: migrations.length - appliedSet.size, ok: true };
 }
 
 export async function run() {
@@ -134,14 +243,34 @@ export async function run() {
     return;
   }
 
+  const checkMode = process.argv.includes('--check');
+  const allowBootstrap = process.argv.includes('--bootstrap');
+
   const { default: pg } = await import('pg');
   const client = new pg.Client({ connectionString: connStr });
 
   try {
     await client.connect();
     console.log('Connected to Postgres');
-    await applyMigrations({ client, migrationsDir: defaultMigrationsDir });
-    console.log('\nAll migrations applied.');
+    const allowBootstrap = process.env.RAF_ALLOW_BOOTSTRAP === 'true';
+    const result = await applyMigrations({
+      client,
+      migrationsDir: defaultMigrationsDir,
+      checkMode,
+      allowBootstrap,
+    });
+
+    if (checkMode) {
+      process.exitCode = result.ok ? 0 : 1;
+    } else {
+      console.log(`\n${result.applied} migration(s) applied.`);
+      if (result.applied === 0) {
+        console.log('All migrations are up to date.');
+      }
+    }
+  } catch (err) {
+    console.error('\nError:', err.message);
+    process.exitCode = 1;
   } finally {
     await client.end();
   }
