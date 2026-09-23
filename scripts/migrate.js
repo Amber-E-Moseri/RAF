@@ -90,10 +90,70 @@ export function assertAppliedMigrationsKnown(applied, discovered) {
   }
 }
 
+export function calculateMigrationFrontier(applied) {
+  if (applied.length === 0) return null;
+  // Frontier is the ID (first 14 chars) of the last applied migration
+  return applied[applied.length - 1].slice(0, 14);
+}
+
+export function validateMigrationOrder(discovered, applied) {
+  const frontier = calculateMigrationFrontier(applied);
+  const appliedSet = new Set(applied);
+
+  // Find unexpected historical migrations: discovered but not applied, and before frontier
+  const unexpectedHistorical = [];
+  for (const filename of discovered) {
+    const id = filename.slice(0, 14);
+    if (!appliedSet.has(filename) && frontier && id < frontier) {
+      unexpectedHistorical.push(filename);
+    }
+  }
+
+  return { frontier, unexpectedHistorical };
+}
+
+export async function printPreflight(discovered, applied, logger = console) {
+  const { frontier, unexpectedHistorical } = validateMigrationOrder(discovered, applied);
+  const appliedSet = new Set(applied);
+  const pending = discovered.filter((f) => !appliedSet.has(f));
+
+  logger.log('\n═══════════════════════════════════════════════════════════════');
+  logger.log('MIGRATION PREFLIGHT REPORT');
+  logger.log('═══════════════════════════════════════════════════════════════');
+  logger.log(`Frontier: ${frontier || '(none - fresh database)'}`);
+  logger.log(`Applied: ${applied.length}`);
+  logger.log(`Pending: ${pending.length}`);
+
+  if (unexpectedHistorical.length > 0) {
+    logger.log('\n🔴 UNEXPECTED HISTORICAL MIGRATIONS:');
+    unexpectedHistorical.forEach((f) => logger.log(`     ${f}`));
+  }
+
+  if (pending.length > 0) {
+    logger.log('\n✅ PENDING (will apply):');
+    pending.forEach((f) => logger.log(`     ${f}`));
+  } else if (unexpectedHistorical.length === 0) {
+    logger.log('\n✅ No pending migrations.');
+  }
+
+  if (unexpectedHistorical.length > 0) {
+    logger.log('\n🔴 FAIL: Unexpected historical migrations detected.');
+    logger.log('   This usually means a migration was deleted from the code');
+    logger.log('   and then restored, or the database state is inconsistent.');
+    logger.log('   Review the frontier and validate the repository state.');
+    return false;
+  }
+
+  logger.log('\n✅ Status: OK - Ready to apply.');
+  logger.log('═══════════════════════════════════════════════════════════════\n');
+  return true;
+}
+
 export async function applyMigrations({
   client,
   migrationsDir = defaultMigrationsDir,
   logger = console,
+  checkMode = false,
 } = {}) {
   if (!client) throw new Error('client is required');
 
@@ -103,6 +163,24 @@ export async function applyMigrations({
 
   const applied = await readAppliedMigrations(client);
   assertAppliedMigrationsKnown(applied, migrations);
+
+  // Preflight: validate migration order and print report
+  const { frontier, unexpectedHistorical } = validateMigrationOrder(migrations, applied);
+
+  if (checkMode) {
+    const ok = await printPreflight(migrations, applied, logger);
+    return { discovered: migrations.length, applied: 0, ok };
+  }
+
+  // Before applying any migrations, fail if unexpected historical migrations are detected
+  if (unexpectedHistorical.length > 0) {
+    await printPreflight(migrations, applied, logger);
+    throw new Error(
+      `Unexpected historical migrations detected: ${unexpectedHistorical.join(', ')}. ` +
+      'Review the frontier and validate the repository state before proceeding.'
+    );
+  }
+
   const appliedSet = new Set(applied);
 
   for (const filename of migrations) {
@@ -121,7 +199,7 @@ export async function applyMigrations({
     logger.log(`  done  ${filename}`);
   }
 
-  return { discovered: migrations.length, applied: migrations.length - appliedSet.size };
+  return { discovered: migrations.length, applied: migrations.length - appliedSet.size, ok: true };
 }
 
 export async function run() {
@@ -134,14 +212,31 @@ export async function run() {
     return;
   }
 
+  const checkMode = process.argv.includes('--check');
+
   const { default: pg } = await import('pg');
   const client = new pg.Client({ connectionString: connStr });
 
   try {
     await client.connect();
     console.log('Connected to Postgres');
-    await applyMigrations({ client, migrationsDir: defaultMigrationsDir });
-    console.log('\nAll migrations applied.');
+    const result = await applyMigrations({
+      client,
+      migrationsDir: defaultMigrationsDir,
+      checkMode,
+    });
+
+    if (checkMode) {
+      process.exitCode = result.ok ? 0 : 1;
+    } else {
+      console.log(`\n${result.applied} migration(s) applied.`);
+      if (result.applied === 0) {
+        console.log('All migrations are up to date.');
+      }
+    }
+  } catch (err) {
+    console.error('\nError:', err.message);
+    process.exitCode = 1;
   } finally {
     await client.end();
   }
