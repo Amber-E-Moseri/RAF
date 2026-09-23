@@ -54,18 +54,18 @@ export async function discoverMigrations(migrationsDir = defaultMigrationsDir) {
   return filenames;
 }
 
-export async function ensureMigrationLedger(client) {
+export async function ensureMigrationLedger(client, ledgerSchema = 'raf') {
   try {
     await client.query(`
-      CREATE TABLE IF NOT EXISTS raf.schema_migrations (
+      CREATE TABLE IF NOT EXISTS ${ledgerSchema}.schema_migrations (
         filename text PRIMARY KEY,
         applied_at timestamptz NOT NULL DEFAULT now()
       )
     `);
   } catch {
-    await client.query('CREATE SCHEMA IF NOT EXISTS raf');
+    await client.query(`CREATE SCHEMA IF NOT EXISTS ${ledgerSchema}`);
     await client.query(`
-      CREATE TABLE IF NOT EXISTS raf.schema_migrations (
+      CREATE TABLE IF NOT EXISTS ${ledgerSchema}.schema_migrations (
         filename text PRIMARY KEY,
         applied_at timestamptz NOT NULL DEFAULT now()
       )
@@ -73,9 +73,9 @@ export async function ensureMigrationLedger(client) {
   }
 }
 
-export async function readAppliedMigrations(client) {
+export async function readAppliedMigrations(client, ledgerSchema = 'raf') {
   const { rows } = await client.query(
-    'SELECT filename FROM raf.schema_migrations ORDER BY filename',
+    `SELECT filename FROM ${ledgerSchema}.schema_migrations ORDER BY filename`,
   );
   return rows.map((row) => row.filename);
 }
@@ -155,14 +155,15 @@ export async function applyMigrations({
   logger = console,
   checkMode = false,
   allowBootstrap = false,
+  ledgerSchema = 'raf',
 } = {}) {
   if (!client) throw new Error('client is required');
 
   const migrations = await discoverMigrations(migrationsDir);
 
-  await ensureMigrationLedger(client);
+  await ensureMigrationLedger(client, ledgerSchema);
 
-  const applied = await readAppliedMigrations(client);
+  const applied = await readAppliedMigrations(client, ledgerSchema);
   assertAppliedMigrationsKnown(applied, migrations);
 
   // Preflight: validate migration order and print report
@@ -170,14 +171,14 @@ export async function applyMigrations({
 
   // Fail closed on empty ledger unless explicitly approved for bootstrap
   if (applied.length === 0 && !allowBootstrap) {
-    logger.log('\n🔴 ERROR: Empty migration ledger detected.');
+    logger.log('\n🔴 ERROR: Fresh database detected — migration ledger is empty.');
     logger.log('   This may be a fresh database or lost migration history.');
     logger.log('   Starting bootstrap without confirmation is unsafe.');
     logger.log('');
     logger.log('   To intentionally initialize a new database, use:');
     logger.log('   node scripts/migrate.js --bootstrap');
     logger.log('');
-    throw new Error('Empty migration ledger detected. Use --bootstrap for fresh database initialization.');
+    throw new Error('Fresh database detected: migration ledger is empty. Use --bootstrap for fresh database initialization.');
   }
 
   if (checkMode) {
@@ -185,9 +186,10 @@ export async function applyMigrations({
     return { discovered: migrations.length, applied: 0, ok };
   }
 
-  // Fail-closed on empty ledger: fresh database initialization is not automatically supported.
-  // Database initialization must use an explicit safe bootstrap procedure.
-  if (frontier === null && migrations.length > 0) {
+  // Secondary guard (reached only when allowBootstrap=true bypasses the primary check above).
+  // Even with bootstrap permission, fail if frontier is null and there are pending migrations —
+  // this path would apply all migrations blindly which is intentional for bootstrap only.
+  if (frontier === null && migrations.length > 0 && !allowBootstrap) {
     const appliedSet = new Set(applied);
     const pending = migrations.filter((f) => !appliedSet.has(f));
     if (pending.length > 0) {
@@ -222,7 +224,7 @@ export async function applyMigrations({
     logger.log(`  run   ${filename} ...`);
     await client.query(sql);
     await client.query(
-      'INSERT INTO raf.schema_migrations (filename) VALUES ($1)',
+      `INSERT INTO ${ledgerSchema}.schema_migrations (filename) VALUES ($1)`,
       [filename],
     );
     logger.log(`  done  ${filename}`);

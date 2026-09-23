@@ -145,6 +145,7 @@ test('applyMigrations does not record a failed migration in the ledger', async (
         applyMigrations({
           client,
           migrationsDir: dir,
+          allowBootstrap: true,
           logger: { log() {} },
         }),
       /migration failed/,

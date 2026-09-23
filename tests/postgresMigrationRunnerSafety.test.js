@@ -68,13 +68,13 @@ maybeTest('PG-MIG-1: historical hole (M2 UNEXPECTED_HISTORICAL) fails before DDL
     try {
       // Set up migration ledger with M1 and M3 only
       await client.query(`
-        CREATE TABLE ${schemaName}.raf_schema_migrations (
+        CREATE TABLE ${schemaName}.schema_migrations (
           filename text PRIMARY KEY,
           applied_at timestamptz DEFAULT now()
         )
       `);
       await client.query(
-        `INSERT INTO ${schemaName}.raf_schema_migrations (filename) VALUES ($1), ($2)`,
+        `INSERT INTO ${schemaName}.schema_migrations (filename) VALUES ($1), ($2)`,
         ['20000101000000_m1.sql', '20000101000002_m3.sql'],
       );
 
@@ -90,6 +90,7 @@ maybeTest('PG-MIG-1: historical hole (M2 UNEXPECTED_HISTORICAL) fails before DDL
         await applyMigrations({
           client: testClient,
           migrationsDir: tmpDir,
+          ledgerSchema: schemaName,
           logger: { log: () => {} },
         });
       } catch (err) {
@@ -118,7 +119,7 @@ maybeTest('PG-MIG-1: historical hole (M2 UNEXPECTED_HISTORICAL) fails before DDL
 
       // Verify ledger unchanged
       const { rows: ledgerRows } = await client.query(
-        `SELECT filename FROM ${schemaName}.raf_schema_migrations ORDER BY filename`,
+        `SELECT filename FROM ${schemaName}.schema_migrations ORDER BY filename`,
       );
       assert.deepEqual(
         ledgerRows.map((r) => r.filename),
@@ -157,13 +158,13 @@ maybeTest('PG-MIG-2: check mode does not mutate database or ledger', async () =>
     try {
       // Set up ledger with M1 + M3
       await client.query(`
-        CREATE TABLE ${schemaName}.raf_schema_migrations (
+        CREATE TABLE ${schemaName}.schema_migrations (
           filename text PRIMARY KEY,
           applied_at timestamptz DEFAULT now()
         )
       `);
       await client.query(
-        `INSERT INTO ${schemaName}.raf_schema_migrations (filename) VALUES ($1), ($2)`,
+        `INSERT INTO ${schemaName}.schema_migrations (filename) VALUES ($1), ($2)`,
         ['20000101000000_m1.sql', '20000101000002_m3.sql'],
       );
 
@@ -177,6 +178,7 @@ maybeTest('PG-MIG-2: check mode does not mutate database or ledger', async () =>
       const result = await applyMigrations({
         client: testClient,
         migrationsDir: tmpDir,
+        ledgerSchema: schemaName,
         logger: { log: () => {} },
         checkMode: true,
       });
@@ -200,7 +202,7 @@ maybeTest('PG-MIG-2: check mode does not mutate database or ledger', async () =>
 
       // Verify ledger unchanged
       const { rows: ledgerRows } = await client.query(
-        `SELECT filename FROM ${schemaName}.raf_schema_migrations ORDER BY filename`,
+        `SELECT filename FROM ${schemaName}.schema_migrations ORDER BY filename`,
       );
       assert.deepEqual(
         ledgerRows.map((r) => r.filename),
@@ -242,13 +244,13 @@ maybeTest('PG-MIG-3: clean incremental migration applies exactly once', async ()
     try {
       // Set up ledger with M1, M2, M3 (M4 is pending)
       await client.query(`
-        CREATE TABLE ${schemaName}.raf_schema_migrations (
+        CREATE TABLE ${schemaName}.schema_migrations (
           filename text PRIMARY KEY,
           applied_at timestamptz DEFAULT now()
         )
       `);
       await client.query(
-        `INSERT INTO ${schemaName}.raf_schema_migrations (filename) VALUES ($1), ($2), ($3)`,
+        `INSERT INTO ${schemaName}.schema_migrations (filename) VALUES ($1), ($2), ($3)`,
         ['20000101000000_m1.sql', '20000101000001_m2.sql', '20000101000002_m3.sql'],
       );
 
@@ -262,6 +264,7 @@ maybeTest('PG-MIG-3: clean incremental migration applies exactly once', async ()
       const result1 = await applyMigrations({
         client: testClient,
         migrationsDir: tmpDir,
+        ledgerSchema: schemaName,
         logger: { log: () => {} },
       });
       assert.equal(result1.applied, 1, 'First run should apply 1 migration');
@@ -275,6 +278,7 @@ maybeTest('PG-MIG-3: clean incremental migration applies exactly once', async ()
       const result2 = await applyMigrations({
         client: testClient,
         migrationsDir: tmpDir,
+        ledgerSchema: schemaName,
         logger: { log: () => {} },
       });
       assert.equal(result2.applied, 0, 'Second run should apply 0 migrations');
@@ -286,7 +290,7 @@ maybeTest('PG-MIG-3: clean incremental migration applies exactly once', async ()
 
       // Verify ledger has M4 exactly once
       const { rows: ledgerRows } = await client.query(
-        `SELECT filename FROM ${schemaName}.raf_schema_migrations WHERE filename LIKE '%m4%'`,
+        `SELECT filename FROM ${schemaName}.schema_migrations WHERE filename LIKE '%m4%'`,
       );
       assert.equal(ledgerRows.length, 1, 'M4 must appear in ledger exactly once');
 
@@ -320,13 +324,13 @@ maybeTest('PG-MIG-4: LEDGER_ONLY migration detected and normal mode fails', asyn
     try {
       // Ledger has M1, phantom M3, and we'll test pending M2
       await client.query(`
-        CREATE TABLE ${schemaName}.raf_schema_migrations (
+        CREATE TABLE ${schemaName}.schema_migrations (
           filename text PRIMARY KEY,
           applied_at timestamptz DEFAULT now()
         )
       `);
       await client.query(
-        `INSERT INTO ${schemaName}.raf_schema_migrations (filename) VALUES ($1), ($2)`,
+        `INSERT INTO ${schemaName}.schema_migrations (filename) VALUES ($1), ($2)`,
         ['20000101000000_m1.sql', '20000101000099_phantom.sql'],
       );
 
@@ -342,6 +346,7 @@ maybeTest('PG-MIG-4: LEDGER_ONLY migration detected and normal mode fails', asyn
         await applyMigrations({
           client: testClient,
           migrationsDir: tmpDir,
+          ledgerSchema: schemaName,
           logger: { log: () => {} },
         });
       } catch (err) {
@@ -389,7 +394,7 @@ maybeTest('PG-MIG-5: empty ledger fails closed before migration execution', asyn
     try {
       // Create empty migration ledger (no applied migrations)
       await client.query(`
-        CREATE TABLE ${schemaName}.raf_schema_migrations (
+        CREATE TABLE ${schemaName}.schema_migrations (
           filename text PRIMARY KEY,
           applied_at timestamptz DEFAULT now()
         )
@@ -407,6 +412,7 @@ maybeTest('PG-MIG-5: empty ledger fails closed before migration execution', asyn
         await applyMigrations({
           client: testClient,
           migrationsDir: tmpDir,
+          ledgerSchema: schemaName,
           logger: { log: () => {} },
         });
       } catch (err) {
@@ -428,7 +434,7 @@ maybeTest('PG-MIG-5: empty ledger fails closed before migration execution', asyn
 
       // Verify ledger remains empty
       const { rows: ledgerRows } = await client.query(
-        `SELECT COUNT(*) FROM ${schemaName}.raf_schema_migrations`,
+        `SELECT COUNT(*) FROM ${schemaName}.schema_migrations`,
       );
       assert.equal(ledgerRows[0].count, 0, 'Ledger must remain empty');
 
