@@ -133,6 +133,7 @@ maybeTest('PG-MIG-1: historical hole (M2 UNEXPECTED_HISTORICAL) fails before DDL
     }
   } finally {
     await cleanupTestSchema(client, schemaName);
+    client.release();
     await pool.end();
   }
 });
@@ -216,6 +217,7 @@ maybeTest('PG-MIG-2: check mode does not mutate database or ledger', async () =>
     }
   } finally {
     await cleanupTestSchema(client, schemaName);
+    client.release();
     await pool.end();
   }
 });
@@ -300,6 +302,7 @@ maybeTest('PG-MIG-3: clean incremental migration applies exactly once', async ()
     }
   } finally {
     await cleanupTestSchema(client, schemaName);
+    client.release();
     await pool.end();
   }
 });
@@ -372,6 +375,7 @@ maybeTest('PG-MIG-4: LEDGER_ONLY migration detected and normal mode fails', asyn
     }
   } finally {
     await cleanupTestSchema(client, schemaName);
+    client.release();
     await pool.end();
   }
 });
@@ -444,6 +448,7 @@ maybeTest('PG-MIG-5: empty ledger fails closed before migration execution', asyn
     }
   } finally {
     await cleanupTestSchema(client, schemaName);
+    client.release();
     await pool.end();
   }
 });
