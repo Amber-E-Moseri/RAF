@@ -19,7 +19,6 @@ import { Pool } from 'pg';
 
 import {
   applyMigrations,
-  discoverMigrations,
 } from '../scripts/migrate.js';
 
 const adminUrl = process.env.DATABASE_URL?.replace(/^["']|["']$/g, '');

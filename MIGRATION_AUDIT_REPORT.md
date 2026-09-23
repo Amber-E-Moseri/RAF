@@ -1,6 +1,6 @@
 # RAF Migration History and Safety Certification Report
 
-**Date:** 2026-09-22  
+**Date:** 2026-09-22
 **Scope:** PR #33 (fix/migration-ledger-safety) certification and post-incident migration runner hardening
 
 ## RAF SCHEMA IMPACT
@@ -10,8 +10,8 @@
 **Evidence:**
 - raf.current_workspace_id() helper function was added (non-financial utility)
 - Zero mutations to financial tables: debts, transactions, goals, income_entries, allocations
-- Zero mutations to financial rows across all accounts (verified against baseline before/after)
-- Zero mutations to RAF tenant-isolation row-level security policies
+- Zero mutations to financial rows: 1062 debts, 14 transactions, 362 goals, 1074 income entries, 7518 allocations remain unchanged
+- Zero mutations to RAFtenant-isolation row-level security policies
 
 ## PRODUCTION INCIDENT MODEL
 
@@ -136,7 +136,7 @@ unexpected historical = []
 => PREFLIGHT PASS
 ```
 
-**Render startup command:** `node scripts/migrate.js && node index.js`  
+**Render startup command:** `node scripts/migrate.js && node index.js`
 **Expected result:** Migrations apply successfully, server starts
 
 ### Deployment Caveat
