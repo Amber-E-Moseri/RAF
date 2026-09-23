@@ -1,209 +1,444 @@
+/**
+ * PG-MIG-1 through PG-MIG-5 — Real PostgreSQL migration runner safety certification.
+ *
+ * These tests prove fail-closed behavior against actual PostgreSQL, not mocked clients.
+ *
+ * Gate conditions:
+ *   DATABASE_URL                   — admin connection (for setup and verification)
+ *   POSTGRES_CONNECTION_STRING_APP — raf_app connection (optional, for read-only checks)
+ *   RAF_RUN_POSTGRES_RLS_TESTS     — must be 'true'
+ *   RAF_CONFIRM_NON_PRODUCTION_DB  — must be 'true'
+ */
+
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
 import { Pool } from 'pg';
 
 import {
   applyMigrations,
   discoverMigrations,
-  ensureMigrationLedger,
-  readAppliedMigrations,
-  validateMigrationOrder,
-  calculateMigrationFrontier,
 } from '../scripts/migrate.js';
 
-// Use test database
-const TEST_POSTGRES_URL = process.env.TEST_POSTGRES_URL || 'postgresql://postgres:postgres@localhost:5432/raf_test';
+const adminUrl = process.env.DATABASE_URL?.replace(/^["']|["']$/g, '');
+const rlsEnabled = process.env.RAF_RUN_POSTGRES_RLS_TESTS === 'true';
+const nonProd = process.env.RAF_CONFIRM_NON_PRODUCTION_DB === 'true';
 
-async function withTestDB(fn) {
-  const pool = new Pool({ connectionString: TEST_POSTGRES_URL });
-  const client = await pool.connect();
+const shouldRun = Boolean(adminUrl && rlsEnabled && nonProd);
+const maybeTest = shouldRun ? test : test.skip;
+
+const sslOption = process.env.RAF_POSTGRES_SSL === 'false' || process.env.RAF_POSTGRES_SSL === '0'
+  ? false
+  : { rejectUnauthorized: false };
+
+async function createTestFixture(testName, migrations) {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'raf-pg-mig-'));
+  for (const [filename, sql] of Object.entries(migrations)) {
+    await fs.writeFile(path.join(tmpDir, filename), sql, 'utf8');
+  }
+  return tmpDir;
+}
+
+async function cleanupTestSchema(client, schemaName) {
   try {
-    await client.query('DROP SCHEMA IF EXISTS raf CASCADE');
-    return await fn(client);
+    await client.query(`DROP SCHEMA IF EXISTS ${schemaName} CASCADE`);
+  } catch {}
+}
+
+// ── PG-MIG-1: HISTORICAL HOLE ──────────────────────────────────────────
+
+maybeTest('PG-MIG-1: historical hole (M2 UNEXPECTED_HISTORICAL) fails before DDL execution', async () => {
+  const pool = new Pool({ connectionString: adminUrl, ssl: sslOption });
+  const client = await pool.connect();
+  const schemaName = 'pgmig1_test';
+
+  try {
+    await cleanupTestSchema(client, schemaName);
+    await client.query(`CREATE SCHEMA ${schemaName}`);
+
+    // Create test fixture: M1 < M2 < M3 < M4, ledger has M1 + M3 only
+    const tmpDir = await createTestFixture('PG-MIG-1', {
+      '20000101000000_m1.sql': `CREATE TABLE ${schemaName}.m1_table AS SELECT 1;`,
+      '20000101000001_m2.sql': `CREATE TABLE ${schemaName}.sentinel_m2 AS SELECT 2;`,
+      '20000101000002_m3.sql': `CREATE TABLE ${schemaName}.m3_table AS SELECT 3;`,
+      '20000101000003_m4.sql': `CREATE TABLE ${schemaName}.sentinel_m4 AS SELECT 4;`,
+    });
+
+    try {
+      // Set up migration ledger with M1 and M3 only
+      await client.query(`
+        CREATE TABLE ${schemaName}.raf_schema_migrations (
+          filename text PRIMARY KEY,
+          applied_at timestamptz DEFAULT now()
+        )
+      `);
+      await client.query(
+        `INSERT INTO ${schemaName}.raf_schema_migrations (filename) VALUES ($1), ($2)`,
+        ['20000101000000_m1.sql', '20000101000002_m3.sql'],
+      );
+
+      // Try to apply migrations — should fail on M2 (UNEXPECTED_HISTORICAL)
+      const testClient = new (await import('pg')).Client({
+        connectionString: adminUrl,
+        ssl: sslOption,
+      });
+      await testClient.connect();
+
+      let thrownError = null;
+      try {
+        await applyMigrations({
+          client: testClient,
+          migrationsDir: tmpDir,
+          logger: { log: () => {} },
+        });
+      } catch (err) {
+        thrownError = err;
+      }
+
+      assert.ok(
+        thrownError && thrownError.message.includes('Unexpected historical migrations'),
+        'Should throw on unexpected historical (M2)',
+      );
+
+      // Verify no DDL was executed
+      const { rows: m2Check } = await client.query(
+        `SELECT EXISTS(SELECT 1 FROM information_schema.tables
+         WHERE table_schema = $1 AND table_name = 'sentinel_m2') AS exists`,
+        [schemaName],
+      );
+      assert.equal(m2Check[0].exists, false, 'M2 sentinel must not exist');
+
+      const { rows: m4Check } = await client.query(
+        `SELECT EXISTS(SELECT 1 FROM information_schema.tables
+         WHERE table_schema = $1 AND table_name = 'sentinel_m4') AS exists`,
+        [schemaName],
+      );
+      assert.equal(m4Check[0].exists, false, 'M4 sentinel must not exist');
+
+      // Verify ledger unchanged
+      const { rows: ledgerRows } = await client.query(
+        `SELECT filename FROM ${schemaName}.raf_schema_migrations ORDER BY filename`,
+      );
+      assert.deepEqual(
+        ledgerRows.map((r) => r.filename),
+        ['20000101000000_m1.sql', '20000101000002_m3.sql'],
+        'Ledger must remain unchanged',
+      );
+
+      await testClient.end();
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
   } finally {
-    await client.end();
+    await cleanupTestSchema(client, schemaName);
     await pool.end();
   }
-}
+});
 
-async function withTempMigrationDir(fn) {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'raf-pg-test-'));
+// ── PG-MIG-2: CHECK MODE ZERO MUTATION ─────────────────────────────────
+
+maybeTest('PG-MIG-2: check mode does not mutate database or ledger', async () => {
+  const pool = new Pool({ connectionString: adminUrl, ssl: sslOption });
+  const client = await pool.connect();
+  const schemaName = 'pgmig2_test';
+
   try {
-    return await fn(dir);
+    await cleanupTestSchema(client, schemaName);
+    await client.query(`CREATE SCHEMA ${schemaName}`);
+
+    const tmpDir = await createTestFixture('PG-MIG-2', {
+      '20000101000000_m1.sql': `CREATE TABLE ${schemaName}.m1_table AS SELECT 1;`,
+      '20000101000001_m2.sql': `CREATE TABLE ${schemaName}.sentinel_m2 AS SELECT 2;`,
+      '20000101000002_m3.sql': `CREATE TABLE ${schemaName}.m3_table AS SELECT 3;`,
+      '20000101000003_m4.sql': `CREATE TABLE ${schemaName}.sentinel_m4 AS SELECT 4;`,
+    });
+
+    try {
+      // Set up ledger with M1 + M3
+      await client.query(`
+        CREATE TABLE ${schemaName}.raf_schema_migrations (
+          filename text PRIMARY KEY,
+          applied_at timestamptz DEFAULT now()
+        )
+      `);
+      await client.query(
+        `INSERT INTO ${schemaName}.raf_schema_migrations (filename) VALUES ($1), ($2)`,
+        ['20000101000000_m1.sql', '20000101000002_m3.sql'],
+      );
+
+      // Run check mode
+      const testClient = new (await import('pg')).Client({
+        connectionString: adminUrl,
+        ssl: sslOption,
+      });
+      await testClient.connect();
+
+      const result = await applyMigrations({
+        client: testClient,
+        migrationsDir: tmpDir,
+        logger: { log: () => {} },
+        checkMode: true,
+      });
+
+      assert.equal(result.ok, false, 'Check mode should report not-ok due to unexpected historical');
+
+      // Verify no DDL executed
+      const { rows: m2Check } = await client.query(
+        `SELECT EXISTS(SELECT 1 FROM information_schema.tables
+         WHERE table_schema = $1 AND table_name = 'sentinel_m2') AS exists`,
+        [schemaName],
+      );
+      assert.equal(m2Check[0].exists, false, 'M2 sentinel must not exist (check mode)');
+
+      const { rows: m4Check } = await client.query(
+        `SELECT EXISTS(SELECT 1 FROM information_schema.tables
+         WHERE table_schema = $1 AND table_name = 'sentinel_m4') AS exists`,
+        [schemaName],
+      );
+      assert.equal(m4Check[0].exists, false, 'M4 sentinel must not exist (check mode)');
+
+      // Verify ledger unchanged
+      const { rows: ledgerRows } = await client.query(
+        `SELECT filename FROM ${schemaName}.raf_schema_migrations ORDER BY filename`,
+      );
+      assert.deepEqual(
+        ledgerRows.map((r) => r.filename),
+        ['20000101000000_m1.sql', '20000101000002_m3.sql'],
+        'Ledger must remain unchanged (check mode)',
+      );
+
+      await testClient.end();
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
   } finally {
-    await fs.rm(dir, { recursive: true, force: true });
+    await cleanupTestSchema(client, schemaName);
+    await pool.end();
   }
-}
+});
 
-async function writeMigration(dir, filename, sql = `-- ${filename}\nselect 1;\n`) {
-  await fs.writeFile(path.join(dir, filename), sql, 'utf8');
-}
+// ── PG-MIG-3: CLEAN INCREMENTAL EXACTLY ONCE ───────────────────────────
 
-test.skip('PG-MIG-1: Historical-hole fail-closed with real PostgreSQL', async () => {
-  if (!process.env.TEST_POSTGRES_URL) {
-    console.log('Skipping: TEST_POSTGRES_URL not set');
-    return;
+maybeTest('PG-MIG-3: clean incremental migration applies exactly once', async () => {
+  const pool = new Pool({ connectionString: adminUrl, ssl: sslOption });
+  const client = await pool.connect();
+  const schemaName = 'pgmig3_test';
+
+  try {
+    await cleanupTestSchema(client, schemaName);
+    await client.query(`CREATE SCHEMA ${schemaName}`);
+
+    const tmpDir = await createTestFixture('PG-MIG-3', {
+      '20000101000000_m1.sql': `CREATE TABLE ${schemaName}.m1_table AS SELECT 1;`,
+      '20000101000001_m2.sql': `CREATE TABLE ${schemaName}.m2_table AS SELECT 2;`,
+      '20000101000002_m3.sql': `CREATE TABLE ${schemaName}.m3_table AS SELECT 3;`,
+      '20000101000003_m4.sql': `
+        CREATE TABLE ${schemaName}.m4_counter AS SELECT 1 AS count;
+        INSERT INTO ${schemaName}.m4_counter VALUES (1);
+      `,
+    });
+
+    try {
+      // Set up ledger with M1, M2, M3 (M4 is pending)
+      await client.query(`
+        CREATE TABLE ${schemaName}.raf_schema_migrations (
+          filename text PRIMARY KEY,
+          applied_at timestamptz DEFAULT now()
+        )
+      `);
+      await client.query(
+        `INSERT INTO ${schemaName}.raf_schema_migrations (filename) VALUES ($1), ($2), ($3)`,
+        ['20000101000000_m1.sql', '20000101000001_m2.sql', '20000101000002_m3.sql'],
+      );
+
+      const testClient = new (await import('pg')).Client({
+        connectionString: adminUrl,
+        ssl: sslOption,
+      });
+      await testClient.connect();
+
+      // First run
+      const result1 = await applyMigrations({
+        client: testClient,
+        migrationsDir: tmpDir,
+        logger: { log: () => {} },
+      });
+      assert.equal(result1.applied, 1, 'First run should apply 1 migration');
+
+      const { rows: countAfterFirst } = await client.query(
+        `SELECT COUNT(*) FROM ${schemaName}.m4_counter`,
+      );
+      assert.equal(countAfterFirst[0].count, 2, 'M4 should have executed once (1 + 1)');
+
+      // Second run
+      const result2 = await applyMigrations({
+        client: testClient,
+        migrationsDir: tmpDir,
+        logger: { log: () => {} },
+      });
+      assert.equal(result2.applied, 0, 'Second run should apply 0 migrations');
+
+      const { rows: countAfterSecond } = await client.query(
+        `SELECT COUNT(*) FROM ${schemaName}.m4_counter`,
+      );
+      assert.equal(countAfterSecond[0].count, 2, 'M4 count must remain 2 (not 3)');
+
+      // Verify ledger has M4 exactly once
+      const { rows: ledgerRows } = await client.query(
+        `SELECT filename FROM ${schemaName}.raf_schema_migrations WHERE filename LIKE '%m4%'`,
+      );
+      assert.equal(ledgerRows.length, 1, 'M4 must appear in ledger exactly once');
+
+      await testClient.end();
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  } finally {
+    await cleanupTestSchema(client, schemaName);
+    await pool.end();
   }
-
-  await withTestDB(async (client) => {
-    await withTempMigrationDir(async (dir) => {
-      // Setup: M1, M2, M3, M4 in code
-      await writeMigration(dir, '20260901000000_M1.sql', 'CREATE TABLE test_m1 (id INT);');
-      await writeMigration(dir, '20260901000001_M2.sql', 'CREATE TABLE test_m2 (id INT);');
-      await writeMigration(dir, '20260902000000_M3.sql', 'CREATE TABLE test_m3 (id INT);');
-      await writeMigration(dir, '20260902000001_M4.sql', 'CREATE TABLE test_m4 (id INT);');
-
-      // Initialize ledger with only M1 and M3 (historical hole)
-      await ensureMigrationLedger(client);
-      await client.query('INSERT INTO raf.schema_migrations (filename) VALUES ($1)', ['20260901000000_M1.sql']);
-      await client.query('INSERT INTO raf.schema_migrations (filename) VALUES ($1)', ['20260902000000_M3.sql']);
-
-      // Apply migrations - should fail before M2 executes
-      await assert.rejects(
-        () => applyMigrations({ client, migrationsDir: dir, logger: { log() {} } }),
-        /Unexpected historical migrations detected/,
-      );
-
-      // Verify no DDL executed for M2 or M4
-      const tables = await client.query("SELECT table_name FROM information_schema.tables WHERE table_schema='public'");
-      const tableNames = tables.rows.map((r) => r.table_name);
-
-      assert.ok(!tableNames.includes('test_m2'), 'M2 should not have executed');
-      assert.ok(!tableNames.includes('test_m4'), 'M4 should not have executed');
-      assert.ok(tableNames.includes('test_m1'), 'M1 should exist');
-      assert.ok(tableNames.includes('test_m3'), 'M3 should exist');
-
-      // Verify ledger unchanged
-      const ledger = await readAppliedMigrations(client);
-      assert.deepEqual(ledger.sort(), ['20260901000000_M1.sql', '20260902000000_M3.sql']);
-    });
-  });
 });
 
-test.skip('PG-MIG-2: Check mode with real PostgreSQL', async () => {
-  if (!process.env.TEST_POSTGRES_URL) return;
+// ── PG-MIG-4: LEDGER_ONLY ──────────────────────────────────────────────
 
-  await withTestDB(async (client) => {
-    await withTempMigrationDir(async (dir) => {
-      // Same fixture as PG-MIG-1
-      await writeMigration(dir, '20260901000000_M1.sql', 'CREATE TABLE test_m1 (id INT);');
-      await writeMigration(dir, '20260901000001_M2.sql', 'CREATE TABLE test_m2 (id INT);');
-      await writeMigration(dir, '20260902000000_M3.sql', 'CREATE TABLE test_m3 (id INT);');
-      await writeMigration(dir, '20260902000001_M4.sql', 'CREATE TABLE test_m4 (id INT);');
+maybeTest('PG-MIG-4: LEDGER_ONLY migration detected and normal mode fails', async () => {
+  const pool = new Pool({ connectionString: adminUrl, ssl: sslOption });
+  const client = await pool.connect();
+  const schemaName = 'pgmig4_test';
 
-      await ensureMigrationLedger(client);
-      await client.query('INSERT INTO raf.schema_migrations (filename) VALUES ($1)', ['20260901000000_M1.sql']);
-      await client.query('INSERT INTO raf.schema_migrations (filename) VALUES ($1)', ['20260902000000_M3.sql']);
+  try {
+    await cleanupTestSchema(client, schemaName);
+    await client.query(`CREATE SCHEMA ${schemaName}`);
 
-      // Check mode
-      const result = await applyMigrations({ client, migrationsDir: dir, checkMode: true, logger: { log() {} } });
-      assert.equal(result.ok, false, 'Check should fail due to historical migration');
-
-      // Verify no tables created
-      const tables = await client.query("SELECT table_name FROM information_schema.tables WHERE table_schema='public'");
-      const tableNames = tables.rows.map((r) => r.table_name);
-      assert.equal(tableNames.length, 0, 'No tables should be created in check mode');
-
-      // Verify ledger unchanged
-      const ledger = await readAppliedMigrations(client);
-      assert.deepEqual(ledger.sort(), ['20260901000000_M1.sql', '20260902000000_M3.sql']);
+    // Repository has only M1 and M2
+    const tmpDir = await createTestFixture('PG-MIG-4', {
+      '20000101000000_m1.sql': `CREATE TABLE ${schemaName}.m1_table AS SELECT 1;`,
+      '20000101000001_m2.sql': `CREATE TABLE ${schemaName}.m2_table AS SELECT 2;`,
     });
-  });
-});
 
-test.skip('PG-MIG-3: Clean incremental with real PostgreSQL', async () => {
-  if (!process.env.TEST_POSTGRES_URL) return;
-
-  await withTestDB(async (client) => {
-    await withTempMigrationDir(async (dir) => {
-      // Setup: M1, M2, M3, M4 in code; M1, M2, M3 in ledger
-      await writeMigration(dir, '20260901000000_M1.sql', 'CREATE TABLE test_m1 (id INT);');
-      await writeMigration(dir, '20260901000001_M2.sql', 'CREATE TABLE test_m2 (id INT);');
-      await writeMigration(dir, '20260902000000_M3.sql', 'CREATE TABLE test_m3 (id INT);');
-      await writeMigration(dir, '20260902000001_M4.sql', 'CREATE TABLE test_m4 (id INT);');
-
-      await ensureMigrationLedger(client);
-      await client.query('INSERT INTO raf.schema_migrations (filename) VALUES ($1)', ['20260901000000_M1.sql']);
-      await client.query('INSERT INTO raf.schema_migrations (filename) VALUES ($1)', ['20260901000001_M2.sql']);
-      await client.query('INSERT INTO raf.schema_migrations (filename) VALUES ($1)', ['20260902000000_M3.sql']);
-
-      // First run - apply M4
-      const result1 = await applyMigrations({ client, migrationsDir: dir, logger: { log() {} } });
-      assert.equal(result1.applied, 1, 'Should apply one migration (M4)');
-
-      let tables = await client.query("SELECT table_name FROM information_schema.tables WHERE table_schema='public'");
-      let tableNames = tables.rows.map((r) => r.table_name);
-      assert.ok(tableNames.includes('test_m4'), 'M4 should exist after first run');
-
-      // Second run - idempotency check
-      const result2 = await applyMigrations({ client, migrationsDir: dir, logger: { log() {} } });
-      assert.equal(result2.applied, 0, 'Should not apply anything on second run');
-
-      tables = await client.query("SELECT table_name FROM information_schema.tables WHERE table_schema='public'");
-      tableNames = tables.rows.map((r) => r.table_name);
-      assert.ok(tableNames.includes('test_m4'), 'M4 should still exist');
-      assert.equal(tableNames.filter((n) => n === 'test_m4').length, 1, 'M4 should exist exactly once');
-
-      const ledger = await readAppliedMigrations(client);
-      assert.equal(
-        ledger.filter((f) => f === '20260902000001_M4.sql').length,
-        1,
-        'M4 should be ledgered exactly once',
-      );
-    });
-  });
-});
-
-test.skip('PG-MIG-4: LEDGER_ONLY detection with real PostgreSQL', async () => {
-  if (!process.env.TEST_POSTGRES_URL) return;
-
-  await withTestDB(async (client) => {
-    await withTempMigrationDir(async (dir) => {
-      // Minimal migration in code
-      await writeMigration(dir, '20260901000000_M1.sql', 'CREATE TABLE test_m1 (id INT);');
-
-      // But ledger contains an orphan migration
-      await ensureMigrationLedger(client);
-      await client.query('INSERT INTO raf.schema_migrations (filename) VALUES ($1)', ['20260901000000_M1.sql']);
-      await client.query('INSERT INTO raf.schema_migrations (filename) VALUES ($1)', ['20260901000001_orphan.sql']);
-
-      // Should fail when trying to apply
-      await assert.rejects(
-        () => applyMigrations({ client, migrationsDir: dir, logger: { log() {} } }),
-        /Applied migration\(s\) are missing from db\/migrations/,
-      );
-    });
-  });
-});
-
-test.skip('PG-MIG-5: Empty ledger fail-closed with real PostgreSQL', async () => {
-  if (!process.env.TEST_POSTGRES_URL) return;
-
-  await withTestDB(async (client) => {
-    await withTempMigrationDir(async (dir) => {
-      // Migrations in code but empty ledger
-      await writeMigration(dir, '20260901000000_M1.sql', 'CREATE TABLE test_m1 (id INT);');
-      await writeMigration(dir, '20260901000001_M2.sql', 'CREATE TABLE test_m2 (id INT);');
-
-      // Initialize empty ledger
-      await ensureMigrationLedger(client);
-
-      // Normal mode should fail on empty ledger
-      await assert.rejects(
-        () => applyMigrations({ client, migrationsDir: dir, logger: { log() {} } }),
-        /Fresh database|empty migration ledger/i,
+    try {
+      // Ledger has M1, phantom M3, and we'll test pending M2
+      await client.query(`
+        CREATE TABLE ${schemaName}.raf_schema_migrations (
+          filename text PRIMARY KEY,
+          applied_at timestamptz DEFAULT now()
+        )
+      `);
+      await client.query(
+        `INSERT INTO ${schemaName}.raf_schema_migrations (filename) VALUES ($1), ($2)`,
+        ['20000101000000_m1.sql', '20000101000099_phantom.sql'],
       );
 
-      // Verify nothing was created
-      const tables = await client.query("SELECT table_name FROM information_schema.tables WHERE table_schema='public'");
-      assert.equal(tables.rows.length, 0, 'No tables should be created on empty ledger failure');
+      const testClient = new (await import('pg')).Client({
+        connectionString: adminUrl,
+        ssl: sslOption,
+      });
+      await testClient.connect();
 
-      // Verify ledger is still empty
-      const ledger = await readAppliedMigrations(client);
-      assert.equal(ledger.length, 0, 'Ledger should remain empty');
+      // Normal mode should fail (LEDGER_ONLY phantom.sql)
+      let thrownError = null;
+      try {
+        await applyMigrations({
+          client: testClient,
+          migrationsDir: tmpDir,
+          logger: { log: () => {} },
+        });
+      } catch (err) {
+        thrownError = err;
+      }
+
+      assert.ok(
+        thrownError && thrownError.message.includes('missing from db/migrations'),
+        'Should throw on LEDGER_ONLY (phantom.sql)',
+      );
+
+      // Verify no new DDL
+      const { rows: m2Check } = await client.query(
+        `SELECT EXISTS(SELECT 1 FROM information_schema.tables
+         WHERE table_schema = $1 AND table_name = 'm2_table') AS exists`,
+        [schemaName],
+      );
+      assert.equal(m2Check[0].exists, false, 'M2 must not execute when LEDGER_ONLY blocks');
+
+      await testClient.end();
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  } finally {
+    await cleanupTestSchema(client, schemaName);
+    await pool.end();
+  }
+});
+
+// ── PG-MIG-5: EMPTY LEDGER ─────────────────────────────────────────────
+
+maybeTest('PG-MIG-5: empty ledger fails closed before migration execution', async () => {
+  const pool = new Pool({ connectionString: adminUrl, ssl: sslOption });
+  const client = await pool.connect();
+  const schemaName = 'pgmig5_test';
+
+  try {
+    await cleanupTestSchema(client, schemaName);
+    await client.query(`CREATE SCHEMA ${schemaName}`);
+
+    const tmpDir = await createTestFixture('PG-MIG-5', {
+      '20000101000000_m1.sql': `CREATE TABLE ${schemaName}.sentinel_m1 AS SELECT 1;`,
     });
-  });
+
+    try {
+      // Create empty migration ledger (no applied migrations)
+      await client.query(`
+        CREATE TABLE ${schemaName}.raf_schema_migrations (
+          filename text PRIMARY KEY,
+          applied_at timestamptz DEFAULT now()
+        )
+      `);
+
+      const testClient = new (await import('pg')).Client({
+        connectionString: adminUrl,
+        ssl: sslOption,
+      });
+      await testClient.connect();
+
+      // Normal mode against empty ledger should fail
+      let thrownError = null;
+      try {
+        await applyMigrations({
+          client: testClient,
+          migrationsDir: tmpDir,
+          logger: { log: () => {} },
+        });
+      } catch (err) {
+        thrownError = err;
+      }
+
+      assert.ok(
+        thrownError && thrownError.message.includes('Fresh database'),
+        'Should throw on empty ledger',
+      );
+
+      // Verify no DDL executed
+      const { rows: m1Check } = await client.query(
+        `SELECT EXISTS(SELECT 1 FROM information_schema.tables
+         WHERE table_schema = $1 AND table_name = 'sentinel_m1') AS exists`,
+        [schemaName],
+      );
+      assert.equal(m1Check[0].exists, false, 'M1 sentinel must not exist');
+
+      // Verify ledger remains empty
+      const { rows: ledgerRows } = await client.query(
+        `SELECT COUNT(*) FROM ${schemaName}.raf_schema_migrations`,
+      );
+      assert.equal(ledgerRows[0].count, 0, 'Ledger must remain empty');
+
+      await testClient.end();
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  } finally {
+    await cleanupTestSchema(client, schemaName);
+    await pool.end();
+  }
 });
