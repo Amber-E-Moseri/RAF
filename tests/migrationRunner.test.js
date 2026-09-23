@@ -137,8 +137,14 @@ test('applyMigrations skips already-applied files and records new files only aft
 
 test('applyMigrations does not record a failed migration in the ledger', async () => {
   await withTempDir(async (dir) => {
-    await writeMigration(dir, '20260901000000_fails.sql', 'select boom;');
-    const client = new FakeClient({ failSql: 'select boom;' });
+    // Non-empty ledger: prior migration already applied, failing one is pending.
+    // Empty ledger would trigger the fail-closed bootstrap guard, not the migration failure path.
+    await writeMigration(dir, '20260901000000_prior.sql', 'select 0;');
+    await writeMigration(dir, '20260901000001_fails.sql', 'select boom;');
+    const client = new FakeClient({
+      applied: ['20260901000000_prior.sql'],
+      failSql: 'select boom;',
+    });
 
     await assert.rejects(
       () =>

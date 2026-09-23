@@ -154,6 +154,7 @@ export async function applyMigrations({
   migrationsDir = defaultMigrationsDir,
   logger = console,
   checkMode = false,
+  allowBootstrap = false,
 } = {}) {
   if (!client) throw new Error('client is required');
 
@@ -172,9 +173,10 @@ export async function applyMigrations({
     return { discovered: migrations.length, applied: 0, ok };
   }
 
-  // Fail-closed on empty ledger: fresh database initialization is not automatically supported.
-  // Database initialization must use an explicit safe bootstrap procedure.
-  if (frontier === null && migrations.length > 0) {
+  // Fail-closed on empty ledger: fresh database initialization is not automatically supported
+  // unless the caller explicitly opts in via allowBootstrap (used by CI setup only).
+  // Production (Render) never sets allowBootstrap, preserving fail-closed safety.
+  if (frontier === null && migrations.length > 0 && !allowBootstrap) {
     const appliedSet = new Set(applied);
     const pending = migrations.filter((f) => !appliedSet.has(f));
     if (pending.length > 0) {
@@ -236,10 +238,12 @@ export async function run() {
   try {
     await client.connect();
     console.log('Connected to Postgres');
+    const allowBootstrap = process.env.RAF_ALLOW_BOOTSTRAP === 'true';
     const result = await applyMigrations({
       client,
       migrationsDir: defaultMigrationsDir,
       checkMode,
+      allowBootstrap,
     });
 
     if (checkMode) {
