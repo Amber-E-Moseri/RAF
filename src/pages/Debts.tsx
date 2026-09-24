@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
+﻿import { useCallback, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { acknowledgePaceInsight, createDebt, getDebts, updateDebt } from "../api/debtsApi";
 import { getTransactions } from "../api/transactionsApi";
@@ -89,6 +90,28 @@ function paymentTooLowWarning(balance: string, apr: string, monthlyPayment: stri
   return monthlyPaymentValue <= monthlyInterest ? "Payment too low to reduce principal." : null;
 }
 
+function obligationStatusLabel(status: string) {
+  switch (status) {
+    case "satisfied": return "Satisfied";
+    case "in_progress": return "In progress";
+    case "pending": return "Pending";
+    case "under_minimum": return "Under minimum";
+    case "missed_payment": return "Missed";
+    default: return status;
+  }
+}
+
+function obligationStatusTone(status: string): "success" | "warning" | "danger" | "neutral" {
+  switch (status) {
+    case "satisfied": return "success";
+    case "in_progress": return "neutral";
+    case "pending": return "neutral";
+    case "under_minimum": return "warning";
+    case "missed_payment": return "danger";
+    default: return "neutral";
+  }
+}
+
 function actualVsPlannedPaymentMessage(plannedPayment: string, actualPayment: string) {
   const planned = Number(plannedPayment ?? "0");
   const actual = Number(actualPayment ?? "0");
@@ -152,23 +175,20 @@ export function Debts() {
   const [editFieldErrors, setEditFieldErrors] = useState<Record<string, string | null>>({});
   const [editError, setEditError] = useState<string | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [expandedSections, setExpandedSections] = useState<Record<string, { month: boolean; payoff: boolean; transactions: boolean; activity: boolean; matching: boolean }>>({});
+  const [expandedSections, setExpandedSections] = useState<Record<string, { activity: boolean; matching: boolean }>>({});
   const [activityDataByDebt, setActivityDataByDebt] = useState<Record<string, DebtActivityFull>>({});
   const [showCreateDebtForm, setShowCreateDebtForm] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [paceAction, setPaceAction] = useState<{ debtId: string; action: DebtPaymentPaceAcknowledgement["action"] } | null>(null);
 
-  function isSectionExpanded(debtId: string, section: "month" | "payoff" | "transactions" | "activity" | "matching") {
+  function isSectionExpanded(debtId: string, section: "activity" | "matching") {
     return expandedSections[debtId]?.[section] ?? false;
   }
 
-  function toggleSection(debtId: string, section: "month" | "payoff" | "transactions" | "activity" | "matching") {
+  function toggleSection(debtId: string, section: "activity" | "matching") {
     setExpandedSections((current) => ({
       ...current,
       [debtId]: {
-        month: current[debtId]?.month ?? false,
-        payoff: current[debtId]?.payoff ?? false,
-        transactions: current[debtId]?.transactions ?? false,
         activity: current[debtId]?.activity ?? false,
         matching: current[debtId]?.matching ?? false,
         [section]: !(current[debtId]?.[section] ?? false),
@@ -559,18 +579,23 @@ export function Debts() {
 
       {!isLoading && !error && data ? (
         <>
-          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Card className="flex flex-col">
               <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">Total debt</p>
               <p className="mt-3 text-2xl font-black tracking-tight text-[var(--text-strong)]"><Money value={data.summary.totalRemaining} /></p>
               <p className="mt-1 text-[8.5px] text-[var(--text-muted)]">All active debts combined</p>
             </Card>
             <Card className="flex flex-col">
-              <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">Planned monthly payments</p>
+              <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">Planned monthly</p>
               <p className="mt-3 text-2xl font-black tracking-tight text-[var(--text-strong)]"><Money value={String(data.items.reduce((sum, d) => sum + Number(d.monthlyPayment || "0"), 0).toFixed(2))} /></p>
               <p className="mt-1 text-[8.5px] text-[var(--text-muted)]">Combined recurring plan</p>
             </Card>
-            <Card className="flex flex-col sm:col-span-2 lg:col-span-1">
+            <Card className="flex flex-col">
+              <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">Paid all time</p>
+              <p className="mt-3 text-2xl font-black tracking-tight text-[var(--text-strong)]"><Money value={data.summary.totalPaidAllTime} /></p>
+              <p className="mt-1 text-[8.5px] text-[var(--text-muted)]">Across all debts</p>
+            </Card>
+            <Card className="flex flex-col">
               <p className="text-[9px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">Balances decreasing</p>
               <p className="mt-3 text-2xl font-black tracking-tight text-[var(--text-strong)]">{data.items.filter(d => d.balanceTrajectory?.isDecreasing || d.status === "paid_off").length}/{data.items.length}</p>
               <p className="mt-1 text-[8.5px] text-[var(--text-muted)]">Independent of payment pace</p>
@@ -598,7 +623,7 @@ export function Debts() {
                         <div className="min-w-0 flex-1">
                           <h3 className="text-2xl font-black tracking-tight text-[var(--text-strong)]">{debt.name}</h3>
                           <p className="mt-2 text-sm text-[var(--text-muted)]">
-                            APR <span className="font-semibold text-[var(--text-strong)]">{debt.apr}%</span> · Minimum <span className="font-semibold text-[var(--text-strong)]"><Money value={debt.minimumPayment} /></span>
+                            APR <span className="font-semibold text-[var(--text-strong)]">{debt.apr}%</span> Â· Minimum <span className="font-semibold text-[var(--text-strong)]"><Money value={debt.minimumPayment} /></span>
                           </p>
                         </div>
                         <div className="flex-shrink-0">
@@ -623,6 +648,28 @@ export function Debts() {
                             <p className="text-[8.5px] leading-relaxed text-[var(--text-muted)]">
                               {debt.paymentPace?.pace === "above_plan" ? "Payments are above plan" : debt.paymentPace?.pace === "no_payment" ? "No payment recorded yet" : "On track with plan"}
                             </p>
+                            {Number(debt.principalReductionThisMonth ?? "0") > 0 || Number(debt.interestChargedThisMonth ?? "0") > 0 ? (
+                              <div className="mt-2 space-y-1 border-t border-[var(--border-color)] pt-2">
+                                {Number(debt.principalReductionThisMonth ?? "0") > 0 ? (
+                                  <div className="flex justify-between text-[8.5px]">
+                                    <span className="text-[var(--text-muted)]">Principal reduced</span>
+                                    <span className="font-semibold text-emerald-600"><Money value={debt.principalReductionThisMonth!} /></span>
+                                  </div>
+                                ) : null}
+                                {Number(debt.interestChargedThisMonth ?? "0") > 0 ? (
+                                  <div className="flex justify-between text-[8.5px]">
+                                    <span className="text-[var(--text-muted)]">Interest charged</span>
+                                    <span className="font-semibold text-[var(--text-strong)]"><Money value={debt.interestChargedThisMonth!} /></span>
+                                  </div>
+                                ) : null}
+                                {Number(debt.feesThisMonth ?? "0") > 0 ? (
+                                  <div className="flex justify-between text-[8.5px]">
+                                    <span className="text-[var(--text-muted)]">Fees</span>
+                                    <span className="font-semibold text-rose-600"><Money value={debt.feesThisMonth!} /></span>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                         <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-4">
@@ -630,14 +677,81 @@ export function Debts() {
                             <div>
                               <p className="text-[7.5px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">Balance trajectory</p>
                               <p className="mt-2 text-base font-black text-[var(--text-strong)]">
-                                {trajectoryLabel}{trajectoryDelta && Number(trajectoryDelta) !== 0 ? ` · ${Number(trajectoryDelta) > 0 ? "+" : ""}` : ""}
+                                {trajectoryLabel}{trajectoryDelta && Number(trajectoryDelta) !== 0 ? ` Â· ${Number(trajectoryDelta) > 0 ? "+" : ""}` : ""}
                                 {trajectoryDelta && Number(trajectoryDelta) !== 0 ? <Money value={trajectoryDelta} /> : null}
                               </p>
                             </div>
-                            <p className="text-[8.5px] leading-relaxed text-[var(--text-muted)]">{trajectoryCopy.split(" ").slice(0, 4).join(" ")}…</p>
+                            <p className="text-[8.5px] leading-relaxed text-[var(--text-muted)]">{trajectoryCopy}</p>
                           </div>
                         </div>
                       </div>
+
+                      {/* Payment obligation + next due date */}
+                      {debt.paymentObligation ? (
+                        <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-[7.5px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">Payment obligation</p>
+                              <p className="mt-2 text-sm font-semibold text-[var(--text-strong)]">
+                                Due {formatIsoDate(debt.paymentObligation.dueDate)}
+                              </p>
+                              <p className="mt-1 text-[8.5px] text-[var(--text-muted)]">
+                                <Money value={debt.paymentObligation.totalPaidToDate} /> paid of <Money value={debt.paymentObligation.plannedAmount} /> planned
+                                {Number(debt.paymentObligation.minimumRemaining) > 0
+                                  ? ` Â· minimum remaining: `
+                                  : debt.paymentObligation.minimumSatisfied ? " Â· minimum satisfied" : ""}
+                              </p>
+                              {Number(debt.paymentObligation.minimumRemaining) > 0 ? (
+                                <p className="text-[8.5px] text-rose-600 font-semibold">
+                                  <Money value={debt.paymentObligation.minimumRemaining} /> still needed to meet minimum
+                                </p>
+                              ) : null}
+                            </div>
+                            <Badge tone={obligationStatusTone(debt.paymentObligation.status)}>
+                              {obligationStatusLabel(debt.paymentObligation.status)}
+                            </Badge>
+                          </div>
+                        </div>
+                      ) : debt.nextPaymentDueDate ? (
+                        <div className="flex items-center gap-3 rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-3">
+                          <p className="text-[7.5px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)] shrink-0">Next payment due</p>
+                          <p className="text-sm font-semibold text-[var(--text-strong)]">{formatIsoDate(debt.nextPaymentDueDate)}</p>
+                          <p className="text-[8.5px] text-[var(--text-muted)] ml-auto">Min: <Money value={debt.minimumPayment} /></p>
+                        </div>
+                      ) : null}
+
+                      {/* Payoff projection */}
+                      {debt.status !== "paid_off" && debt.estimatedPayoffDate ? (
+                        <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] p-4">
+                          <p className="text-[7.5px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">Payoff projection</p>
+                          <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                            <div>
+                              <p className="text-[8.5px] text-[var(--text-muted)]">Estimated date</p>
+                              <p className="mt-1 text-sm font-semibold text-[var(--text-strong)]">{formatIsoDate(debt.estimatedPayoffDate)}</p>
+                            </div>
+                            {debt.monthsRemaining != null ? (
+                              <div>
+                                <p className="text-[8.5px] text-[var(--text-muted)]">Months remaining</p>
+                                <p className="mt-1 text-sm font-semibold text-[var(--text-strong)]">{debt.monthsRemaining}</p>
+                              </div>
+                            ) : null}
+                            {debt.totalInterestRemaining ? (
+                              <div>
+                                <p className="text-[8.5px] text-[var(--text-muted)]">Est. interest remaining</p>
+                                <p className="mt-1 text-sm font-semibold text-[var(--text-strong)]"><Money value={debt.totalInterestRemaining} /></p>
+                              </div>
+                            ) : null}
+                          </div>
+                          <p className="mt-2 text-[8px] text-[var(--text-muted)]">Based on <Money value={debt.monthlyPayment} />/month plan at {debt.apr}% APR</p>
+                        </div>
+                      ) : debt.status !== "paid_off" && !debt.estimatedPayoffDate && Number(debt.monthlyPayment) > 0 ? (
+                        <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-elevated)] px-4 py-3">
+                          <p className="text-[7.5px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">Payoff projection</p>
+                          <p className="mt-1 text-[8.5px] text-[var(--text-muted)]">
+                            {payoffEstimateMessage(debt) ?? "Projection unavailable."}
+                          </p>
+                        </div>
+                      ) : null}
 
                       <PaymentPaceInsight
                         debt={debt}
@@ -653,7 +767,7 @@ export function Debts() {
                           <p className="text-[7.5px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">Recent linked payments</p>
                           {linkedTxs.slice(0, 3).map((tx) => (
                             <div key={tx.id} className="flex items-center justify-between gap-3 py-2 text-[9.5px]">
-                              <span className="text-[var(--text-muted)]">{formatIsoDate(tx.transactionDate)} · {tx.description}</span>
+                              <span className="text-[var(--text-muted)]">{formatIsoDate(tx.transactionDate)} Â· {tx.description}</span>
                               <span className="font-semibold text-[var(--text-strong)]"><Money value={tx.amount} /></span>
                             </div>
                           ))}
@@ -690,12 +804,12 @@ export function Debts() {
                     </div>
 
                     <div className="flex flex-wrap gap-3 pt-5 border-t border-[var(--border-color)]">
-                      <Button type="button" onClick={() => openEditModal(debt)}>
+                      <Link
+                        to="/transactions"
+                        className="inline-flex min-h-[40px] items-center rounded-[11px] bg-[var(--theme-primary)] px-[13px] text-[11.5px] font-semibold text-white transition hover:opacity-90"
+                      >
                         Record payment
-                      </Button>
-                      <Button type="button" variant="secondary" onClick={() => toggleSection(debt.id, "transactions")}>
-                        Link transaction
-                      </Button>
+                      </Link>
                       <Button type="button" variant="secondary" onClick={() => toggleSection(debt.id, "activity")}>
                         {isSectionExpanded(debt.id, "activity") ? "Hide activity" : "Activity"}
                       </Button>
@@ -703,7 +817,7 @@ export function Debts() {
                         {isSectionExpanded(debt.id, "matching") ? "Hide matching" : "Matching"}
                       </Button>
                       <Button type="button" variant="secondary" onClick={() => openEditModal(debt)}>
-                        Edit
+                        Edit debt
                       </Button>
                     </div>
                   </Card>
@@ -755,7 +869,7 @@ export function Debts() {
                     />
                     <label className="block">
                       <span className="mb-2 block text-sm font-medium tracking-[0.01em] text-[var(--text-strong)]">Current balance</span>
-                      <div className="ui-field flex items-center bg-[var(--surface-elevated)] text-[var(--text-strong)]">{editingDebt ? <Money value={editingDebt.currentBalance} /> : "—"}</div>
+                      <div className="ui-field flex items-center bg-[var(--surface-elevated)] text-[var(--text-strong)]">{editingDebt ? <Money value={editingDebt.currentBalance} /> : "â€”"}</div>
                     </label>
                     <div>
                       <Input

@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { getFinancialAccounts } from "../api/accountsApi";
 import { getAllocationCategoriesAsOf } from "../api/allocationCategoriesApi";
 import { ApiError } from "../api/client";
+import { getDebts } from "../api/debtsApi";
 import { getIncome, getIncomeAllocations } from "../api/incomeApi";
 import { getDashboardAggregateReport } from "../api/reportsApi";
 import { getTransactions, markTransactionReviewed, markTransactionUnreviewed, bulkReviewTransactions } from "../api/transactionsApi";
@@ -29,6 +30,8 @@ import { Money } from "../components/ui/Money";
 import { useMoneyFormat } from "../hooks/useMoneyFormat";
 import type {
   AllocationCategory,
+  Debt,
+  DebtListResponse,
   DashboardPeriod,
   FinancialAccount,
   IncomeAllocationReport,
@@ -268,6 +271,11 @@ export function Dashboard() {
     }
   }
 
+  const { data: debtsData } = useAsyncData<DebtListResponse>(
+    () => getDebts().catch(() => ({ items: [] as Debt[], summary: { totalStarting: "0.00", totalRemaining: "0.00", totalPaidAllTime: "0.00" } })),
+    [],
+  );
+
   const { data, error, isLoading, reload } = useAsyncData<DashboardViewModel>(async () => {
     const [aggregate, incomeResponse, transactionsResponse, accountsResponse] = await Promise.all([
       getDashboardAggregateReport({ from, to }),
@@ -407,7 +415,7 @@ export function Dashboard() {
         </div>
       )}
     >
-      {/* Net surplus hero — closest truthful RAF equivalent to prototype "Available to allocate" */}
+      {/* Net surplus hero â€” closest truthful RAF equivalent to prototype "Available to allocate" */}
       <div className="raf-hero">
         <div className="raf-hero-top">
           <div>
@@ -442,6 +450,82 @@ export function Dashboard() {
       ) : null}
       {nextStepState?.kind === "month-reminder" ? <MonthReminderBanner monthKey={nextStepState.monthKey} /> : null}
       <FinancialAttentionAggregator items={attentionData?.items ?? []} />
+
+      {/* Debt obligations â€” shown only when there are active debts */}
+      {debtsData && debtsData.items.filter(d => d.isActive !== false && Number(d.currentBalance) > 0).length > 0 ? (() => {
+        const activeDebts = debtsData.items.filter(d => d.isActive !== false && Number(d.currentBalance) > 0);
+        const obligationsThisMonth = activeDebts.filter(d =>
+          d.paymentObligation && d.paymentObligation.status !== "satisfied" && d.paymentObligation.status !== "pending"
+            ? true
+            : d.nextPaymentDueDate != null
+        );
+        const needsAttention = activeDebts.filter(d =>
+          d.paymentObligation?.status === "missed_payment" ||
+          d.paymentObligation?.status === "under_minimum" ||
+          d.paymentStatus === "missed_payment" ||
+          d.paymentStatus === "under_minimum"
+        );
+
+        return (
+          <Card
+            title="Debt obligations"
+            actions={(
+              <Link to="/debts" className="text-[11px] font-medium text-[var(--primary-color)]">
+                See all debts â†’
+              </Link>
+            )}
+          >
+            <div className="mb-3 flex flex-wrap gap-4 text-[13px]">
+              <div>
+                <span className="text-[var(--text-muted)]">Total remaining </span>
+                <span className="font-semibold text-[var(--text-strong)]"><Money value={debtsData.summary.totalRemaining} /></span>
+              </div>
+              <div>
+                <span className="text-[var(--text-muted)]">Monthly plan </span>
+                <span className="font-semibold text-[var(--text-strong)]">
+                  <Money value={String(activeDebts.reduce((s, d) => s + Number(d.monthlyPayment || "0"), 0).toFixed(2))} />
+                </span>
+              </div>
+              {needsAttention.length > 0 ? (
+                <div className="text-rose-600 font-semibold">
+                  {needsAttention.length} debt{needsAttention.length !== 1 ? "s" : ""} need attention
+                </div>
+              ) : null}
+            </div>
+            <div className="divide-y" style={{ borderColor: "var(--border-color)" }}>
+              {activeDebts.slice(0, 4).map((debt) => {
+                const obligationStatus = debt.paymentObligation?.status ?? null;
+                const hasConcern = obligationStatus === "missed_payment" || obligationStatus === "under_minimum" || debt.balanceTrajectory?.isIncreasing;
+                return (
+                  <div key={debt.id} className="flex items-center gap-3 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-medium text-[var(--text-strong)]">{debt.name}</p>
+                      <p className="text-[10px] text-[var(--text-muted)]">
+                        {debt.apr}% APR
+                        {debt.nextPaymentDueDate ? ` Â· due ${formatIsoDate(debt.nextPaymentDueDate)}` : ""}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[13px] font-semibold text-[var(--text-strong)]"><Money value={debt.currentBalance} /></p>
+                      {hasConcern ? (
+                        <p className="text-[10px] font-semibold text-rose-600">
+                          {obligationStatus === "missed_payment" ? "Missed" : obligationStatus === "under_minimum" ? "Under min" : "Balance rising"}
+                        </p>
+                      ) : debt.estimatedPayoffDate ? (
+                        <p className="text-[10px] text-[var(--text-muted)]">Payoff {formatIsoDate(debt.estimatedPayoffDate).split(",")[0]}</p>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+              {activeDebts.length > 4 ? (
+                <p className="pt-2.5 text-[11px] text-[var(--text-muted)]">+ {activeDebts.length - 4} more</p>
+              ) : null}
+            </div>
+          </Card>
+        );
+      })() : null}
+
       {eligibleForReview.length > 0 ? (
         <div id="transaction-review">
         <Card
@@ -459,7 +543,7 @@ export function Dashboard() {
                 onClick={() => void handleBulkReviewAll()}
                 className="min-h-8 rounded-full bg-[var(--primary-color)] px-3 py-1 text-xs font-semibold text-[var(--primary-contrast)] disabled:opacity-50"
               >
-                {isBulkReviewing ? "Marking…" : `Mark all ${eligibleForReview.length} reviewed`}
+                {isBulkReviewing ? "Markingâ€¦" : `Mark all ${eligibleForReview.length} reviewed`}
               </button>
             </div>
           ) : null}
@@ -484,7 +568,7 @@ export function Dashboard() {
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-[var(--text-strong)]">{txn.description}</p>
-                  <p className="text-xs text-[var(--text-secondary)]">{txn.transactionDate} · {txn.direction === "debit" ? "-" : "+"}{txn.amount}</p>
+                  <p className="text-xs text-[var(--text-secondary)]">{txn.transactionDate} Â· {txn.direction === "debit" ? "-" : "+"}{txn.amount}</p>
                 </div>
                 <button
                   type="button"
@@ -492,7 +576,7 @@ export function Dashboard() {
                   onClick={() => handleMarkReviewed(txn)}
                   className="min-h-8 shrink-0 rounded-full border border-[var(--border-color)] bg-[var(--surface-plain)] px-3 py-1 text-xs font-medium text-[var(--text-strong)] transition hover:bg-[var(--surface-elevated)] disabled:opacity-50"
                 >
-                  {isReviewingId === txn.id ? "Marking…" : "Mark reviewed"}
+                  {isReviewingId === txn.id ? "Markingâ€¦" : "Mark reviewed"}
                 </button>
               </div>
             ))}
@@ -570,7 +654,7 @@ export function Dashboard() {
       {nextStepState?.kind === "closed-current-month" ? (
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
           <div className="flex items-center gap-3">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>✓</span>
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>âœ“</span>
             <span className="text-[var(--text-muted)]">
               <span className="font-semibold text-[var(--text-strong)]">{activeMonthName} is closed. Your month is complete.</span>{" "}
               RAF will guide the next cycle when new activity begins.
@@ -581,28 +665,28 @@ export function Dashboard() {
       {nextStepState?.kind === "income-no-transactions" ? (
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
           <div className="flex items-center gap-3">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>→</span>
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>â†’</span>
             <span className="text-[var(--text-muted)]">
               <span className="font-semibold text-[var(--text-strong)]">Income logged.</span>{" "}
               Next: record transactions to track where it goes.
             </span>
           </div>
           <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/transactions">
-            Track spending →
+            Track spending â†’
           </Link>
         </div>
       ) : null}
       {nextStepState?.kind === "income-transactions-open" ? (
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
           <div className="flex items-center gap-3">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>✓</span>
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>âœ“</span>
             <span className="text-[var(--text-muted)]">
               <span className="font-semibold text-[var(--text-strong)]">Looking good.</span>{" "}
               When you are done spending, close {activeMonthLabel} in Monthly Review.
             </span>
           </div>
           <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/monthly-review">
-            Monthly Review →
+            Monthly Review â†’
           </Link>
         </div>
       ) : null}
@@ -705,7 +789,7 @@ export function Dashboard() {
                 </span>
               </div>
               <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/monthly-review">
-                Review allocation →
+                Review allocation â†’
               </Link>
             </div>
           ) : null}
@@ -762,19 +846,30 @@ export function Dashboard() {
               { label: "Recorded activity", value: activityFreshness },
             ];
             return (
-              <Card title="Data Freshness">
-                <p className="mb-3 text-[11px] text-[var(--text-muted)]">
-                  RAF does not treat age alone as proof that a balance is wrong.
-                </p>
-                <div className="divide-y" style={{ borderColor: "var(--border-color)" }}>
-                  {freshnessRows.map((row) => (
-                    <div key={row.label} className="flex items-center justify-between gap-3 py-2.5 text-[13px]">
-                      <span className="text-[var(--text-muted)]">{row.label}</span>
-                      <span className="font-medium text-[var(--text-strong)]">{formatFreshnessTimestamp(row.value)}</span>
-                    </div>
-                  ))}
+              <>
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
+                  <div>
+                    <p className="font-semibold text-[var(--text-strong)]">Cash flow outlook</p>
+                    <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">30/60/90-day projection with bills, debt, and income</p>
+                  </div>
+                  <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/cash-flow">
+                    View â†’
+                  </Link>
                 </div>
-              </Card>
+                <Card title="Data Freshness">
+                  <p className="mb-3 text-[11px] text-[var(--text-muted)]">
+                    RAF does not treat age alone as proof that a balance is wrong.
+                  </p>
+                  <div className="divide-y" style={{ borderColor: "var(--border-color)" }}>
+                    {freshnessRows.map((row) => (
+                      <div key={row.label} className="flex items-center justify-between gap-3 py-2.5 text-[13px]">
+                        <span className="text-[var(--text-muted)]">{row.label}</span>
+                        <span className="font-medium text-[var(--text-strong)]">{formatFreshnessTimestamp(row.value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </>
             );
           })()}
         </div>
