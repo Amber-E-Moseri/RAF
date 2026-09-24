@@ -858,7 +858,7 @@ export function Dashboard() {
                 </div>
                 <Card title="Data Freshness">
                   <p className="mb-3 text-[11px] text-[var(--text-muted)]">
-                    RAF does not treat age alone as proof that a balance is wrong.
+                    NOMI does not treat age alone as proof that a balance is wrong.
                   </p>
                   <div className="divide-y" style={{ borderColor: "var(--border-color)" }}>
                     {freshnessRows.map((row) => (
