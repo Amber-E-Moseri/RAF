@@ -13,7 +13,7 @@ import { createFixedWindowRateLimiter } from './lib/server/rateLimit.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const { port, dbPath, persistenceDriver, postgresConnectionString, postgresSsl, authRequired, sentryDsn, allowedOrigins } = loadServerEnv({ cwd: __dirname });
+const { port, dbPath, persistenceDriver, postgresConnectionString, postgresSsl, authRequired, sentryDsn, allowedOrigins, supabaseUrl, supabaseAnonKey, rafAppUrl } = loadServerEnv({ cwd: __dirname });
 
 initSentry(sentryDsn);
 
@@ -23,7 +23,17 @@ if (persistenceDriver === 'postgres') {
 
 const db = createServerDb({ persistenceDriver, dbPath, postgresConnectionString, postgresSsl });
 
+// Dynamic import keeps @supabase/supabase-js out of the module graph when
+// Supabase is not configured — test servers and local-auth deployments never
+// load the package, avoiding a hard dependency on an optional credential.
+const supabaseAuth = supabaseUrl && supabaseAnonKey
+  ? await import('./lib/auth/supabaseAuth.js').then(({ createSupabaseAuth }) =>
+      createSupabaseAuth({ url: supabaseUrl, anonKey: supabaseAnonKey, appUrl: rafAppUrl }))
+  : null;
+
 console.log(`[RAF] persistence: ${persistenceDriver}`);
+console.log(`[RAF] supabase auth: ${supabaseAuth ? 'enabled' : 'disabled (local auth)'}`);
+
 const app = express();
 
 app.use((req, res, next) => {
@@ -158,6 +168,7 @@ const apiRouter = await createApiRouter({
   db,
   defaultHouseholdId: authRequired ? null : (db.defaultHouseholdId ?? null),
   aliases,
+  supabaseAuth,
 });
 
 app.use('/api/v1', apiRouter);

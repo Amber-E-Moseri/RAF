@@ -31,3 +31,11 @@ services:
         sync: false
       - key: ALLOWED_ORIGINS
         sync: false
+      # Supabase auth integration (both required together or both absent)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      # Canonical frontend origin for Supabase recovery redirect emails
+      - key: RAF_APP_URL
+        sync: false
