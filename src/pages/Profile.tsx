@@ -183,11 +183,6 @@ export function Profile() {
                 <p className="truncate text-sm font-semibold text-[var(--text-strong)]">{session?.email ?? "—"}</p>
                 <p className="mt-0.5 text-xs text-[var(--text-muted)]">Signed-in account</p>
               </div>
-              {session?.remiTier && (
-                <Badge tone={session.remiTier === "paid" ? "success" : "neutral"}>
-                  {session.remiTier === "paid" ? "Paid plan" : "Free plan"}
-                </Badge>
-              )}
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
