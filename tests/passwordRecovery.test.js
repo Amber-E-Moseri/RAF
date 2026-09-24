@@ -22,6 +22,7 @@ function createFakeSupabaseAuth() {
     },
     async updatePassword({ accessToken, password }) {
       calls.updatePassword.push({ accessToken, password });
+      return { user: { id: 'fake-user-id' } };
     },
   };
 }
@@ -36,12 +37,14 @@ function jwtContext() {
 
 // ── Forgot-password ────────────────────────────────────────────────────────
 
-test('forgot-password: non-supabase auth returns 404', async () => {
+test('forgot-password: non-supabase auth (native) returns neutral 200', async () => {
   const res = await forgotPassword(
     jsonRequest('/auth/forgot-password', { email: 'x@example.com' }),
     jwtContext(),
   );
-  assert.equal(res.status, 404);
+  // Track A native implementation handles all auth providers; always returns
+  // the neutral 200 response to prevent account enumeration.
+  assert.equal(res.status, 200);
 });
 
 test('forgot-password: missing email returns 400', async () => {
@@ -108,12 +111,13 @@ test('forgot-password: invalid JSON body returns 400', async () => {
 
 // ── Reset-password ─────────────────────────────────────────────────────────
 
-test('reset-password: non-supabase auth returns 404', async () => {
+test('reset-password: non-supabase auth with invalid token returns 401', async () => {
   const res = await resetPassword(
     jsonRequest('/auth/reset-password', { password: 'NewPass123!' }, { authorization: 'Bearer tok' }),
     jwtContext(),
   );
-  assert.equal(res.status, 404);
+  // Track A native implementation: token is not in DB → 401 (not 404).
+  assert.equal(res.status, 401);
 });
 
 test('reset-password: missing authorization header returns 401', async () => {
