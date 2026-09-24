@@ -1,4 +1,4 @@
-﻿import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { acknowledgePaceInsight, createDebt, getDebts, updateDebt } from "../api/debtsApi";
@@ -623,7 +623,7 @@ export function Debts() {
                         <div className="min-w-0 flex-1">
                           <h3 className="text-2xl font-black tracking-tight text-[var(--text-strong)]">{debt.name}</h3>
                           <p className="mt-2 text-sm text-[var(--text-muted)]">
-                            APR <span className="font-semibold text-[var(--text-strong)]">{debt.apr}%</span> Â· Minimum <span className="font-semibold text-[var(--text-strong)]"><Money value={debt.minimumPayment} /></span>
+                            APR <span className="font-semibold text-[var(--text-strong)]">{debt.apr}%</span> · Minimum <span className="font-semibold text-[var(--text-strong)]"><Money value={debt.minimumPayment} /></span>
                           </p>
                         </div>
                         <div className="flex-shrink-0">
@@ -677,7 +677,7 @@ export function Debts() {
                             <div>
                               <p className="text-[7.5px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">Balance trajectory</p>
                               <p className="mt-2 text-base font-black text-[var(--text-strong)]">
-                                {trajectoryLabel}{trajectoryDelta && Number(trajectoryDelta) !== 0 ? ` Â· ${Number(trajectoryDelta) > 0 ? "+" : ""}` : ""}
+                                {trajectoryLabel}{trajectoryDelta && Number(trajectoryDelta) !== 0 ? ` · ${Number(trajectoryDelta) > 0 ? "+" : ""}` : ""}
                                 {trajectoryDelta && Number(trajectoryDelta) !== 0 ? <Money value={trajectoryDelta} /> : null}
                               </p>
                             </div>
@@ -698,8 +698,8 @@ export function Debts() {
                               <p className="mt-1 text-[8.5px] text-[var(--text-muted)]">
                                 <Money value={debt.paymentObligation.totalPaidToDate} /> paid of <Money value={debt.paymentObligation.plannedAmount} /> planned
                                 {Number(debt.paymentObligation.minimumRemaining) > 0
-                                  ? ` Â· minimum remaining: `
-                                  : debt.paymentObligation.minimumSatisfied ? " Â· minimum satisfied" : ""}
+                                  ? ` · minimum remaining: `
+                                  : debt.paymentObligation.minimumSatisfied ? " · minimum satisfied" : ""}
                               </p>
                               {Number(debt.paymentObligation.minimumRemaining) > 0 ? (
                                 <p className="text-[8.5px] text-rose-600 font-semibold">
@@ -767,7 +767,7 @@ export function Debts() {
                           <p className="text-[7.5px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">Recent linked payments</p>
                           {linkedTxs.slice(0, 3).map((tx) => (
                             <div key={tx.id} className="flex items-center justify-between gap-3 py-2 text-[9.5px]">
-                              <span className="text-[var(--text-muted)]">{formatIsoDate(tx.transactionDate)} Â· {tx.description}</span>
+                              <span className="text-[var(--text-muted)]">{formatIsoDate(tx.transactionDate)} · {tx.description}</span>
                               <span className="font-semibold text-[var(--text-strong)]"><Money value={tx.amount} /></span>
                             </div>
                           ))}
@@ -869,7 +869,7 @@ export function Debts() {
                     />
                     <label className="block">
                       <span className="mb-2 block text-sm font-medium tracking-[0.01em] text-[var(--text-strong)]">Current balance</span>
-                      <div className="ui-field flex items-center bg-[var(--surface-elevated)] text-[var(--text-strong)]">{editingDebt ? <Money value={editingDebt.currentBalance} /> : "â€”"}</div>
+                      <div className="ui-field flex items-center bg-[var(--surface-elevated)] text-[var(--text-strong)]">{editingDebt ? <Money value={editingDebt.currentBalance} /> : "—"}</div>
                     </label>
                     <div>
                       <Input

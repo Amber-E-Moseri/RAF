@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { getFinancialAccounts } from "../api/accountsApi";
@@ -415,7 +415,7 @@ export function Dashboard() {
         </div>
       )}
     >
-      {/* Net surplus hero â€” closest truthful RAF equivalent to prototype "Available to allocate" */}
+      {/* Net surplus hero — closest truthful RAF equivalent to prototype "Available to allocate" */}
       <div className="raf-hero">
         <div className="raf-hero-top">
           <div>
@@ -451,7 +451,7 @@ export function Dashboard() {
       {nextStepState?.kind === "month-reminder" ? <MonthReminderBanner monthKey={nextStepState.monthKey} /> : null}
       <FinancialAttentionAggregator items={attentionData?.items ?? []} />
 
-      {/* Debt obligations â€” shown only when there are active debts */}
+      {/* Debt obligations — shown only when there are active debts */}
       {debtsData && debtsData.items.filter(d => d.isActive !== false && Number(d.currentBalance) > 0).length > 0 ? (() => {
         const activeDebts = debtsData.items.filter(d => d.isActive !== false && Number(d.currentBalance) > 0);
         const obligationsThisMonth = activeDebts.filter(d =>
@@ -471,7 +471,7 @@ export function Dashboard() {
             title="Debt obligations"
             actions={(
               <Link to="/debts" className="text-[11px] font-medium text-[var(--primary-color)]">
-                See all debts â†’
+                See all debts →
               </Link>
             )}
           >
@@ -502,7 +502,7 @@ export function Dashboard() {
                       <p className="truncate text-[13px] font-medium text-[var(--text-strong)]">{debt.name}</p>
                       <p className="text-[10px] text-[var(--text-muted)]">
                         {debt.apr}% APR
-                        {debt.nextPaymentDueDate ? ` Â· due ${formatIsoDate(debt.nextPaymentDueDate)}` : ""}
+                        {debt.nextPaymentDueDate ? ` · due ${formatIsoDate(debt.nextPaymentDueDate)}` : ""}
                       </p>
                     </div>
                     <div className="text-right">
@@ -543,7 +543,7 @@ export function Dashboard() {
                 onClick={() => void handleBulkReviewAll()}
                 className="min-h-8 rounded-full bg-[var(--primary-color)] px-3 py-1 text-xs font-semibold text-[var(--primary-contrast)] disabled:opacity-50"
               >
-                {isBulkReviewing ? "Markingâ€¦" : `Mark all ${eligibleForReview.length} reviewed`}
+                {isBulkReviewing ? "Marking…" : `Mark all ${eligibleForReview.length} reviewed`}
               </button>
             </div>
           ) : null}
@@ -568,7 +568,7 @@ export function Dashboard() {
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-[var(--text-strong)]">{txn.description}</p>
-                  <p className="text-xs text-[var(--text-secondary)]">{txn.transactionDate} Â· {txn.direction === "debit" ? "-" : "+"}{txn.amount}</p>
+                  <p className="text-xs text-[var(--text-secondary)]">{txn.transactionDate} · {txn.direction === "debit" ? "-" : "+"}{txn.amount}</p>
                 </div>
                 <button
                   type="button"
@@ -576,7 +576,7 @@ export function Dashboard() {
                   onClick={() => handleMarkReviewed(txn)}
                   className="min-h-8 shrink-0 rounded-full border border-[var(--border-color)] bg-[var(--surface-plain)] px-3 py-1 text-xs font-medium text-[var(--text-strong)] transition hover:bg-[var(--surface-elevated)] disabled:opacity-50"
                 >
-                  {isReviewingId === txn.id ? "Markingâ€¦" : "Mark reviewed"}
+                  {isReviewingId === txn.id ? "Marking…" : "Mark reviewed"}
                 </button>
               </div>
             ))}
@@ -654,7 +654,7 @@ export function Dashboard() {
       {nextStepState?.kind === "closed-current-month" ? (
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
           <div className="flex items-center gap-3">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>âœ“</span>
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>✓</span>
             <span className="text-[var(--text-muted)]">
               <span className="font-semibold text-[var(--text-strong)]">{activeMonthName} is closed. Your month is complete.</span>{" "}
               NOMI will guide the next cycle when new activity begins.
@@ -665,28 +665,28 @@ export function Dashboard() {
       {nextStepState?.kind === "income-no-transactions" ? (
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
           <div className="flex items-center gap-3">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>â†’</span>
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>→</span>
             <span className="text-[var(--text-muted)]">
               <span className="font-semibold text-[var(--text-strong)]">Income logged.</span>{" "}
               Next: record transactions to track where it goes.
             </span>
           </div>
           <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/transactions">
-            Track spending â†’
+            Track spending →
           </Link>
         </div>
       ) : null}
       {nextStepState?.kind === "income-transactions-open" ? (
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
           <div className="flex items-center gap-3">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>âœ“</span>
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>✓</span>
             <span className="text-[var(--text-muted)]">
               <span className="font-semibold text-[var(--text-strong)]">Looking good.</span>{" "}
               When you are done spending, close {activeMonthLabel} in Monthly Review.
             </span>
           </div>
           <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/monthly-review">
-            Monthly Review â†’
+            Monthly Review →
           </Link>
         </div>
       ) : null}
@@ -789,7 +789,7 @@ export function Dashboard() {
                 </span>
               </div>
               <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/monthly-review">
-                Review allocation â†’
+                Review allocation →
               </Link>
             </div>
           ) : null}
@@ -853,7 +853,7 @@ export function Dashboard() {
                     <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">30/60/90-day projection with bills, debt, and income</p>
                   </div>
                   <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/cash-flow">
-                    View â†’
+                    View →
                   </Link>
                 </div>
                 <Card title="Data Freshness">
