@@ -333,7 +333,7 @@ export function Dashboard() {
 
   if (isLoading || monthWorkflow.isLoading) {
     return (
-      <PageShell eyebrow="Home" title="Your money, with a clear next move." description="RAF keeps the important decisions visible without turning your finances into a wall of charts.">
+      <PageShell eyebrow="Home" title="Your money, with a clear next move." description="NOMI keeps the important decisions visible without turning your finances into a wall of charts.">
         <LoadingState label="Loading the current financial snapshot..." />
       </PageShell>
     );
@@ -341,7 +341,7 @@ export function Dashboard() {
 
   if (error || !data || monthWorkflow.error || !monthWorkflow.data) {
     return (
-      <PageShell eyebrow="Home" title="Your money, with a clear next move." description="RAF keeps the important decisions visible without turning your finances into a wall of charts.">
+      <PageShell eyebrow="Home" title="Your money, with a clear next move." description="NOMI keeps the important decisions visible without turning your finances into a wall of charts.">
         <ErrorState
           title="Failed to load dashboard"
           message={error ?? monthWorkflow.error ?? "We could not load the current dashboard data. Please try again."}
@@ -407,7 +407,7 @@ export function Dashboard() {
     <PageShell
       eyebrow="Home"
       title="Your money, with a clear next move."
-      description="RAF keeps the important decisions visible without turning your finances into a wall of charts."
+      description="NOMI keeps the important decisions visible without turning your finances into a wall of charts."
       actions={(
         <div className="flex items-center gap-2">
           <Link to="/monthly-review" className="inline-flex min-h-[40px] items-center rounded-[11px] border border-[var(--border-subtle)] bg-[var(--surface-card)] px-[13px] text-[11.5px] font-semibold text-[var(--text-primary)] shadow-[var(--shadow-sm)] transition hover:bg-[var(--surface-muted)]">Monthly review</Link>
@@ -590,7 +590,7 @@ export function Dashboard() {
       {nextStepState?.kind === "setup-incomplete" ? (
         <Card
           title="Start Here"
-          subtitle="A simple monthly setup path from RAF's allocation template."
+          subtitle="A simple monthly setup path from NOMI's allocation template."
           actions={(
             <Button type="button" variant="ghost" className="min-h-8 rounded-full px-3 py-1 text-xs" onClick={dismissStartHere}>
               Dismiss
@@ -622,15 +622,15 @@ export function Dashboard() {
               onClick={() => setHowRafWorksOpen((current) => !current)}
               aria-expanded={howRafWorksOpen}
             >
-              <span>How RAF works</span>
+              <span>How NOMI works</span>
               <span className="text-[var(--text-muted)]">{howRafWorksOpen ? "^" : "v"}</span>
             </button>
             {howRafWorksOpen ? (
               <ol className="space-y-3 border-t border-[var(--border-color)] px-4 py-4 text-sm text-[var(--text-muted)]">
-                <li><span className="font-semibold text-[var(--text-strong)]">Log income</span> - record each paycheck or deposit. RAF splits it across your categories by the percentages you configured.</li>
-                <li><span className="font-semibold text-[var(--text-strong)]">Track spending</span> - record transactions against your categories. RAF tracks how much of each category's allocation has been used.</li>
-                <li><span className="font-semibold text-[var(--text-strong)]">Monthly Review</span> - at month end, close the month. RAF calculates any surplus (income exceeded spending) or deficit.</li>
-                <li><span className="font-semibold text-[var(--text-strong)]">Distribute surplus</span> - tell RAF where surplus goes: debt paydown, savings goals, or other categories.</li>
+                <li><span className="font-semibold text-[var(--text-strong)]">Log income</span> - record each paycheck or deposit. NOMI splits it across your categories by the percentages you configured.</li>
+                <li><span className="font-semibold text-[var(--text-strong)]">Track spending</span> - record transactions against your categories. NOMI tracks how much of each category's allocation has been used.</li>
+                <li><span className="font-semibold text-[var(--text-strong)]">Monthly Review</span> - at month end, close the month. NOMI calculates any surplus (income exceeded spending) or deficit.</li>
+                <li><span className="font-semibold text-[var(--text-strong)]">Distribute surplus</span> - tell NOMI where surplus goes: debt paydown, savings goals, or other categories.</li>
                 <li><span className="font-semibold text-[var(--text-strong)]">Repeat</span> - next month starts fresh with your same plan.</li>
               </ol>
             ) : null}
@@ -657,7 +657,7 @@ export function Dashboard() {
             <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>âœ“</span>
             <span className="text-[var(--text-muted)]">
               <span className="font-semibold text-[var(--text-strong)]">{activeMonthName} is closed. Your month is complete.</span>{" "}
-              RAF will guide the next cycle when new activity begins.
+              NOMI will guide the next cycle when new activity begins.
             </span>
           </div>
         </div>

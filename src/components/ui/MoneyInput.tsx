@@ -26,9 +26,9 @@ export function MoneyInput({
 
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-medium tracking-[0.01em] text-raf-ink">{label}</span>
+      <span className="mb-2 block text-sm font-medium tracking-[0.01em] text-[var(--text-primary)]">{label}</span>
       <div className="relative">
-        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-stone-400">$</span>
+        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-[var(--text-subtle)]">$</span>
         <input
           className="ui-field py-3 pl-8 pr-4"
           name={name}
@@ -45,8 +45,8 @@ export function MoneyInput({
           }}
         />
       </div>
-      {normalized ? <span className="mt-2 block text-xs font-medium tracking-[0.01em] text-stone-500">Preview: <Money value={normalized} /></span> : null}
-      {error ? <span className="mt-2 block text-sm leading-6 text-rose-600">{error}</span> : null}
+      {normalized ? <span className="mt-2 block text-xs font-medium tracking-[0.01em] text-[var(--text-secondary)]">Preview: <Money value={normalized} /></span> : null}
+      {error ? <span className="mt-2 block text-sm leading-6 text-[var(--status-danger)]">{error}</span> : null}
     </label>
   );
 }

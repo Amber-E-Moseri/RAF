@@ -178,7 +178,7 @@ export function Plan() {
     <PageShell
       eyebrow="Plan"
       title="Allocation without noise."
-      description="Adjust allocation preferences, see execution, and keep Buffer visible without turning RAF into a traditional budgeting app."
+      description="Adjust allocation preferences, see execution, and keep Buffer visible without turning NOMI into a traditional budgeting app."
     >
       <div className="flex flex-wrap gap-2">
         {PLAN_TABS.map((tab) => (

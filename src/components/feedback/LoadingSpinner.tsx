@@ -28,10 +28,10 @@ export function LoadingSpinner({
   return (
     <div className={containerClassName} role="status" aria-live="polite">
       <span
-        className={`inline-block animate-spin rounded-full border-stone-300 border-t-raf-moss ${spinnerSize(size)}`}
+        className={`inline-block animate-spin rounded-full border-[var(--border-strong)] border-t-[var(--theme-primary)] ${spinnerSize(size)}`}
         aria-hidden="true"
       />
-      <span className="text-sm text-stone-500">{label}</span>
+      <span className="text-sm text-[var(--text-secondary)]">{label}</span>
     </div>
   );
 }

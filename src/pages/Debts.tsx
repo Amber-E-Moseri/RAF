@@ -557,7 +557,7 @@ export function Debts() {
         <div className="space-y-4">
           {submitError ? <ErrorState title="Failed to add debt" message={submitError} /> : null}
           {submitSuccess ? <SuccessNotice title="Debt saved" message={submitSuccess} /> : null}
-          <Card title="Form Guidance" subtitle="RAF keeps balances current as payments and charges are recorded.">
+          <Card title="Form Guidance" subtitle="NOMI keeps balances current as payments and charges are recorded.">
             <ul className="space-y-2 text-sm text-[var(--text-muted)]">
               <li>Starting balance must be greater than zero.</li>
               <li>APR must be between 0 and 100 with up to two decimals.</li>
@@ -573,7 +573,7 @@ export function Debts() {
       {!isLoading && error ? <ErrorState title="Failed to fetch debts" message={error} onRetry={() => void reload()} /> : null}
       {!isCurrentMonth && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" style={{ background: "color-mix(in srgb, #fef3c7 80%, transparent)" }}>
-          <strong>Viewing a past period.</strong> Debt balances shown below reflect the current outstanding balance, not the balance at the end of this period. RAF does not snapshot historical debt balances.
+          <strong>Viewing a past period.</strong> Debt balances shown below reflect the current outstanding balance, not the balance at the end of this period. NOMI does not snapshot historical debt balances.
         </div>
       )}
 
@@ -993,7 +993,7 @@ export function Debts() {
                 <section className="space-y-4 border-t border-[var(--border-color)] pt-6">
                   <div>
                     <h3 className="text-sm font-semibold text-[var(--text-strong)]">Automation</h3>
-                    <p className="mt-1 text-sm italic text-[var(--text-muted)]">Automation settings control how RAF posts cycle activity.</p>
+                    <p className="mt-1 text-sm italic text-[var(--text-muted)]">Automation settings control how NOMI posts cycle activity.</p>
                   </div>
                   <div className="text-sm font-medium text-[var(--text-muted)]">Auto-post fees based on account activity</div>
                   <div className="grid gap-3 md:grid-cols-2">

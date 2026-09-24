@@ -429,10 +429,10 @@ export function AppLayout() {
       {/* ── Dark sidebar (desktop only) ── */}
       <aside className={`sidebar-shell${sidebarVisible ? " hidden md:flex" : " hidden"}`}>
         <div className="sidebar-brand">
-          <img src={rafLogo} alt="RAF" className="brand-logo" />
+          <img src={rafLogo} alt="NOMI" className="brand-logo" />
           <div>
             <p className="sidebar-brand-name">{APP_NAME}</p>
-            <p className="sidebar-brand-sub">Revenue Allocation Formula</p>
+            <p className="sidebar-brand-sub">Your financial OS</p>
           </div>
         </div>
 
@@ -491,10 +491,10 @@ export function AppLayout() {
         {/* Mobile header */}
         <header className="mobile-top">
           <div className="flex items-center gap-2">
-            <img src={rafLogo} alt="RAF" className="brand-logo" />
+            <img src={rafLogo} alt="NOMI" className="brand-logo" />
             <div className="leading-none">
               <p className="text-[15px] font-bold text-[var(--text-primary)]">{APP_NAME}</p>
-              <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)]">Revenue Allocation Formula</p>
+              <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-secondary)]">Your financial OS</p>
             </div>
           </div>
           <div className="flex items-center gap-2">

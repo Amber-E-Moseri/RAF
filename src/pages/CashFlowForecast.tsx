@@ -744,7 +744,7 @@ function CoverageGapWarning({ forecast }: { forecast: CashFlowForecast }) {
         Coverage gaps ({gaps.length})
       </h3>
       <p className="mb-3 text-[12px] text-amber-700 dark:text-amber-400">
-        The following accounts have payment activity that RAF cannot fully attribute. The forecast excludes these obligations.
+        The following accounts have payment activity that NOMI cannot fully attribute. The forecast excludes these obligations.
       </p>
       <ul className="space-y-1.5">
         {gaps.map((gap) => (
@@ -811,7 +811,7 @@ export function CashFlowForecast() {
     <PageShell
       eyebrow="Cash Flow"
       title="See the next 30 days with context."
-      description="RAF keeps household cash pooled, separates freshness from certainty, and avoids inventing obligations it cannot prove."
+      description="NOMI keeps household cash pooled, separates freshness from certainty, and avoids inventing obligations it cannot prove."
       actions={tabActions}
     >
       {isLoading && <LoadingState label="Building forecast…" />}

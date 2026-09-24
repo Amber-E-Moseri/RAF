@@ -384,7 +384,7 @@ export function Remi() {
       id: uid(),
       role: "assistant",
       content:
-        "Hi, I'm Remi — RAF's financial intelligence layer.\n\nI can check your actual plan data, model scenarios, explain variances, and help you think through decisions. Pick a question below or ask me anything.",
+        "Hi, I'm Remi — NOMI's financial intelligence layer.\n\nI can check your actual plan data, model scenarios, explain variances, and help you think through decisions. Pick a question below or ask me anything.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -446,7 +446,7 @@ export function Remi() {
         id: uid(),
         role: "assistant",
         content:
-          "Hi, I'm Remi — RAF's financial intelligence layer.\n\nI can check your actual plan data, model scenarios, explain variances, and help you think through decisions. Pick a question below or ask me anything.",
+          "Hi, I'm Remi — NOMI's financial intelligence layer.\n\nI can check your actual plan data, model scenarios, explain variances, and help you think through decisions. Pick a question below or ask me anything.",
       },
     ]);
     setInput("");
@@ -495,7 +495,7 @@ export function Remi() {
   return (
     <PageShell
       eyebrow="Remi"
-      title="Your RAF guide."
+      title="Your NOMI guide."
       description="Ask about your plan, recent activity, goals or cash-flow context. This prototype uses local deterministic responses."
     >
       {/* Dot animation */}

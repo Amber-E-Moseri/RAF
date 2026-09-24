@@ -164,12 +164,12 @@ export function validateSplitRows(transaction: Transaction, rows: SplitDraftRow[
 
 function validationToneClass(tone: SplitValidation["tone"]) {
   if (tone === "valid") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-800";
+    return "border-[var(--badge-success-ring)] bg-[var(--badge-success-bg)] text-[var(--badge-success-text)]";
   }
   if (tone === "invalid") {
-    return "border-rose-200 bg-rose-50 text-rose-800";
+    return "border-[var(--badge-danger-ring)] bg-[var(--badge-danger-bg)] text-[var(--badge-danger-text)]";
   }
-  return "border-amber-200 bg-amber-50 text-amber-800";
+  return "border-[var(--badge-warning-ring)] bg-[var(--badge-warning-bg)] text-[var(--badge-warning-text)]";
 }
 
 function toPayload(rows: SplitDraftRow[]): TransactionSplitDraft[] {
@@ -352,7 +352,7 @@ export function SplitTransactionEditor({
                     <label className="block">
                       <span className="mb-2 block text-sm font-medium text-[var(--text-strong)]">Amount</span>
                       <div className="relative">
-                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-stone-400">$</span>
+                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-[var(--text-subtle)]">$</span>
                         <input
                           className="ui-field py-3 pl-8 pr-4"
                           inputMode="decimal"
