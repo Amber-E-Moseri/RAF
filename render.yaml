@@ -31,3 +31,8 @@ services:
         sync: false
       - key: ALLOWED_ORIGINS
         sync: false
+      # Git SHA of the deployed commit — exposed on GET /health as `sha` for
+      # deployment attestation.  Render sets $RENDER_GIT_COMMIT automatically;
+      # map it here so the server picks it up via RAF_BUILD_SHA.
+      - key: RAF_BUILD_SHA
+        fromEnv: RENDER_GIT_COMMIT

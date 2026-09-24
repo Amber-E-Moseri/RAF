@@ -20,6 +20,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 
+import { getAvailablePort } from './helpers/isolatedSqliteServer.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
@@ -37,12 +39,10 @@ const shouldRun = Boolean(connectionString);
 const maybeTest = shouldRun ? test : test.skip;
 const maybeDescribe = shouldRun ? describe : describe.skip;
 
-// Randomized rather than fixed so a leaked/leftover server process from an interrupted
-// prior run can never be mistaken for this run's freshly spawned instance.
-const port = 20000 + Math.floor(Math.random() * 20000);
-const baseUrl = `http://127.0.0.1:${port}`;
 const jwtSecret = 'branch-e-adversarial-test-secret-2026';
 
+let port;
+let baseUrl;
 let serverProcess;
 let startupLog = '';
 
@@ -104,27 +104,42 @@ async function login(email, password) {
 
 before(async () => {
   if (!shouldRun) return;
-  serverProcess = spawn(process.execPath, ['index.js'], {
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      PORT: String(port),
-      PERSISTENCE_DRIVER: 'postgres',
-      POSTGRES_CONNECTION_STRING: connectionString,
-      RAF_AUTH_REQUIRED: 'true',
-      JWT_SECRET: jwtSecret,
-      RAF_AUTH_RATE_LIMIT_MAX: '200',
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  serverProcess.stdout.on('data', (c) => { startupLog += c.toString(); });
-  serverProcess.stderr.on('data', (c) => { startupLog += c.toString(); });
-  try {
-    await waitForServer(`${baseUrl}/health`);
-  } catch (err) {
-    serverProcess?.kill('SIGTERM');
-    throw new Error(`Server failed to start.\n${startupLog}\n${err.message}`);
+  // Use getAvailablePort() rather than Math.random() to avoid port collisions
+  // when multiple test files run in parallel.  We retry up to 3 times in case
+  // another worker grabs the port in the TOCTOU window between allocation and bind.
+  const MAX_RETRIES = 3;
+  let lastErr;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    port = await getAvailablePort();
+    baseUrl = `http://127.0.0.1:${port}`;
+    startupLog = '';
+    serverProcess = spawn(process.execPath, ['index.js'], {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        PORT: String(port),
+        PERSISTENCE_DRIVER: 'postgres',
+        POSTGRES_CONNECTION_STRING: connectionString,
+        RAF_AUTH_REQUIRED: 'true',
+        JWT_SECRET: jwtSecret,
+        RAF_AUTH_RATE_LIMIT_MAX: '200',
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    serverProcess.stdout.on('data', (c) => { startupLog += c.toString(); });
+    serverProcess.stderr.on('data', (c) => { startupLog += c.toString(); });
+    try {
+      await waitForServer(`${baseUrl}/health`);
+      return;
+    } catch (err) {
+      serverProcess?.kill('SIGTERM');
+      await wait(200);
+      lastErr = new Error(`Server failed to start.\n${startupLog}\n${err.message}`);
+      const serverStarted = startupLog.includes('[RAF] persistence: postgres');
+      if (!serverStarted || attempt === MAX_RETRIES) break;
+    }
   }
+  throw lastErr;
 });
 
 after(async () => {
