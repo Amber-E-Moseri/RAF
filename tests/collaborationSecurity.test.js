@@ -13,11 +13,7 @@ import { startIsolatedSqliteServer } from './helpers/isolatedSqliteServer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
-// Randomized rather than fixed so a leaked/leftover server process from an interrupted
-// prior run can never be mistaken for this run's freshly spawned instance.
-const port = 20000 + Math.floor(Math.random() * 20000);
-const baseUrl = `http://127.0.0.1:${port}`;
-
+let baseUrl;
 let serverProcess;
 
 async function request(pathname, { method = 'GET', token, workspaceId, headers = {}, body } = {}) {
@@ -48,7 +44,6 @@ before(async () => {
   serverProcess = await startIsolatedSqliteServer({
     repoRoot,
     testName: 'raf-collaboration-security',
-    port,
     authRequired: true,
     jwtSecret: 'raf-collaboration-security-secret',
     extraEnv: {
@@ -58,6 +53,7 @@ before(async () => {
       SUPABASE_ANON_KEY: '',
     },
   });
+  baseUrl = serverProcess.baseUrl;
 });
 
 after(async () => {

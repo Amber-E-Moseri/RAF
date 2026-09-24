@@ -1044,8 +1044,7 @@ describe('Cross-feature collision chains', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 {
-  const port = 25000 + Math.floor(Math.random() * 5000);
-  const baseUrl = `http://127.0.0.1:${port}`;
+  let baseUrl;
   let serverProcess;
 
   async function req(pathname, { method = 'GET', token, workspaceId, body } = {}) {
@@ -1078,7 +1077,6 @@ describe('Cross-feature collision chains', () => {
       serverProcess = await startIsolatedSqliteServer({
         repoRoot,
         testName: 'raf-phase7-auth',
-        port,
         authRequired: true,
         jwtSecret: 'phase7-auth-secret',
         extraEnv: {
@@ -1088,6 +1086,7 @@ describe('Cross-feature collision chains', () => {
           SUPABASE_ANON_KEY: '',
         },
       });
+      baseUrl = serverProcess.baseUrl;
     });
 
     after(async () => {

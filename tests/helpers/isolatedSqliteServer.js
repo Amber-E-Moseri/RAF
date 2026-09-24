@@ -159,11 +159,30 @@ async function startIsolatedSqliteServerOnce({
   child.stdout.on('data', (chunk) => { startupLog += chunk.toString(); });
   child.stderr.on('data', (chunk) => { startupLog += chunk.toString(); });
 
+  // Fast-fail: if the child exits before the health check succeeds (e.g. EADDRINUSE),
+  // abort polling after the next wait so stdout data has time to drain before we throw.
+  // Using 'close' (not 'exit') ensures all stdio buffers are flushed first.
+  let childClosed = false;
+  child.once('close', () => { childClosed = true; });
+
   try {
-    await waitForServer(`${baseUrl}${startupPath}`, {
-      attempts: startupAttempts,
-      intervalMs: startupIntervalMs,
-    });
+    let lastError;
+    let healthOk = false;
+    for (let attempt = 0; attempt < startupAttempts; attempt++) {
+      try {
+        const response = await fetch(`${baseUrl}${startupPath}`);
+        if (response.ok) { healthOk = true; break; }
+        lastError = new Error(`Unexpected status ${response.status}`);
+      } catch (err) {
+        lastError = err;
+      }
+      await wait(startupIntervalMs);
+      // Check after wait so all pending stdout 'data' events have been delivered.
+      if (childClosed) {
+        throw new Error('Server process exited before health check passed');
+      }
+    }
+    if (!healthOk) throw lastError ?? new Error('Health check timed out');
     assert.match(
       startupLog,
       /\[RAF\] persistence: sqlite/,
@@ -214,7 +233,7 @@ export async function startIsolatedSqliteServer({
   extraEnv = {},
   host = '127.0.0.1',
   startupPath = '/health',
-  startupAttempts = 50,
+  startupAttempts = 100,
   startupIntervalMs = 200,
 } = {}) {
   if (!repoRoot) {
@@ -230,7 +249,7 @@ export async function startIsolatedSqliteServer({
     });
   }
 
-  const MAX_RETRIES = 3;
+  const MAX_RETRIES = 5;
   let lastError;
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     const port = await getAvailablePort();
