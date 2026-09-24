@@ -39,15 +39,6 @@ function emailConfig(overrides = {}) {
   };
 }
 
-// Capture calls to sendEmail without sending real emails.
-function makeSendCapture() {
-  const sent = [];
-  return {
-    sent,
-    // inject via monkey-patch is not needed — routes import sendEmail directly.
-    // We test observable side-effects (DB state, response shape) instead.
-  };
-}
 
 async function seedUserWithPassword(db, email, plainPassword) {
   const passwordHash = await hashPassword(plainPassword);
@@ -174,9 +165,8 @@ await test('hashResetToken returns consistent SHA-256', () => {
 
 await test('reset URL is built from RAF_APP_URL, not request Host header', async () => {
   const db = createInMemoryDb();
-  const user = await seedUserWithPassword(db, 'amber@example.com', 'OldPass123');
+  await seedUserWithPassword(db, 'amber@example.com', 'OldPass123');
 
-  const sentEmails = [];
   // Wrap the route by checking DB state — route uses rafAppUrl from emailConfig, not from request.
   const ecfg = emailConfig({ rafAppUrl: 'https://trusted.example.com' });
 
@@ -365,7 +355,6 @@ await test('concurrent token use — only one succeeds', async () => {
   assert.ok(statuses.includes(200), 'one request should succeed');
   assert.ok(statuses.includes(401), 'one request should fail');
   // Only one of the passwords should authenticate.
-  const successRes = res1.status === 200 ? res1 : res2;
   const successPw = res1.status === 200 ? 'Concurrent1!' : 'Concurrent2!';
 
   const loginOk = await login(
