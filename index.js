@@ -13,7 +13,7 @@ import { createFixedWindowRateLimiter } from './lib/server/rateLimit.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const { port, dbPath, persistenceDriver, postgresConnectionString, postgresSsl, authRequired, sentryDsn, allowedOrigins } = loadServerEnv({ cwd: __dirname });
+const { port, dbPath, persistenceDriver, postgresConnectionString, postgresSsl, authRequired, sentryDsn, allowedOrigins, resendApiKey, emailFrom, rafAppUrl } = loadServerEnv({ cwd: __dirname });
 
 initSentry(sentryDsn);
 
@@ -84,8 +84,22 @@ const authSignupRateLimiter = createFixedWindowRateLimiter({
   keyPrefix: 'auth-signup',
 });
 
+const authForgotPasswordRateLimiter = createFixedWindowRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: authRateLimitMax,
+  keyPrefix: 'auth-forgot-password',
+});
+
+const authResetPasswordRateLimiter = createFixedWindowRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: authRateLimitMax,
+  keyPrefix: 'auth-reset-password',
+});
+
 app.use('/api/v1/auth/login', authLoginRateLimiter);
 app.use('/api/v1/auth/signup', authSignupRateLimiter);
+app.use('/api/v1/auth/forgot-password', authForgotPasswordRateLimiter);
+app.use('/api/v1/auth/reset-password', authResetPasswordRateLimiter);
 
 app.use(express.json());
 app.use(express.raw({
@@ -163,11 +177,14 @@ const aliases = [
   },
 ];
 
+console.log(`[RAF] email: ${resendApiKey ? 'resend enabled' : 'disabled (no RESEND_API_KEY)'}`);
+
 const apiRouter = await createApiRouter({
   apiRootDir,
   db,
   defaultHouseholdId: authRequired ? null : (db.defaultHouseholdId ?? null),
   aliases,
+  emailConfig: { resendApiKey, emailFrom, rafAppUrl },
 });
 
 app.use('/api/v1', apiRouter);

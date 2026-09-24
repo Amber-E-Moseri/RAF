@@ -36,3 +36,11 @@ services:
       # map it here so the server picks it up via RAF_BUILD_SHA.
       - key: RAF_BUILD_SHA
         fromEnv: RENDER_GIT_COMMIT
+      # Canonical frontend origin for password recovery redirect links
+      - key: RAF_APP_URL
+        sync: false
+      # Resend email delivery (both required for password recovery emails)
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false

@@ -27,6 +27,7 @@
   "description": "",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
+    "resend": "^4.0.0",
     "@sentry/node": "^10.73.0",
     "better-sqlite3": "^12.9.0",
     "cors": "^2.8.6",
