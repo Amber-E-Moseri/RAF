@@ -1557,8 +1557,9 @@ export function Transactions() {
       >
         <div className="flex items-end gap-2">
           <div>
-            <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">From</label>
+            <label htmlFor="filter-from" className="mb-1 block text-xs font-medium text-[var(--text-muted)]">From</label>
             <input
+              id="filter-from"
               type="date"
               className="rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-raf-ink outline-none transition focus:border-raf-moss"
               value={fromDate}
@@ -1569,8 +1570,9 @@ export function Transactions() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">To</label>
+            <label htmlFor="filter-to" className="mb-1 block text-xs font-medium text-[var(--text-muted)]">To</label>
             <input
+              id="filter-to"
               type="date"
               className="rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-raf-ink outline-none transition focus:border-raf-moss"
               value={toDate}
@@ -1582,8 +1584,9 @@ export function Transactions() {
           </div>
         </div>
         <div className="min-w-[160px] flex-1">
-          <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Category</label>
+          <label htmlFor="filter-category" className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Category</label>
           <select
+            id="filter-category"
             className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-raf-ink outline-none transition focus:border-raf-moss"
             value={categoryFilter}
             onChange={(event) => updateCategoryFilter(event.target.value)}
@@ -1595,8 +1598,9 @@ export function Transactions() {
           </select>
         </div>
         <div className="min-w-[200px] flex-1">
-          <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Search</label>
+          <label htmlFor="filter-search" className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Search</label>
           <input
+            id="filter-search"
             type="text"
             placeholder="Description or merchant..."
             className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-raf-ink outline-none transition focus:border-raf-moss"
