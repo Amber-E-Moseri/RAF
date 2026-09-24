@@ -1395,7 +1395,9 @@ export function Transactions() {
             Add Income
           </Button>
           <Button type="button" variant="secondary" onClick={() => setShowImportWorkflow((current) => !current)}>
-            Import statement
+            {importsSummary.unreviewed > 0
+              ? `Import statement · ${importsSummary.unreviewed} pending`
+              : "Import statement"}
           </Button>
           <Button type="button" onClick={() => setShowCreateTransactionForm((current) => !current)}>
             {showCreateTransactionForm ? "Hide Add Transaction" : "Add transaction"}
@@ -1404,8 +1406,7 @@ export function Transactions() {
       }
     >
       {(showCreateTransactionForm || (!isLoading && !error && data && data.transactions.items.length === 0)) ? (
-      <section className="grid gap-6 xl:grid-cols-[0.95fr,1.05fr]">
-        <Card title="Create Transaction" subtitle="Record spending, income, transfers, and linked payments.">
+      <Card title="Create Transaction" subtitle="Record spending, income, transfers, and linked payments." className="max-w-2xl">
           <form className="space-y-4" onSubmit={handleCreateTransaction}>
             <Input
               label="Transaction date"
@@ -1544,62 +1545,66 @@ export function Transactions() {
               </Button>
             </div>
           </form>
-        </Card>
-
-        <div className="space-y-4">
-          {submitError ? <ErrorState title="Failed to record transaction" message={submitError} /> : null}
-          {submitSuccess ? <SuccessNotice title="Transaction saved" message={submitSuccess} /> : null}
-          <Card title="Filter Ledger" subtitle="Date and category filters shape the current page.">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Input
-                label="From date"
-                name="fromDate"
-                type="date"
-                value={fromDate}
-                onChange={(event) => {
-                  setFromDate(event.target.value);
-                  setCursorHistory([null]);
-                }}
-              />
-              <Input
-                label="To date"
-                name="toDate"
-                type="date"
-                value={toDate}
-                onChange={(event) => {
-                  setToDate(event.target.value);
-                  setCursorHistory([null]);
-                }}
-              />
-            </div>
-            <div className="grid gap-4 md:grid-cols-[1.2fr,0.8fr]">
-              <Input
-                label="Search description"
-                name="search"
-                placeholder="Search current page"
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-              />
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-raf-ink">Filter by category</span>
-                <select
-                  className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
-                  value={categoryFilter}
-                  onChange={(event) => {
-                    updateCategoryFilter(event.target.value);
-                  }}
-                >
-                  <option value="">All categories</option>
-                  {(data?.categories ?? []).map((category) => (
-                    <option key={category.id} value={category.id}>{category.label}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          </Card>
-        </div>
-      </section>
+      </Card>
       ) : null}
+
+      {submitError ? <ErrorState title="Failed to record transaction" message={submitError} /> : null}
+      {submitSuccess ? <SuccessNotice title="Transaction saved" message={submitSuccess} /> : null}
+
+      <div
+        className="flex flex-wrap items-end gap-3 rounded-2xl border px-4 py-3"
+        style={{ borderColor: "var(--border-color)", background: "var(--surface-plain)" }}
+      >
+        <div className="flex items-end gap-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">From</label>
+            <input
+              type="date"
+              className="rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-raf-ink outline-none transition focus:border-raf-moss"
+              value={fromDate}
+              onChange={(event) => {
+                setFromDate(event.target.value);
+                setCursorHistory([null]);
+              }}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">To</label>
+            <input
+              type="date"
+              className="rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-raf-ink outline-none transition focus:border-raf-moss"
+              value={toDate}
+              onChange={(event) => {
+                setToDate(event.target.value);
+                setCursorHistory([null]);
+              }}
+            />
+          </div>
+        </div>
+        <div className="min-w-[160px] flex-1">
+          <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Category</label>
+          <select
+            className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-raf-ink outline-none transition focus:border-raf-moss"
+            value={categoryFilter}
+            onChange={(event) => updateCategoryFilter(event.target.value)}
+          >
+            <option value="">All categories</option>
+            {(data?.categories ?? []).map((category) => (
+              <option key={category.id} value={category.id}>{category.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="min-w-[200px] flex-1">
+          <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Search</label>
+          <input
+            type="text"
+            placeholder="Description or merchant..."
+            className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-raf-ink outline-none transition focus:border-raf-moss"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+          />
+        </div>
+      </div>
 
       {showImportWorkflow ? (
         <TransactionImportWorkflow
@@ -1652,6 +1657,7 @@ export function Transactions() {
           onCloseImportPanel={closeImportPanel}
           onToggleAdvancedMenu={toggleAdvancedMenu}
           onToggleImportMenu={toggleImportMenu}
+          onCloseImportMenu={() => setOpenImportMenuId(null)}
           onHandleIgnoreImportedRow={handleIgnoreImportedRow}
           onHandleDeleteRule={handleDeleteRule}
           onHandleRuleModeUpdate={handleRuleModeUpdate}
@@ -1694,48 +1700,39 @@ export function Transactions() {
         {!isLoading && error ? <ErrorState title="Failed to fetch transactions" message={error} onRetry={() => void reload()} /> : null}
         {!isLoading && !error && data ? (
           <>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex min-w-0 flex-wrap items-center gap-3">
-                {categorySlugFilterFromUrl || categoryFilterFromUrl ? (
-                  <span className="rounded-full bg-[color:color-mix(in_srgb,var(--primary-color)_10%,transparent)] px-3 py-1 text-[11px] font-semibold text-[var(--text-strong)]">
-                    {dashboardFocusedBucketLabel ? `${dashboardFocusedBucketLabel} filter active` : "Dashboard filter active"}
-                  </span>
-                ) : null}
-                <div className="inline-flex overflow-hidden rounded-[10px] border border-[var(--border-color)]">
-                  {[
-                    ["all", "All"],
-                    ["spend", "Spend"],
-                    ["income", "Income"],
-                    ["transfer", "Transfer"],
-                    ["debt", "Debt Payoff"],
-                  ].map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className={`px-4 py-2 text-[12px] font-semibold transition ${
-                        quickFilter === value
-                          ? "bg-[var(--primary-color)] text-[var(--primary-contrast)]"
-                          : "bg-[var(--surface-color)] text-[var(--text-muted)] hover:bg-[var(--surface-plain)]"
-                      }`}
-                      onClick={() => applyQuickFilter(value as "all" | "spend" | "income" | "transfer" | "debt")}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                {categorySlugFilterFromUrl || categoryFilterFromUrl ? (
-                  <Button type="button" variant="secondary" className="rounded-full px-3 py-1.5 text-xs" onClick={clearDashboardBucketFocus}>
-                    Clear filter
-                  </Button>
-                ) : null}
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              {categorySlugFilterFromUrl || categoryFilterFromUrl ? (
+                <span className="rounded-full bg-[color:color-mix(in_srgb,var(--primary-color)_10%,transparent)] px-3 py-1 text-[11px] font-semibold text-[var(--text-strong)]">
+                  {dashboardFocusedBucketLabel ? `${dashboardFocusedBucketLabel} filter active` : "Dashboard filter active"}
+                </span>
+              ) : null}
+              <div className="inline-flex overflow-hidden rounded-[10px] border border-[var(--border-color)]">
+                {[
+                  ["all", "All"],
+                  ["spend", "Spend"],
+                  ["income", "Income"],
+                  ["transfer", "Transfer"],
+                  ["debt", "Debt Payoff"],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`px-4 py-2 text-[12px] font-semibold transition ${
+                      quickFilter === value
+                        ? "bg-[var(--primary-color)] text-[var(--primary-contrast)]"
+                        : "bg-[var(--surface-color)] text-[var(--text-muted)] hover:bg-[var(--surface-plain)]"
+                    }`}
+                    onClick={() => applyQuickFilter(value as "all" | "spend" | "income" | "transfer" | "debt")}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
-              <input
-                type="text"
-                placeholder="Search transactions..."
-                className="w-full max-w-[260px] rounded-[10px] border border-[var(--border-color)] bg-[var(--surface-color)] px-3 py-2 text-sm text-[var(--text-strong)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--primary-color)]"
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-              />
+              {categorySlugFilterFromUrl || categoryFilterFromUrl ? (
+                <Button type="button" variant="secondary" className="rounded-full px-3 py-1.5 text-xs" onClick={clearDashboardBucketFocus}>
+                  Clear filter
+                </Button>
+              ) : null}
             </div>
             {visibleTransactions.length ? (
               <Table
