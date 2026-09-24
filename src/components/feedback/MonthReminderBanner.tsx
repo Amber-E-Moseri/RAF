@@ -15,14 +15,14 @@ export function MonthReminderBanner({
   ctaLabel = "Review month",
 }: MonthReminderBannerProps) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--badge-warning-ring)] bg-[var(--badge-warning-bg)] px-4 py-3 text-sm text-[var(--badge-warning-text)]">
       <div className="flex items-center gap-3">
         <Badge tone={tone}>{tone === "danger" ? "Needs attention" : "Still open"}</Badge>
         <p>
           {formatMonthLabel(monthKey)} is still open. Review and close it before continuing.
         </p>
       </div>
-      <Link className="text-sm font-semibold text-amber-950 underline-offset-4 hover:underline" to="/monthly-review">
+      <Link className="text-sm font-semibold text-[var(--badge-warning-text)] underline-offset-4 hover:underline" to="/monthly-review">
         {ctaLabel}
       </Link>
     </div>

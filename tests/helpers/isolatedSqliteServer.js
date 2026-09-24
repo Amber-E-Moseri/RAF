@@ -108,26 +108,23 @@ async function waitForServer(url, { attempts = 50, intervalMs = 200 } = {}) {
   throw lastError;
 }
 
-export async function startIsolatedSqliteServer({
+// Attempt to start one isolated SQLite server on a specific port.
+// Returns the server handle on success; throws with the startup log on failure.
+async function startIsolatedSqliteServerOnce({
   repoRoot,
   testName,
-  port: requestedPort,
-  authRequired = false,
-  jwtSecret = 'isolated-sqlite-test-secret',
-  extraEnv = {},
-  host = '127.0.0.1',
-  startupPath = '/health',
-  startupAttempts = 50,
-  startupIntervalMs = 200,
-} = {}) {
-  if (!repoRoot) {
-    throw new Error('repoRoot is required to start an isolated SQLite test server.');
-  }
-
+  port,
+  authRequired,
+  jwtSecret,
+  extraEnv,
+  host,
+  startupPath,
+  startupAttempts,
+  startupIntervalMs,
+}) {
   const prefix = normalizePrefix(testName);
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `${prefix}-`));
   const dbPath = path.join(tempDir, 'raf.sqlite');
-  const port = requestedPort ?? await getAvailablePort();
   const baseUrl = `http://${host}:${port}`;
   const env = {
     ...process.env,
@@ -142,19 +139,13 @@ export async function startIsolatedSqliteServer({
   };
 
   try {
-    if (requestedPort != null) {
-      await assertPortAvailable(port, host);
-    }
     assert.equal(env.PERSISTENCE_DRIVER, 'sqlite', 'isolated helper requires PERSISTENCE_DRIVER=sqlite');
     for (const key of POSTGRES_ENV_KEYS) {
       assert.equal(env[key], '', `isolated helper requires ${key} to be cleared`);
     }
-
     assertIsolatedSqliteEnvResolvesToSqlite({ cwd: repoRoot, env });
   } catch (error) {
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
     throw error;
   }
 
@@ -168,11 +159,30 @@ export async function startIsolatedSqliteServer({
   child.stdout.on('data', (chunk) => { startupLog += chunk.toString(); });
   child.stderr.on('data', (chunk) => { startupLog += chunk.toString(); });
 
+  // Fast-fail: if the child exits before the health check succeeds (e.g. EADDRINUSE),
+  // abort polling after the next wait so stdout data has time to drain before we throw.
+  // Using 'close' (not 'exit') ensures all stdio buffers are flushed first.
+  let childClosed = false;
+  child.once('close', () => { childClosed = true; });
+
   try {
-    await waitForServer(`${baseUrl}${startupPath}`, {
-      attempts: startupAttempts,
-      intervalMs: startupIntervalMs,
-    });
+    let lastError;
+    let healthOk = false;
+    for (let attempt = 0; attempt < startupAttempts; attempt++) {
+      try {
+        const response = await fetch(`${baseUrl}${startupPath}`);
+        if (response.ok) { healthOk = true; break; }
+        lastError = new Error(`Unexpected status ${response.status}`);
+      } catch (err) {
+        lastError = err;
+      }
+      await wait(startupIntervalMs);
+      // Check after wait so all pending stdout 'data' events have been delivered.
+      if (childClosed) {
+        throw new Error('Server process exited before health check passed');
+      }
+    }
+    if (!healthOk) throw lastError ?? new Error('Health check timed out');
     assert.match(
       startupLog,
       /\[RAF\] persistence: sqlite/,
@@ -180,6 +190,8 @@ export async function startIsolatedSqliteServer({
     );
   } catch (error) {
     child.kill('SIGTERM');
+    // Wait briefly so the port is released before the caller retries.
+    await wait(200);
     throw new Error(`Isolated SQLite server failed to start. Output:\n${startupLog}\n${error.message}`);
   }
 
@@ -207,4 +219,52 @@ export async function startIsolatedSqliteServer({
     startupLog: () => startupLog,
     stop,
   };
+}
+
+// Public entry point.  Retries with a fresh OS-assigned port on startup failure
+// to mitigate the TOCTOU race where getAvailablePort() releases the port before
+// the child process binds it and a concurrent test grabs it first.
+export async function startIsolatedSqliteServer({
+  repoRoot,
+  testName,
+  port: requestedPort,
+  authRequired = false,
+  jwtSecret = 'isolated-sqlite-test-secret',
+  extraEnv = {},
+  host = '127.0.0.1',
+  startupPath = '/health',
+  startupAttempts = 100,
+  startupIntervalMs = 200,
+} = {}) {
+  if (!repoRoot) {
+    throw new Error('repoRoot is required to start an isolated SQLite test server.');
+  }
+
+  // Explicit requestedPort bypasses the TOCTOU check — caller takes responsibility.
+  if (requestedPort != null) {
+    await assertPortAvailable(requestedPort, host);
+    return startIsolatedSqliteServerOnce({
+      repoRoot, testName, port: requestedPort, authRequired, jwtSecret,
+      extraEnv, host, startupPath, startupAttempts, startupIntervalMs,
+    });
+  }
+
+  const MAX_RETRIES = 5;
+  let lastError;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const port = await getAvailablePort();
+    try {
+      return await startIsolatedSqliteServerOnce({
+        repoRoot, testName, port, authRequired, jwtSecret,
+        extraEnv, host, startupPath, startupAttempts, startupIntervalMs,
+      });
+    } catch (err) {
+      lastError = err;
+      // Only retry when the failure looks like a port collision (server started but
+      // health check never responded).  A configuration error should not be retried.
+      const serverStarted = err.message.includes('[RAF] persistence: sqlite');
+      if (!serverStarted || attempt === MAX_RETRIES) break;
+    }
+  }
+  throw lastError;
 }

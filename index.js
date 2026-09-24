@@ -13,7 +13,7 @@ import { createFixedWindowRateLimiter } from './lib/server/rateLimit.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const { port, dbPath, persistenceDriver, postgresConnectionString, postgresSsl, authRequired, sentryDsn, allowedOrigins } = loadServerEnv({ cwd: __dirname });
+const { port, dbPath, persistenceDriver, postgresConnectionString, postgresSsl, authRequired, sentryDsn, allowedOrigins, resendApiKey, emailFrom, rafAppUrl } = loadServerEnv({ cwd: __dirname });
 
 initSentry(sentryDsn);
 
@@ -59,6 +59,11 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key, x-workspace-id, x-household-id, x-household_id');
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
 
+  // Security headers — tighten browser behaviour for API responses.
+  res.header('X-Content-Type-Options', 'nosniff');
+  res.header('X-Frame-Options', 'DENY');
+  res.header('Referrer-Policy', 'no-referrer');
+
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }
@@ -79,8 +84,22 @@ const authSignupRateLimiter = createFixedWindowRateLimiter({
   keyPrefix: 'auth-signup',
 });
 
+const authForgotPasswordRateLimiter = createFixedWindowRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: authRateLimitMax,
+  keyPrefix: 'auth-forgot-password',
+});
+
+const authResetPasswordRateLimiter = createFixedWindowRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: authRateLimitMax,
+  keyPrefix: 'auth-reset-password',
+});
+
 app.use('/api/v1/auth/login', authLoginRateLimiter);
 app.use('/api/v1/auth/signup', authSignupRateLimiter);
+app.use('/api/v1/auth/forgot-password', authForgotPasswordRateLimiter);
+app.use('/api/v1/auth/reset-password', authResetPasswordRateLimiter);
 
 app.use(express.json());
 app.use(express.raw({
@@ -91,10 +110,15 @@ app.use(express.raw({
   limit: '10mb',
 }));
 
+// RAF_BUILD_SHA is set by the deploy pipeline (e.g. Render env var from $RENDER_GIT_COMMIT).
+// Omitted when not set — never falls back to the real git binary at runtime.
+const buildSha = process.env.RAF_BUILD_SHA ?? null;
+
 app.get('/health', (_req, res) => {
   res.status(200).json({
     status: 'ok',
     service: 'raf-api',
+    ...(buildSha ? { sha: buildSha } : {}),
   });
 });
 
@@ -153,11 +177,14 @@ const aliases = [
   },
 ];
 
+console.log(`[RAF] email: ${resendApiKey ? 'resend enabled' : 'disabled (no RESEND_API_KEY)'}`);
+
 const apiRouter = await createApiRouter({
   apiRootDir,
   db,
   defaultHouseholdId: authRequired ? null : (db.defaultHouseholdId ?? null),
   aliases,
+  emailConfig: { resendApiKey, emailFrom, rafAppUrl },
 });
 
 app.use('/api/v1', apiRouter);
@@ -183,6 +210,10 @@ app.use((error, _req, res, _next) => {
   });
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`RAF API running on http://localhost:${port}`);
+});
+server.on('error', (err) => {
+  console.error(JSON.stringify({ level: 'error', event: 'server_listen_failed', port, message: err.message, code: err.code }));
+  process.exit(1);
 });

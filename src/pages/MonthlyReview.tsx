@@ -827,7 +827,7 @@ export function MonthlyReview() {
                 <div>
                   <p className="text-sm font-semibold text-[var(--text-strong)]">Close {activeMonthLabel}?</p>
                   <p className="mt-1 text-sm text-[var(--text-muted)]">
-                    RAF will preserve an immutable historical snapshot of this period — income, spending, allocations, buffer, goal contributions, and debt payments captured at this exact moment. The snapshot cannot be modified after closing.
+                    NOMI will preserve an immutable historical snapshot of this period — income, spending, allocations, buffer, goal contributions, and debt payments captured at this exact moment. The snapshot cannot be modified after closing.
                   </p>
                 </div>
 
@@ -1040,7 +1040,7 @@ export function MonthlyReview() {
                   <div>
                     <div className="text-sm font-semibold text-[var(--text-strong)]">Overspending Impact</div>
                     <div className="mt-1 text-[12px] text-[var(--text-muted)]">
-                      Overused categories reduce available month surplus. RAF does not silently correct them.
+                      Overused categories reduce available month surplus. NOMI does not silently correct them.
                     </div>
                   </div>
                   <Badge tone="warning">
@@ -1449,7 +1449,7 @@ export function MonthlyReview() {
         <Card title="Review Applied" subtitle={`Review month ${result.review.reviewMonth}`}>
           <SuccessNotice
             title="Monthly review applied"
-            message={`RAF saved the review and created ${result.appliedTransactions.length} allocation transaction${result.appliedTransactions.length === 1 ? "" : "s"}.`}
+            message={`NOMI saved the review and created ${result.appliedTransactions.length} allocation transaction${result.appliedTransactions.length === 1 ? "" : "s"}.`}
           />
           <div className="mt-4 grid gap-4 lg:grid-cols-[0.7fr,1fr]">
             <div className="rounded-2xl p-4" style={{ background: "var(--surface-plain)" }}>

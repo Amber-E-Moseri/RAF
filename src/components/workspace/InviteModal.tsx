@@ -86,7 +86,7 @@ export function InviteModal({ workspaceId, onSent, onClose }: Props) {
           </div>
 
           {error ? (
-            <p className="text-[12px] text-[var(--text-danger,#ef4444)]">{error}</p>
+            <p className="text-[12px] text-[var(--status-danger)]">{error}</p>
           ) : null}
 
           <div className="flex gap-2 pt-1">

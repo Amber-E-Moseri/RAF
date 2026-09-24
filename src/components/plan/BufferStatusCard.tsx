@@ -78,10 +78,10 @@ export function BufferStatusCard() {
 
   const statusLabel = exceeded ? "Exceeded" : fullyUsed ? "Fully used" : unused ? "Unused" : "Partially used";
   const fillColor = exceeded || fullyUsed
-    ? "#dc2626"
+    ? "var(--status-danger)"
     : unused
-      ? "color-mix(in srgb, var(--primary-color) 72%, var(--text-strong))"
-      : "#b45309";
+      ? "var(--theme-primary)"
+      : "var(--status-warning)";
 
   return (
     <div className="mt-4 rounded-2xl border border-[var(--border-color)] p-5" style={{ background: "var(--surface-plain)" }}>

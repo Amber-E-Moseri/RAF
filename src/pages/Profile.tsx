@@ -171,37 +171,37 @@ export function Profile() {
           <Card title="User Information" subtitle="Account details and household context.">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h2 className="text-lg font-semibold text-raf-ink">Jane Doe</h2>
-                <p className="mt-1 text-sm text-stone-500">Local RAF profile placeholder</p>
+                <h2 className="text-lg font-semibold text-[var(--text-primary)]">Jane Doe</h2>
+                <p className="mt-1 text-sm text-[var(--text-secondary)]">Local profile placeholder</p>
               </div>
               <Badge tone="neutral">Profile placeholder</Badge>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
-                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">Household</p>
-                <p className="mt-2 text-sm font-medium text-raf-ink">Local RAF Household</p>
-                <p className="mt-1 text-sm text-stone-500">Household and account details will appear here when available.</p>
+              <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-4">
+                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-secondary)]">Household</p>
+                <p className="mt-2 text-sm font-medium text-[var(--text-primary)]">Household</p>
+                <p className="mt-1 text-sm text-[var(--text-secondary)]">Household and account details will appear here when available.</p>
               </div>
-              <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
-                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-stone-500">Account</p>
-                <p className="mt-2 text-sm font-medium text-raf-ink">Google-auth account placeholder</p>
-                <p className="mt-1 text-sm text-stone-500">Connected user details are not available yet.</p>
+              <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-4">
+                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-secondary)]">Account</p>
+                <p className="mt-2 text-sm font-medium text-[var(--text-primary)]">Google-auth account placeholder</p>
+                <p className="mt-1 text-sm text-[var(--text-secondary)]">Connected user details are not available yet.</p>
               </div>
             </div>
           </Card>
 
           <section className="grid gap-4 md:grid-cols-3">
             <Card title="Monthly Review" subtitle="Planning summary placeholder.">
-              <p className="text-2xl font-bold tracking-tight text-raf-ink">{data.monthlyReviewCount}</p>
-              <p className="mt-2 text-sm text-stone-500">Saved monthly reviews this year</p>
+              <p className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">{data.monthlyReviewCount}</p>
+              <p className="mt-2 text-sm text-[var(--text-secondary)]">Saved monthly reviews this year</p>
             </Card>
             <Card title="Categories" subtitle="Current allocation setup summary.">
-              <p className="text-2xl font-bold tracking-tight text-raf-ink">{data.activeAllocationCount}</p>
-              <p className="mt-2 text-sm text-stone-500">{data.allocationCount} total categories configured</p>
+              <p className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">{data.activeAllocationCount}</p>
+              <p className="mt-2 text-sm text-[var(--text-secondary)]">{data.allocationCount} total categories configured</p>
             </Card>
             <Card title="Goals" subtitle="Goal planning placeholder.">
-              <p className="text-2xl font-bold tracking-tight text-raf-ink">{data.goalCount}</p>
-              <p className="mt-2 text-sm text-stone-500">Active and planned goals currently tracked</p>
+              <p className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">{data.goalCount}</p>
+              <p className="mt-2 text-sm text-[var(--text-secondary)]">Active and planned goals currently tracked</p>
             </Card>
           </section>
 

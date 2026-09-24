@@ -14,7 +14,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 const ROLE_COLORS: Record<string, string> = {
   owner: "bg-[var(--theme-primary)] text-white",
-  admin: "bg-[var(--accent-blue,#3b82f6)] text-white",
+  admin: "bg-[var(--surface-muted)] text-[var(--text-primary)] ring-1 ring-[var(--border-strong)]",
   member: "bg-[var(--surface-muted)] text-[var(--text-primary)]",
   viewer: "bg-[var(--surface-muted)] text-[var(--text-secondary)]",
 };
@@ -132,7 +132,7 @@ export function MemberRow({ member, workspaceId, isCurrentUser, isPersonalWorksp
           <Button
             type="button"
             variant="ghost"
-            className="text-[11px] text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+            className="text-[11px] text-[var(--status-danger)] hover:bg-[var(--badge-danger-bg)]"
             disabled={busy}
             onClick={() => void handleRemove()}
           >
@@ -144,7 +144,7 @@ export function MemberRow({ member, workspaceId, isCurrentUser, isPersonalWorksp
           <Button
             type="button"
             variant="ghost"
-            className="text-[11px] text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+            className="text-[11px] text-[var(--status-danger)] hover:bg-[var(--badge-danger-bg)]"
             disabled={busy}
             onClick={() => void handleLeave()}
           >
@@ -154,7 +154,7 @@ export function MemberRow({ member, workspaceId, isCurrentUser, isPersonalWorksp
       </div>
 
       {error ? (
-        <p className="mt-1 w-full text-[11px] text-[var(--text-danger,#ef4444)]">{error}</p>
+        <p className="mt-1 w-full text-[11px] text-[var(--status-danger)]">{error}</p>
       ) : null}
     </div>
   );

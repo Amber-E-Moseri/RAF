@@ -87,6 +87,7 @@
   /* Semantic aliases kept for consuming code */
   --text-strong: var(--text-primary);
   --text-muted: var(--text-secondary);
+  --text-danger: var(--status-danger);
   --border-color: var(--border-subtle);
   --surface-color: var(--surface-card);
   --surface-elevated: var(--surface-muted);

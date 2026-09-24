@@ -358,7 +358,9 @@ export async function run() {
   }
 
   const checkMode = process.argv.includes('--check');
-  const allowBootstrap = process.argv.includes('--bootstrap');
+  // Accept --bootstrap CLI flag OR RAF_ALLOW_BOOTSTRAP env var (e.g. CI setup).
+  // The inner redeclaration that previously shadowed this line has been removed.
+  const allowBootstrap = process.argv.includes('--bootstrap') || process.env.RAF_ALLOW_BOOTSTRAP === 'true';
 
   const { default: pg } = await import('pg');
   const client = new pg.Client({ connectionString: connStr });
@@ -366,7 +368,6 @@ export async function run() {
   try {
     await client.connect();
     console.log('Connected to Postgres');
-    const allowBootstrap = process.env.RAF_ALLOW_BOOTSTRAP === 'true';
     const result = await applyMigrations({
       client,
       migrationsDir: defaultMigrationsDir,

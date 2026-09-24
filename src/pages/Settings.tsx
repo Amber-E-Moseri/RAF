@@ -26,7 +26,7 @@ export function Settings() {
   return (
     <PageShell
       eyebrow="Settings"
-      title="Make RAF feel like yours."
+      title="Make NOMI feel like yours."
       description="Manage your household, appearance, financial categories and import rules."
     >
       <nav className="page-tabs" aria-label="Settings sections">

@@ -815,7 +815,7 @@ export function Goals() {
               <div className="mt-4 rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
                 <div className="text-sm font-semibold text-[var(--text-strong)]">Pace</div>
                 <p className="mt-1 text-xs text-[var(--text-muted)]">
-                  Estimate only: if this period's pace holds, RAF can show how long the remaining target may take.
+                  Estimate only: if this period's pace holds, NOMI can show how long the remaining target may take.
                 </p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <div>

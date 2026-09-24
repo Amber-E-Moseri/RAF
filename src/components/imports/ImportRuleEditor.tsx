@@ -81,6 +81,11 @@ export function mapRuleDraftToPayload(draft: ImportRuleDraft): ImportReviewRuleU
   };
 }
 
+const selectClass =
+  "w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--theme-primary)] focus:ring-2 focus:ring-[var(--theme-soft)]";
+
+const labelTextClass = "mb-2 block text-sm font-medium text-[var(--text-primary)]";
+
 export function ImportRuleEditor({
   categories,
   debts,
@@ -97,7 +102,7 @@ export function ImportRuleEditor({
   const canLinkFixedBill = fixedBills.length > 0;
 
   return (
-    <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface-color)] p-4">
+    <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-card)] p-4">
       <div className="grid gap-4 md:grid-cols-2">
         <Input
           label="Match condition"
@@ -108,9 +113,9 @@ export function ImportRuleEditor({
         />
 
         <label className="block">
-          <span className="mb-2 block text-sm font-medium text-raf-ink">Match type</span>
+          <span className={labelTextClass}>Match type</span>
           <select
-            className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+            className={selectClass}
             value={draft.matchType}
             onChange={(event) => onChange({ matchType: event.target.value as "contains" | "exact" })}
           >
@@ -120,9 +125,9 @@ export function ImportRuleEditor({
         </label>
 
         <label className="block">
-          <span className="mb-2 block text-sm font-medium text-raf-ink">Review action</span>
+          <span className={labelTextClass}>Review action</span>
           <select
-            className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+            className={selectClass}
             value={draft.classificationType}
             onChange={(event) => onChange({
               classificationType: event.target.value as ImportClassificationPayload["classification_type"],
@@ -144,9 +149,9 @@ export function ImportRuleEditor({
         </label>
 
         <label className="block">
-          <span className="mb-2 block text-sm font-medium text-raf-ink">Rule type</span>
+          <span className={labelTextClass}>Rule type</span>
           <select
-            className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+            className={selectClass}
             value={draft.ruleType}
             onChange={(event) => onChange({
               ruleType: event.target.value as "suggestion" | "reusable_rule",
@@ -160,9 +165,9 @@ export function ImportRuleEditor({
 
         {requiresCategorySelection(draft.classificationType) ? (
           <label className="block">
-            <span className="mb-2 block text-sm font-medium text-raf-ink">Category assignment</span>
+            <span className={labelTextClass}>Category assignment</span>
             <select
-              className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+              className={selectClass}
               value={draft.categoryId}
               onChange={(event) => onChange({ categoryId: event.target.value })}
             >
@@ -176,9 +181,9 @@ export function ImportRuleEditor({
 
         {requiresDebtSelection(draft.classificationType) ? (
           <label className="block">
-            <span className="mb-2 block text-sm font-medium text-raf-ink">Debt</span>
+            <span className={labelTextClass}>Debt</span>
             <select
-              className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+              className={selectClass}
               value={draft.debtId}
               onChange={(event) => onChange({ debtId: event.target.value })}
             >
@@ -192,9 +197,9 @@ export function ImportRuleEditor({
 
         {requiresFixedBillSelection(draft.classificationType) ? (
           <label className="block">
-            <span className="mb-2 block text-sm font-medium text-raf-ink">Fixed bill</span>
+            <span className={labelTextClass}>Fixed bill</span>
             <select
-              className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+              className={selectClass}
               value={draft.fixedBillId}
               onChange={(event) => onChange({ fixedBillId: event.target.value })}
             >
@@ -208,9 +213,9 @@ export function ImportRuleEditor({
 
         {requiresGoalSelection(draft.classificationType) ? (
           <label className="block">
-            <span className="mb-2 block text-sm font-medium text-raf-ink">Savings goal</span>
+            <span className={labelTextClass}>Savings goal</span>
             <select
-              className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm text-raf-ink outline-none transition focus:border-raf-moss focus:ring-2 focus:ring-raf-sage"
+              className={selectClass}
               value={draft.goalId}
               onChange={(event) => onChange({ goalId: event.target.value })}
             >
@@ -223,23 +228,23 @@ export function ImportRuleEditor({
         ) : null}
 
         {allowAutoApplyToggle ? (
-          <label className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700 md:col-span-2">
+          <label className="flex items-start gap-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-secondary)] md:col-span-2">
             <input
               type="checkbox"
-              className="mt-1 size-4 rounded border-stone-300 text-raf-moss"
+              className="mt-1 size-4 rounded border-[var(--border-strong)] text-[var(--theme-primary)]"
               checked={draft.autoApply}
               disabled={draft.ruleType !== "reusable_rule"}
               onChange={(event) => onChange({ autoApply: event.target.checked })}
             />
             <span>
-              <span className="block font-medium text-raf-ink">Auto-apply</span>
-              <span className="mt-1 block text-stone-500">Visible and reversible. Turn this off to convert the rule back to suggestion behavior.</span>
+              <span className="block font-medium text-[var(--text-primary)]">Auto-apply</span>
+              <span className="mt-1 block text-[var(--text-secondary)]">Visible and reversible. Turn this off to convert the rule back to suggestion behavior.</span>
             </span>
           </label>
         ) : draft.ruleType === "reusable_rule" ? (
-          <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700 md:col-span-2">
-            <span className="block font-medium text-raf-ink">Auto-apply enabled</span>
-            <span className="mt-1 block text-stone-500">Reusable rules auto-apply right away. To disable that later, use Settings.</span>
+          <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-secondary)] md:col-span-2">
+            <span className="block font-medium text-[var(--text-primary)]">Auto-apply enabled</span>
+            <span className="mt-1 block text-[var(--text-secondary)]">Reusable rules auto-apply right away. To disable that later, use Settings.</span>
           </div>
         ) : null}
       </div>

@@ -14,7 +14,7 @@ export function Table({ headers, thClassNames, footer, tableClassName = "", chil
         <thead>
           <tr>
             {headers.map((header, index) => (
-              <th key={index} className={["px-4 py-3.5 text-left text-[8.5px] font-[900] uppercase tracking-[0.06em] text-[var(--text-secondary)] bg-[#fafaf8]", thClassNames?.[index] ?? ""].filter(Boolean).join(" ")}>
+              <th key={index} className={["px-4 py-3.5 text-left text-[8.5px] font-[900] uppercase tracking-[0.06em] text-[var(--text-secondary)] bg-[var(--surface-muted)]", thClassNames?.[index] ?? ""].filter(Boolean).join(" ")}>
                 {header}
               </th>
             ))}
@@ -22,7 +22,7 @@ export function Table({ headers, thClassNames, footer, tableClassName = "", chil
         </thead>
         <tbody>{children}</tbody>
       </table>
-      {footer ? <div className="border-t border-[#f0efeb] bg-transparent px-[13px] py-[11px]">{footer}</div> : null}
+      {footer ? <div className="border-t border-[var(--border-subtle)] bg-transparent px-[13px] py-[11px]">{footer}</div> : null}
     </div>
   );
 }

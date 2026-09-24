@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { getFinancialAccounts } from "../api/accountsApi";
 import { getAllocationCategoriesAsOf } from "../api/allocationCategoriesApi";
 import { ApiError } from "../api/client";
+import { getDebts } from "../api/debtsApi";
 import { getIncome, getIncomeAllocations } from "../api/incomeApi";
 import { getDashboardAggregateReport } from "../api/reportsApi";
 import { getTransactions, markTransactionReviewed, markTransactionUnreviewed, bulkReviewTransactions } from "../api/transactionsApi";
@@ -29,6 +30,8 @@ import { Money } from "../components/ui/Money";
 import { useMoneyFormat } from "../hooks/useMoneyFormat";
 import type {
   AllocationCategory,
+  Debt,
+  DebtListResponse,
   DashboardPeriod,
   FinancialAccount,
   IncomeAllocationReport,
@@ -268,6 +271,11 @@ export function Dashboard() {
     }
   }
 
+  const { data: debtsData } = useAsyncData<DebtListResponse>(
+    () => getDebts().catch(() => ({ items: [] as Debt[], summary: { totalStarting: "0.00", totalRemaining: "0.00", totalPaidAllTime: "0.00" } })),
+    [],
+  );
+
   const { data, error, isLoading, reload } = useAsyncData<DashboardViewModel>(async () => {
     const [aggregate, incomeResponse, transactionsResponse, accountsResponse] = await Promise.all([
       getDashboardAggregateReport({ from, to }),
@@ -325,7 +333,7 @@ export function Dashboard() {
 
   if (isLoading || monthWorkflow.isLoading) {
     return (
-      <PageShell eyebrow="Home" title="Your money, with a clear next move." description="RAF keeps the important decisions visible without turning your finances into a wall of charts.">
+      <PageShell eyebrow="Home" title="Your money, with a clear next move." description="NOMI keeps the important decisions visible without turning your finances into a wall of charts.">
         <LoadingState label="Loading the current financial snapshot..." />
       </PageShell>
     );
@@ -333,7 +341,7 @@ export function Dashboard() {
 
   if (error || !data || monthWorkflow.error || !monthWorkflow.data) {
     return (
-      <PageShell eyebrow="Home" title="Your money, with a clear next move." description="RAF keeps the important decisions visible without turning your finances into a wall of charts.">
+      <PageShell eyebrow="Home" title="Your money, with a clear next move." description="NOMI keeps the important decisions visible without turning your finances into a wall of charts.">
         <ErrorState
           title="Failed to load dashboard"
           message={error ?? monthWorkflow.error ?? "We could not load the current dashboard data. Please try again."}
@@ -399,7 +407,7 @@ export function Dashboard() {
     <PageShell
       eyebrow="Home"
       title="Your money, with a clear next move."
-      description="RAF keeps the important decisions visible without turning your finances into a wall of charts."
+      description="NOMI keeps the important decisions visible without turning your finances into a wall of charts."
       actions={(
         <div className="flex items-center gap-2">
           <Link to="/monthly-review" className="inline-flex min-h-[40px] items-center rounded-[11px] border border-[var(--border-subtle)] bg-[var(--surface-card)] px-[13px] text-[11.5px] font-semibold text-[var(--text-primary)] shadow-[var(--shadow-sm)] transition hover:bg-[var(--surface-muted)]">Monthly review</Link>
@@ -442,6 +450,82 @@ export function Dashboard() {
       ) : null}
       {nextStepState?.kind === "month-reminder" ? <MonthReminderBanner monthKey={nextStepState.monthKey} /> : null}
       <FinancialAttentionAggregator items={attentionData?.items ?? []} />
+
+      {/* Debt obligations — shown only when there are active debts */}
+      {debtsData && debtsData.items.filter(d => d.isActive !== false && Number(d.currentBalance) > 0).length > 0 ? (() => {
+        const activeDebts = debtsData.items.filter(d => d.isActive !== false && Number(d.currentBalance) > 0);
+        const obligationsThisMonth = activeDebts.filter(d =>
+          d.paymentObligation && d.paymentObligation.status !== "satisfied" && d.paymentObligation.status !== "pending"
+            ? true
+            : d.nextPaymentDueDate != null
+        );
+        const needsAttention = activeDebts.filter(d =>
+          d.paymentObligation?.status === "missed_payment" ||
+          d.paymentObligation?.status === "under_minimum" ||
+          d.paymentStatus === "missed_payment" ||
+          d.paymentStatus === "under_minimum"
+        );
+
+        return (
+          <Card
+            title="Debt obligations"
+            actions={(
+              <Link to="/debts" className="text-[11px] font-medium text-[var(--primary-color)]">
+                See all debts →
+              </Link>
+            )}
+          >
+            <div className="mb-3 flex flex-wrap gap-4 text-[13px]">
+              <div>
+                <span className="text-[var(--text-muted)]">Total remaining </span>
+                <span className="font-semibold text-[var(--text-strong)]"><Money value={debtsData.summary.totalRemaining} /></span>
+              </div>
+              <div>
+                <span className="text-[var(--text-muted)]">Monthly plan </span>
+                <span className="font-semibold text-[var(--text-strong)]">
+                  <Money value={String(activeDebts.reduce((s, d) => s + Number(d.monthlyPayment || "0"), 0).toFixed(2))} />
+                </span>
+              </div>
+              {needsAttention.length > 0 ? (
+                <div className="text-rose-600 font-semibold">
+                  {needsAttention.length} debt{needsAttention.length !== 1 ? "s" : ""} need attention
+                </div>
+              ) : null}
+            </div>
+            <div className="divide-y" style={{ borderColor: "var(--border-color)" }}>
+              {activeDebts.slice(0, 4).map((debt) => {
+                const obligationStatus = debt.paymentObligation?.status ?? null;
+                const hasConcern = obligationStatus === "missed_payment" || obligationStatus === "under_minimum" || debt.balanceTrajectory?.isIncreasing;
+                return (
+                  <div key={debt.id} className="flex items-center gap-3 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-medium text-[var(--text-strong)]">{debt.name}</p>
+                      <p className="text-[10px] text-[var(--text-muted)]">
+                        {debt.apr}% APR
+                        {debt.nextPaymentDueDate ? ` · due ${formatIsoDate(debt.nextPaymentDueDate)}` : ""}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[13px] font-semibold text-[var(--text-strong)]"><Money value={debt.currentBalance} /></p>
+                      {hasConcern ? (
+                        <p className="text-[10px] font-semibold text-rose-600">
+                          {obligationStatus === "missed_payment" ? "Missed" : obligationStatus === "under_minimum" ? "Under min" : "Balance rising"}
+                        </p>
+                      ) : debt.estimatedPayoffDate ? (
+                        <p className="text-[10px] text-[var(--text-muted)]">Payoff {formatIsoDate(debt.estimatedPayoffDate).split(",")[0]}</p>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+              {activeDebts.length > 4 ? (
+                <p className="pt-2.5 text-[11px] text-[var(--text-muted)]">+ {activeDebts.length - 4} more</p>
+              ) : null}
+            </div>
+          </Card>
+        );
+      })() : null}
+
       {eligibleForReview.length > 0 ? (
         <div id="transaction-review">
         <Card
@@ -506,7 +590,7 @@ export function Dashboard() {
       {nextStepState?.kind === "setup-incomplete" ? (
         <Card
           title="Start Here"
-          subtitle="A simple monthly setup path from RAF's allocation template."
+          subtitle="A simple monthly setup path from NOMI's allocation template."
           actions={(
             <Button type="button" variant="ghost" className="min-h-8 rounded-full px-3 py-1 text-xs" onClick={dismissStartHere}>
               Dismiss
@@ -538,15 +622,15 @@ export function Dashboard() {
               onClick={() => setHowRafWorksOpen((current) => !current)}
               aria-expanded={howRafWorksOpen}
             >
-              <span>How RAF works</span>
+              <span>How NOMI works</span>
               <span className="text-[var(--text-muted)]">{howRafWorksOpen ? "^" : "v"}</span>
             </button>
             {howRafWorksOpen ? (
               <ol className="space-y-3 border-t border-[var(--border-color)] px-4 py-4 text-sm text-[var(--text-muted)]">
-                <li><span className="font-semibold text-[var(--text-strong)]">Log income</span> - record each paycheck or deposit. RAF splits it across your categories by the percentages you configured.</li>
-                <li><span className="font-semibold text-[var(--text-strong)]">Track spending</span> - record transactions against your categories. RAF tracks how much of each category's allocation has been used.</li>
-                <li><span className="font-semibold text-[var(--text-strong)]">Monthly Review</span> - at month end, close the month. RAF calculates any surplus (income exceeded spending) or deficit.</li>
-                <li><span className="font-semibold text-[var(--text-strong)]">Distribute surplus</span> - tell RAF where surplus goes: debt paydown, savings goals, or other categories.</li>
+                <li><span className="font-semibold text-[var(--text-strong)]">Log income</span> - record each paycheck or deposit. NOMI splits it across your categories by the percentages you configured.</li>
+                <li><span className="font-semibold text-[var(--text-strong)]">Track spending</span> - record transactions against your categories. NOMI tracks how much of each category's allocation has been used.</li>
+                <li><span className="font-semibold text-[var(--text-strong)]">Monthly Review</span> - at month end, close the month. NOMI calculates any surplus (income exceeded spending) or deficit.</li>
+                <li><span className="font-semibold text-[var(--text-strong)]">Distribute surplus</span> - tell NOMI where surplus goes: debt paydown, savings goals, or other categories.</li>
                 <li><span className="font-semibold text-[var(--text-strong)]">Repeat</span> - next month starts fresh with your same plan.</li>
               </ol>
             ) : null}
@@ -573,7 +657,7 @@ export function Dashboard() {
             <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base" style={{ background: "var(--theme-soft)" }}>✓</span>
             <span className="text-[var(--text-muted)]">
               <span className="font-semibold text-[var(--text-strong)]">{activeMonthName} is closed. Your month is complete.</span>{" "}
-              RAF will guide the next cycle when new activity begins.
+              NOMI will guide the next cycle when new activity begins.
             </span>
           </div>
         </div>
@@ -762,19 +846,30 @@ export function Dashboard() {
               { label: "Recorded activity", value: activityFreshness },
             ];
             return (
-              <Card title="Data Freshness">
-                <p className="mb-3 text-[11px] text-[var(--text-muted)]">
-                  RAF does not treat age alone as proof that a balance is wrong.
-                </p>
-                <div className="divide-y" style={{ borderColor: "var(--border-color)" }}>
-                  {freshnessRows.map((row) => (
-                    <div key={row.label} className="flex items-center justify-between gap-3 py-2.5 text-[13px]">
-                      <span className="text-[var(--text-muted)]">{row.label}</span>
-                      <span className="font-medium text-[var(--text-strong)]">{formatFreshnessTimestamp(row.value)}</span>
-                    </div>
-                  ))}
+              <>
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border-color)] px-4 py-3 text-sm" style={{ background: "var(--surface-plain)" }}>
+                  <div>
+                    <p className="font-semibold text-[var(--text-strong)]">Cash flow outlook</p>
+                    <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">30/60/90-day projection with bills, debt, and income</p>
+                  </div>
+                  <Link className="shrink-0 text-[12px] font-semibold text-[var(--primary-color)]" to="/cash-flow">
+                    View →
+                  </Link>
                 </div>
-              </Card>
+                <Card title="Data Freshness">
+                  <p className="mb-3 text-[11px] text-[var(--text-muted)]">
+                    NOMI does not treat age alone as proof that a balance is wrong.
+                  </p>
+                  <div className="divide-y" style={{ borderColor: "var(--border-color)" }}>
+                    {freshnessRows.map((row) => (
+                      <div key={row.label} className="flex items-center justify-between gap-3 py-2.5 text-[13px]">
+                        <span className="text-[var(--text-muted)]">{row.label}</span>
+                        <span className="font-medium text-[var(--text-strong)]">{formatFreshnessTimestamp(row.value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </>
             );
           })()}
         </div>

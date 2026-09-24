@@ -74,6 +74,7 @@ interface TransactionImportWorkflowProps {
   onBulkReview: (action: string) => Promise<void>;
   onAdvanceToNextUnreviewed: (id: string) => void;
   onOpenImportMenu: (id: string) => void;
+  onCloseImportMenu: () => void;
   onUpdateReviewDraft: (item: any, patch: any) => void;
   onApplySuggestion: (item: any) => void;
   onResetRuleEffect: (item: any) => void;
@@ -165,6 +166,7 @@ export function TransactionImportWorkflow({
   onBulkReview,
   onAdvanceToNextUnreviewed,
   onOpenImportMenu,
+  onCloseImportMenu,
   onUpdateReviewDraft,
   onApplySuggestion,
   onResetRuleEffect,
@@ -223,7 +225,7 @@ export function TransactionImportWorkflow({
 
       <Card
         title="Import Bank Statement"
-        subtitle="Upload a PDF bank statement to create imported rows for review. Nothing becomes a completed RAF transaction until you approve it."
+        subtitle="Upload a PDF bank statement to create imported rows for review. Nothing becomes a completed transaction until you approve it."
         actions={(
           <Button type="button" variant="secondary" disabled={isLoading || isImporting} onClick={() => void onImportRefresh()}>
             Refresh imports
@@ -602,7 +604,7 @@ export function TransactionImportWorkflow({
                                       className="block w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--text-strong)] transition hover:bg-[var(--surface-plain)]"
                                       onClick={() => {
                                         onOpenImportPanel(item.id, "review");
-                                        onToggleImportMenu(null as any);
+                                        onCloseImportMenu();
                                       }}
                                     >
                                       Review transaction
@@ -631,7 +633,7 @@ export function TransactionImportWorkflow({
                                     className="block w-full rounded-xl px-3 py-2 text-left text-sm text-[var(--text-strong)] transition hover:bg-[var(--surface-plain)]"
                                     onClick={() => {
                                       onOpenImportPanel(item.id, "details");
-                                      onToggleImportMenu(null as any);
+                                      onCloseImportMenu();
                                     }}
                                   >
                                     View details
@@ -671,7 +673,7 @@ export function TransactionImportWorkflow({
                                         onClick={() => {
                                           // setEditingRuleId(activeRule.id); -- handled by parent via updateRuleDraft
                                           onOpenImportPanel(item.id, "review");
-                                          onToggleImportMenu(null as any);
+                                          onCloseImportMenu();
                                         }}
                                       >
                                         Edit rule
@@ -907,7 +909,7 @@ export function TransactionImportWorkflow({
                                       disabled={isPending || isBulkReviewing}
                                       onClick={() => {
                                         onCloseImportPanel(item.id);
-                                        onToggleImportMenu(null as any);
+                                        onCloseImportMenu();
                                       }}
                                     >
                                       Cancel
@@ -1121,7 +1123,6 @@ export function TransactionImportWorkflow({
   );
 
   function handleImportUpload(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
     void onImportUpload(event);
   }
 }

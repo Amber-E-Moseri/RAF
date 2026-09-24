@@ -8,11 +8,7 @@ import { startIsolatedSqliteServer } from './helpers/isolatedSqliteServer.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
-// Randomized rather than fixed so a leaked/leftover server process from an interrupted
-// prior run can never be mistaken for this run's freshly spawned instance.
-const port = 20000 + Math.floor(Math.random() * 20000);
-const baseUrl = `http://127.0.0.1:${port}`;
-
+let baseUrl;
 let serverProcess;
 
 
@@ -44,7 +40,6 @@ before(async () => {
   serverProcess = await startIsolatedSqliteServer({
     repoRoot,
     testName: 'raf-privilege-escalation',
-    port,
     authRequired: true,
     jwtSecret: 'raf-privilege-escalation-secret',
     extraEnv: {
@@ -53,6 +48,7 @@ before(async () => {
       SUPABASE_ANON_KEY: '',
     },
   });
+  baseUrl = serverProcess.baseUrl;
 });
 
 after(async () => {
