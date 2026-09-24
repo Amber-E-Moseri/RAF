@@ -7,7 +7,7 @@ test('Data Freshness card uses factual timestamps without color or threshold sem
 
   assert.match(source, /Data Freshness/, 'card must be present');
   assert.match(source, /formatFreshnessTimestamp/, 'must use the formatting helper');
-  assert.match(source, /RAF does not treat age alone as proof/, 'must include the factual note');
+  assert.match(source, /NOMI does not treat age alone as proof/, 'must include the factual note');
 
   assert.doesNotMatch(source, /color.*fresh|fresh.*color/i, 'must not apply color based on freshness');
   assert.doesNotMatch(source, /FRESHNESS_THRESHOLD|freshnessThreshold|freshness_threshold/i, 'must not define an age threshold');
