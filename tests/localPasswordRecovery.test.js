@@ -688,3 +688,59 @@ await test('token expires_at is approximately 1 hour from now', async () => {
   assert.ok(expiresMs >= before + 3599_000, 'expiry should be ~1 hour from creation');
   assert.ok(expiresMs <= after + 3601_000, 'expiry should not be more than 1 hour + 1s');
 });
+
+// ---------------------------------------------------------------------------
+// 35. safeHref rejects non-http/https protocols
+// ---------------------------------------------------------------------------
+
+await test('safeHref allows http and https URLs', async () => {
+  const { safeHref } = await import('../lib/email/templates/base.js');
+  assert.equal(safeHref('https://app.example.com/reset'), 'https://app.example.com/reset');
+  assert.equal(safeHref('http://localhost:3000/reset'), 'http://localhost:3000/reset');
+});
+
+await test('safeHref blocks javascript: and data: URLs', async () => {
+  const { safeHref } = await import('../lib/email/templates/base.js');
+  assert.equal(safeHref('javascript:alert(1)'), '#');
+  assert.equal(safeHref('data:text/html,<h1>hi</h1>'), '#');
+  assert.equal(safeHref('ftp://example.com'), '#');
+  assert.equal(safeHref(''), '#');
+  assert.equal(safeHref(null), '#');
+});
+
+// ---------------------------------------------------------------------------
+// 36. env.js RAF_APP_URL Zod validation rejects non-http/https protocols
+// ---------------------------------------------------------------------------
+
+await test('loadServerEnv rejects RAF_APP_URL with javascript: protocol', async () => {
+  const { loadServerEnv } = await import('../lib/server/env.js');
+  const savedEnv = { ...process.env };
+  process.env.PERSISTENCE_DRIVER = 'sqlite';
+  process.env.RAF_DB_PATH = ':memory:';
+  process.env.RAF_APP_URL = 'javascript:alert(1)';
+  try {
+    assert.throws(() => loadServerEnv(), /RAF_APP_URL must be an http or https URL/);
+  } finally {
+    Object.keys(process.env).forEach((k) => {
+      if (!(k in savedEnv)) delete process.env[k];
+      else process.env[k] = savedEnv[k];
+    });
+  }
+});
+
+await test('loadServerEnv accepts https RAF_APP_URL', async () => {
+  const { loadServerEnv } = await import('../lib/server/env.js');
+  const savedEnv = { ...process.env };
+  process.env.PERSISTENCE_DRIVER = 'sqlite';
+  process.env.RAF_DB_PATH = ':memory:';
+  process.env.RAF_APP_URL = 'https://app.example.com';
+  try {
+    const env = loadServerEnv();
+    assert.equal(env.rafAppUrl, 'https://app.example.com');
+  } finally {
+    Object.keys(process.env).forEach((k) => {
+      if (!(k in savedEnv)) delete process.env[k];
+      else process.env[k] = savedEnv[k];
+    });
+  }
+});
