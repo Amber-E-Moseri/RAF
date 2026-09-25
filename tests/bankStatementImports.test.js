@@ -17,10 +17,29 @@ function createPdfFixture(textLines) {
 function createDbDouble({ importedTransactions = [], quotaTier = 'free', quotaRemaining = 3 } = {}) {
   const state = {
     importedTransactions: importedTransactions.map((row) => ({ ...row })),
+    importBatches: [],
     quotaCount: Math.max(0, 3 - quotaRemaining),
   };
 
   const tx = {
+    async getImportBatchByFileHash({ householdId, fileHash }) {
+      if (!fileHash) return null;
+      return (
+        state.importBatches.find(
+          (b) => (b.householdId === householdId || b.workspaceId === householdId) && b.fileHash === fileHash,
+        ) ?? null
+      );
+    },
+    async insertImportBatch(payload) {
+      const row = {
+        id: `batch_${state.importBatches.length + 1}`,
+        createdAt: '2026-03-13T00:00:00.000Z',
+        updatedAt: '2026-03-13T00:00:00.000Z',
+        ...payload,
+      };
+      state.importBatches.push(row);
+      return { ...row };
+    },
     async insertImportedTransactions({ rows }) {
       const inserted = rows.map((row, index) => ({
         id: `import_${state.importedTransactions.length + index + 1}`,

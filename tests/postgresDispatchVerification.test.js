@@ -843,7 +843,7 @@ test('zero production fallback — all production-active tx methods are present 
     'deleteImportReviewRule', 'touchImportReviewRule', 'upsertImportReviewRule',
     'findImportReviewRuleByMerchantKey', 'findImportReviewRuleByNormalizedDescription',
     'insertMerchantRule', 'getMerchantRuleById', 'updateMerchantRule', 'deleteMerchantRule',
-    'insertImportBatch', 'insertImportedRows', 'insertImportedTransactions',
+    'getImportBatchByFileHash', 'insertImportBatch', 'insertImportedRows', 'insertImportedTransactions',
     'insertPaymentPaceAcknowledgement', 'getPaymentPaceAcknowledgement',
     // Remi
     'getRemiConversation', 'createRemiConversation', 'listRemiConversations',
