@@ -7,12 +7,12 @@ This project is **raf-platform** — a deposit-driven financial allocation syste
 Read the relevant section before implementing any feature.
 
 ## Tech Stack
-- Frontend: Next.js 14 App Router, TypeScript strict
-- Backend: Supabase Edge Functions + Row Level Security
-- Database: PostgreSQL via Supabase (raw SQL migrations, no Prisma)
-- Auth: Supabase Auth — Google OAuth only
+- Frontend: Vite 5 + React 18, TypeScript strict, React Router DOM v6
+- Backend: Express.js / Node.js; API routes under `app/api/v1/` loaded by `lib/server/routerLoader.js`
+- Database: PostgreSQL (raw SQL migrations, no Prisma)
+- Auth: Native RAF email/password; JWT issued by `lib/auth/jwt.js` (HS256, 24h); Supabase auth adapter parked
 - Validation: Zod on every write path
-- Hosting: Vercel
+- Hosting: Backend on Render (`render.yaml`); frontend deployment provider not repository-attested
 - Error tracking: Sentry
 
 ## Financial Logic Rules
@@ -37,8 +37,8 @@ Never skip steps. Never perform financial mutations outside a DB transaction.
 - Merchant rule matching lives in `lib/merchant-rules/`
 
 ## Security
-- Supabase RLS is the authorization layer — all household tables are scoped by `household_id`
-- Cross-household queries are forbidden at every layer
+- PostgreSQL RLS is the authorization layer — all financial tables in the `raf` schema are scoped by `workspace_id` via `raf.current_workspace_id()`
+- Cross-workspace queries are forbidden at every layer
 - No secrets in logs — structured JSON logging only (Pino-compatible)
 
 ## Never Do
