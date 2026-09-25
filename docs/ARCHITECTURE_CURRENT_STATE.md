@@ -57,7 +57,7 @@ Current `AuthContext.AuthSession`:
   refreshToken?: string,
   expiresAt?: number | null,
   userId: string,                     // Required
-  email: string,                      // Required, populated from OAuth
+  email: string,                      // Required, from registration/login (native auth)
   householdId: string,
   householdName: string,
   workspaceId?: string,               // Optional, falls back to householdId
@@ -307,7 +307,7 @@ Skipped: 69
 
 1. **Password recovery via native RAF** (Track A2)
    - Decision: Implement native RAF password reset
-   - Rationale: Google OAuth password management insufficient
+   - Rationale: Native RAF email/password auth requires its own recovery flow; no external provider handles it
    - Status: Implemented, merged PR #38
 
 2. **Profile remiTier badge omission** (PR #39 f3f70a9)
@@ -333,12 +333,11 @@ Skipped: 69
 
 1. Clarify remiTier backend authority
 2. Add importBankStatement idempotency protection
-3. Harden current_workspace_id() search_path
-4. Review password reset rate limiting
+3. Review password reset rate limiting
 
 ---
 
-**Document Version**: 1.0  
+**Document Version**: 1.1  
 **Reconciliation Date**: 2026-09-24  
 **Baseline**: main @ 27110425d503ed37286519af25af714c2e1c95d1  
 **Status**: Architecture guide reconciled against current code. Ready for team review.
