@@ -29,12 +29,13 @@ No production deployment has occurred. All changes are in main, available for st
 
 ### Current Authority
 
-**Supabase Auth**: Google OAuth only (primary auth)
-- Login flow: Browser → Google OAuth → Supabase Auth → RAF JWT
-- JWT issued by Supabase, validated by RAF backend
+**Native RAF Authentication**: Active (primary auth)
+- Email/password-based login and signup
+- Implements password hashing and verification (`lib/auth/password.js`)
+- JWT issued and validated by RAF backend (`lib/auth/jwt.js`)
 - Session stored in localStorage as JSON
 
-**Native RAF Password Recovery**: Active (Track A2)
+**Password Recovery**: Active (Track A2)
 - Email-based password reset enabled
 - Recovery token lifetime: 1 hour
 - Reset does NOT invalidate existing JWTs (they remain valid until expiry)
@@ -42,6 +43,7 @@ No production deployment has occurred. All changes are in main, available for st
 
 **Supabase Auth Wiring**: Parked (not activated)
 - Code exists (feature/supabase-auth-wiring branch)
+- Fallback path for Supabase OAuth when authProvider='supabase'
 - Not integrated into main convergence
 - Remains optional future path
 
@@ -96,7 +98,7 @@ Terminology is now consistent across UI (Track B branding complete).
 
 ### RLS Enforcement
 
-All household tables scoped by `household_id` (workspace):
+All household tables scoped by `workspace_id` (primary workspace isolation dimension):
 - income_allocations
 - debt_accounts
 - transaction_splits
@@ -104,7 +106,7 @@ All household tables scoped by `household_id` (workspace):
 - monthly_reviews
 - etc.
 
-Cross-household queries are forbidden at every layer (row-level, application, API).
+Cross-workspace queries are forbidden at every layer (row-level, application, API).
 
 ---
 
@@ -113,9 +115,9 @@ Cross-household queries are forbidden at every layer (row-level, application, AP
 ### Deferred Items
 
 1. **current_workspace_id() search_path hardening**
-   - Status: Deferred
-   - Issue: Edge case in multi-workspace scenarios
-   - Timeline: Post-release follow-up
+   - Status: RESOLVED
+   - Implementation: Migration 20260903090000 applies `SET search_path = raf, pg_catalog`
+   - Ensures workspace context cannot be bypassed via pg_catalog function lookups
 
 2. **Process-local password-reset rate limiting**
    - Status: Deferred
@@ -227,11 +229,12 @@ Displays authenticated session data:
 
 ### Current Stack
 
-- **Frontend**: Next.js 14 App Router, TypeScript strict (Vercel)
-- **Backend**: Supabase Edge Functions + Row Level Security
-- **Database**: PostgreSQL via Supabase
-- **Auth**: Supabase Auth (Google OAuth)
+- **Frontend**: Vite + React 18 with React Router, TypeScript strict
+- **Backend**: Express.js / Node.js (Render) with PostgreSQL Row Level Security
+- **Database**: PostgreSQL via Supabase/Neon
+- **Auth**: Native RAF email/password authentication with RFC JWT validation
 - **Error tracking**: Sentry
+- **Remi (AI Advisory)**: Co-located subsystem in RAF Express backend (not separately deployed)
 
 ### Deployment Authorization
 
@@ -255,11 +258,6 @@ Displays authenticated session data:
    - Gap: File-hash protection exists but not applied
    - Impact: Duplicate imports possible
    - Timeline: Post-release implementation
-
-3. **current_workspace_id() search_path hardening**
-   - Gap: Edge case in multi-workspace context
-   - Impact: Potential data visibility issue
-   - Timeline: Post-release security review
 
 ### Medium Priority
 
