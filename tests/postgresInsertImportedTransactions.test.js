@@ -251,6 +251,8 @@ test('importBankStatement — synthetic PDF returns staged rows, no financial re
   const db = {
     async transaction(cb) {
       const tx = {
+        async getImportBatchByFileHash() { return null; },
+        async insertImportBatch() { return { id: 'batch_fake', source: 'bank_import' }; },
         async insertImportedTransactions({ rows }) {
           const inserted = rows.map((row, i) => ({
             id: `fake_id_${i + 1}`,
@@ -308,6 +310,8 @@ test('PDF import route — POST returns 201 with staged rows, safe 500 on persis
   const goodDb = {
     async transaction(cb) {
       const tx = {
+        async getImportBatchByFileHash() { return null; },
+        async insertImportBatch() { return { id: 'batch_fake', source: 'bank_import' }; },
         async insertImportedTransactions({ rows }) {
           return rows.map((row, i) => ({
             id: `fake_${i}`,
@@ -349,6 +353,8 @@ test('PDF import route — POST returns 201 with staged rows, safe 500 on persis
   const badDb = {
     async transaction(cb) {
       const tx = {
+        async getImportBatchByFileHash() { return null; },
+        async insertImportBatch() { return { id: 'batch_fake', source: 'bank_import' }; },
         async insertImportedTransactions() {
           throw new Error('column "batch_id" of relation "imported_transactions" does not exist');
         },
