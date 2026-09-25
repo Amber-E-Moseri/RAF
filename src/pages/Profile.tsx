@@ -8,6 +8,7 @@ import { getDashboardReport } from "../api/reportsApi";
 import { ErrorState } from "../components/feedback/ErrorState";
 import { LoadingState } from "../components/feedback/LoadingState";
 import { PageShell } from "../components/layout/PageShell";
+import { useAuth } from "../context/AuthContext";
 import { usePeriod } from "../components/layout/PeriodProvider";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -57,6 +58,7 @@ function resolveGoalCategoryLabel(goal: Goal, progress: GoalProgress | null, cat
 }
 
 export function Profile() {
+  const { session } = useAuth();
   const { activeRange } = usePeriod();
   const { data, error, isLoading, reload } = useAsyncData<ProfileViewModel>(async () => {
     const currentYear = new Date().getFullYear();
@@ -168,40 +170,56 @@ export function Profile() {
       ) : null}
       {!isLoading && !error && data ? (
         <section className="grid gap-4">
-          <Card title="User Information" subtitle="Account details and household context.">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-semibold text-[var(--text-primary)]">Jane Doe</h2>
-                <p className="mt-1 text-sm text-[var(--text-secondary)]">Local profile placeholder</p>
+          <Card title="Account" subtitle="Signed-in user and workspace details.">
+            <div className="flex flex-wrap items-start gap-4">
+              <div
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-base font-bold"
+                style={{ background: "var(--primary-color)", color: "var(--primary-contrast)" }}
+                aria-hidden="true"
+              >
+                {(session?.email?.[0] ?? "?").toUpperCase()}
               </div>
-              <Badge tone="neutral">Profile placeholder</Badge>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-[var(--text-strong)]">{session?.email ?? "—"}</p>
+                <p className="mt-0.5 text-xs text-[var(--text-muted)]">Signed-in account</p>
+              </div>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-4">
-                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-secondary)]">Household</p>
-                <p className="mt-2 text-sm font-medium text-[var(--text-primary)]">Household</p>
-                <p className="mt-1 text-sm text-[var(--text-secondary)]">Household and account details will appear here when available.</p>
+              <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
+                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Active workspace</p>
+                <p className="mt-2 text-sm font-semibold text-[var(--text-strong)]">{session?.workspaceName ?? "—"}</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">ID: {session?.workspaceId ? `…${session.workspaceId.slice(-8)}` : "—"}</p>
               </div>
-              <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-4">
-                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-secondary)]">Account</p>
-                <p className="mt-2 text-sm font-medium text-[var(--text-primary)]">Google-auth account placeholder</p>
-                <p className="mt-1 text-sm text-[var(--text-secondary)]">Connected user details are not available yet.</p>
+              <div className="rounded-2xl border border-[var(--border-color)] p-4" style={{ background: "var(--surface-plain)" }}>
+                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">Workspaces</p>
+                {session?.workspaces?.length ? (
+                  <ul className="mt-2 space-y-1.5">
+                    {session.workspaces.map((ws) => (
+                      <li key={ws.id} className="flex items-center justify-between gap-2 text-sm">
+                        <span className="truncate font-medium text-[var(--text-strong)]">{ws.name}</span>
+                        <Badge tone={ws.status === "active" ? "success" : "neutral"}>{ws.role}</Badge>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-sm text-[var(--text-muted)]">{session?.workspaceName ?? "—"}</p>
+                )}
               </div>
             </div>
           </Card>
 
           <section className="grid gap-4 md:grid-cols-3">
-            <Card title="Monthly Review" subtitle="Planning summary placeholder.">
-              <p className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">{data.monthlyReviewCount}</p>
-              <p className="mt-2 text-sm text-[var(--text-secondary)]">Saved monthly reviews this year</p>
+            <Card title="Monthly Reviews" subtitle="This calendar year.">
+              <p className="text-2xl font-bold tracking-tight text-[var(--text-strong)]">{data.monthlyReviewCount}</p>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">Saved monthly reviews</p>
             </Card>
-            <Card title="Categories" subtitle="Current allocation setup summary.">
-              <p className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">{data.activeAllocationCount}</p>
-              <p className="mt-2 text-sm text-[var(--text-secondary)]">{data.allocationCount} total categories configured</p>
+            <Card title="Categories" subtitle="Allocation budget setup.">
+              <p className="text-2xl font-bold tracking-tight text-[var(--text-strong)]">{data.activeAllocationCount}</p>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">{data.allocationCount} total · {data.activeAllocationCount} active</p>
             </Card>
-            <Card title="Goals" subtitle="Goal planning placeholder.">
-              <p className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">{data.goalCount}</p>
-              <p className="mt-2 text-sm text-[var(--text-secondary)]">Active and planned goals currently tracked</p>
+            <Card title="Goals" subtitle="Savings and targets.">
+              <p className="text-2xl font-bold tracking-tight text-[var(--text-strong)]">{data.goalCount}</p>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">Goals currently tracked</p>
             </Card>
           </section>
 
