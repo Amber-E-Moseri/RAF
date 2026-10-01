@@ -1,13 +1,15 @@
 import { json, getDb, getHouseholdId } from '../../../_shared/http.js';
+import { getRemiEntitlementForRequest } from '../../../../../../lib/entitlement/remiEntitlement.js';
 
 export async function GET(request, context) {
   const db = getDb(context);
   const householdId = getHouseholdId(request, context);
+  const workspaceId = context?.workspaceId ?? householdId;
   const userId = context?.userId ?? 'local-user';
   const conversationId = context?.params?.conversationId;
 
-  const user = await db.transaction((tx) => tx.getUserById({ userId }));
-  if (user?.remiTier !== 'paid') {
+  const entitlement = await getRemiEntitlementForRequest(db, userId, workspaceId);
+  if (!entitlement.authorized) {
     return json({ error: 'Conversation history requires a paid Remi plan', tier: 'free' }, 403);
   }
 
