@@ -59,6 +59,7 @@ import type {
   Debt,
   FixedBill,
   Goal,
+  ImportDuplicateMatch,
   ImportedTransaction,
   ImportClassificationPayload,
   ImportHistoryDetailResponse,
@@ -1061,7 +1062,13 @@ export function Transactions() {
 
     try {
       const result = await importBankStatement(selectedImportFile);
-      setImportSuccess(`Imported ${result.extracted} row${result.extracted === 1 ? "" : "s"} for review.`);
+      const skipped = result.rows_rejected ?? 0;
+      const flagged = (result.duplicates?.exact ?? 0) + (result.duplicates?.likely ?? 0);
+      setImportSuccess(
+        `Imported ${result.extracted} row${result.extracted === 1 ? "" : "s"} for review.`
+        + (skipped > 0 ? ` ${skipped} unreadable row${skipped === 1 ? " was" : "s were"} skipped.` : "")
+        + (flagged > 0 ? ` ${flagged} may already be in RAF; review them before approving.` : ""),
+      );
       setIsImportsExpanded(true);
       setSelectedImportFile(null);
       const fileInput = (event.currentTarget?.querySelector('input[type="file"]') as HTMLInputElement | null);
@@ -1124,7 +1131,25 @@ export function Transactions() {
     setReviewSuccess(null);
 
     try {
-      await classifyImportedTransaction(item.id, payload);
+      try {
+        await classifyImportedTransaction(item.id, payload);
+      } catch (firstError) {
+        if (!(firstError instanceof ApiError) || firstError.code !== "IMPORT_POSSIBLE_DUPLICATE") {
+          throw firstError;
+        }
+        const matches = (firstError.details?.matches ?? []) as ImportDuplicateMatch[];
+        const first = matches[0];
+        const summary = first
+          ? ` (${[first.date, first.amount, first.description].filter(Boolean).join(" · ")})`
+          : "";
+        const confirmed = window.confirm(
+          `This row looks like a transaction already in RAF${summary}. Add it as a separate transaction anyway?`,
+        );
+        if (!confirmed) {
+          throw new Error("Not added. Mark the row as a duplicate if it is the same transaction.");
+        }
+        await classifyImportedTransaction(item.id, { ...payload, confirm_distinct: true });
+      }
     } catch (requestError) {
       throw requestError instanceof Error ? requestError : new Error("Imported row review failed.");
     } finally {

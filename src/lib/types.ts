@@ -145,6 +145,9 @@ export interface ImportedTransaction {
   linked_debt_id: string | null;
   linked_fixed_bill_id: string | null;
   linked_goal_id?: string | null;
+  duplicate_state?: "none" | "likely" | "exact";
+  duplicate_matches?: ImportDuplicateMatch[];
+  duplicate_of_transaction_id?: string | null;
   normalized_description?: string | null;
   suggestion?: ImportReviewSuggestion | null;
   reviewed_at: string | null;
@@ -178,6 +181,20 @@ export interface BankStatementImportResponse {
   extracted: number;
   currency: string;
   items: ImportedTransaction[];
+  parser?: "regex" | "ai";
+  rows_found?: number;
+  rows_valid?: number;
+  rows_rejected?: number;
+  duplicates?: { exact: number; likely: number };
+}
+
+export interface ImportDuplicateMatch {
+  kind: "transaction" | "income_entry";
+  id: string;
+  via: string;
+  date?: string;
+  amount?: string;
+  description?: string | null;
 }
 
 export interface ImportClassificationPayload {
@@ -193,6 +210,8 @@ export interface ImportClassificationPayload {
   save_rule_mode?: "suggestion" | "reusable_rule";
   auto_apply_rule?: boolean;
   review_note?: string | null;
+  confirm_distinct?: boolean;
+  duplicate_of_transaction_id?: string | null;
 }
 
 export interface ImportReviewRule {

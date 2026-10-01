@@ -119,23 +119,23 @@ test('1.3 — approveImportBatch creates one transaction per approved row', asyn
 
 // ─── Section 2: Duplicate Detection ─────────────────────────────────────────
 
-test('2.1 — Within-batch fingerprint: identical approved rows → second is skipped', async () => {
+test('2.1 — Identical rows within one batch are distinct economic events: both are imported', async () => {
   const db = createInMemoryDb();
   const batchId = await uploadAndParse(db, HOUSEHOLD_ID, [
     { date: '2026-01-15', description: 'Gym Membership', amount: '75.00' },
     { date: '2026-01-15', description: 'Gym Membership', amount: '75.00' },
   ]);
 
-  // Both rows are pending; mark both approved with same categoryId → same fingerprint
+  // Same date, description, amount and category: two real purchases listed twice by the bank.
   const review = await reviewImportBatch({ db, householdId: HOUSEHOLD_ID, batchId });
   for (const row of review.rows) {
     await updateImportedRow({ db, householdId: HOUSEHOLD_ID, rowId: row.id, input: { status: 'approved', categoryId: 'cat_spending' } });
   }
 
   const result = await approveImportBatch({ db, householdId: HOUSEHOLD_ID, batchId });
-  assert.strictEqual(result.inserted, 1, 'First occurrence inserted');
-  assert.strictEqual(result.skipped, 1, 'Second occurrence skipped (fingerprint duplicate)');
-  assert.strictEqual(result.duplicates, 0, 'Not a status=duplicate row, just skipped');
+  assert.strictEqual(result.inserted, 2, 'both occurrences are imported; the statement itself lists two events');
+  assert.strictEqual(result.skipped, 0, 'nothing is silently dropped');
+  assert.strictEqual(result.duplicates, 0);
 });
 
 test('2.2 — Same-batch near-duplicate with different amounts: both inserted', async () => {
@@ -549,11 +549,9 @@ test('12.5 — Legitimate identical-looking transactions in same file: file-leve
   // The file-hash idempotency constraint prevents re-uploading the file, but it cannot and
   // should not suppress rows that exist within a single upload.
   //
-  // Separate authority: the approval-time in-memory fingerprint (buildImportRowFingerprint)
-  // will still suppress the second row when both are approved with the SAME category, because
-  // that mechanism deduplicates within a single approval pass. To get two canonical transactions,
-  // the user must assign different categories — which is the correct UX prompt for economically
-  // identical-looking rows.
+  // Approval no longer drops identical rows within one batch: each gets its own occurrence
+  // ordinal, so two real identical purchases always produce two transactions regardless of
+  // which category the user picks.
   const db = createInMemoryDb();
 
   const batchId = await uploadAndParse(db, HOUSEHOLD_ID, [
@@ -569,10 +567,9 @@ test('12.5 — Legitimate identical-looking transactions in same file: file-leve
     'both rows are pending, not suppressed by file-level idempotency',
   );
 
-  // Approve with different categories so approval-time fingerprints differ → two transactions
   await updateImportedRow({ db, householdId: HOUSEHOLD_ID, rowId: review.rows[0].id, input: { status: 'approved', categoryId: 'cat_dining' } });
-  await updateImportedRow({ db, householdId: HOUSEHOLD_ID, rowId: review.rows[1].id, input: { status: 'approved', categoryId: 'cat_groceries' } });
+  await updateImportedRow({ db, householdId: HOUSEHOLD_ID, rowId: review.rows[1].id, input: { status: 'approved', categoryId: 'cat_dining' } });
   const result = await approveImportBatch({ db, householdId: HOUSEHOLD_ID, batchId });
 
-  assert.strictEqual(result.inserted, 2, 'two transactions created when categories differ — distinct approval-time fingerprints');
+  assert.strictEqual(result.inserted, 2, 'two transactions created even with the same category');
 });
