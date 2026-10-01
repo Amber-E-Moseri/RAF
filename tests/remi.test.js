@@ -30,8 +30,16 @@ function makeDb({ remiTier = 'free', conversations = [], messages = [] } = {}) {
   let nextId = 1;
 
   const tx = {
+    // Workspace-scoped entitlement — authoritative source per Prompt 2
+    async getWorkspaceMembership({ userId, workspaceId }) {
+      if (userId && workspaceId) return { userId, workspaceId, role: 'member' };
+      return null;
+    },
+    async getWorkspace({ workspaceId }) {
+      return { id: workspaceId, remiTier };
+    },
     async getUserById({ userId }) {
-      return { id: userId, remiTier };
+      return { id: userId };
     },
     async getHousehold() {
       return { id: 'household_1', name: 'Test Household', activeMonth: '2026-03-01' };
@@ -76,27 +84,27 @@ function req(path, { method = 'GET', body, householdId = 'household_1', userId =
   });
 }
 
-function ctx(db, { householdId = 'household_1', userId = 'user_1', apiKey = null, params = {} } = {}) {
-  return { db, householdId, userId, anthropicApiKey: apiKey, params };
+function ctx(db, { householdId = 'household_1', userId = 'user_1', apiKey = null, params = {}, workspaceId = 'household_1' } = {}) {
+  return { db, householdId, userId, anthropicApiKey: apiKey, params, workspaceId };
 }
 
 // ── GET /remi/upgrade ─────────────────────────────────────────────────────────
 
-test('upgrade GET returns userId and remiTier for free user', async () => {
+test('upgrade GET returns userId and tier for free workspace', async () => {
   const db = makeDb({ remiTier: 'free' });
   const res = await upgradeGet(req('/remi/upgrade'), ctx(db));
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(body.userId, 'user_1');
-  assert.equal(body.remiTier, 'free');
+  assert.equal(body.tier, 'free');
 });
 
-test('upgrade GET returns paid remiTier for paid user', async () => {
+test('upgrade GET returns paid tier for paid workspace', async () => {
   const db = makeDb({ remiTier: 'paid' });
   const res = await upgradeGet(req('/remi/upgrade'), ctx(db));
   assert.equal(res.status, 200);
   const body = await res.json();
-  assert.equal(body.remiTier, 'paid');
+  assert.equal(body.tier, 'paid');
 });
 
 // ── PATCH /remi/upgrade ───────────────────────────────────────────────────────
