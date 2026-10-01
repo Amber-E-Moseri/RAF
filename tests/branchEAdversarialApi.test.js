@@ -18,26 +18,28 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync } from 'node:fs';
 
 import { getAvailablePort } from './helpers/isolatedSqliteServer.js';
+import { requireExplicitTestDb } from './helpers/requireExplicitTestDb.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
 
-const connectionString = process.env.POSTGRES_CONNECTION_STRING
-  ?? (() => {
-    try {
-      const env = readFileSync(path.join(repoRoot, '.env'), 'utf8');
-      const m = env.match(/^POSTGRES_CONNECTION_STRING\s*=\s*(.+)$/m);
-      return m ? m[1].trim().replace(/^["']|["']$/g, '') : '';
-    } catch { return ''; }
-  })();
+// Require explicit POSTGRES_CONNECTION_STRING in environment (no .env fallback).
+// Non-local databases need RFC_CONFIRM_NON_PRODUCTION_DB=true.
+const { connectionString, shouldRun, databaseLabel } = requireExplicitTestDb({
+  envVar: 'POSTGRES_CONNECTION_STRING',
+  confirmNonProd: true,
+});
 
-const shouldRun = Boolean(connectionString);
 const maybeTest = shouldRun ? test : test.skip;
 const maybeDescribe = shouldRun ? describe : describe.skip;
+
+// Print database label for test-runner diagnostics
+if (shouldRun) {
+  console.log(`[branchEAdversarialApi] Test database: ${databaseLabel}`);
+}
 
 const jwtSecret = 'branch-e-adversarial-test-secret-2026';
 
