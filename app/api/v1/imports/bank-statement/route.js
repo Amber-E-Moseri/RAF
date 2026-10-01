@@ -5,6 +5,7 @@ import { buildErrorBody, getDb, getHouseholdId, json } from '../../_shared/http.
 export async function POST(request, context = {}) {
   try {
     let file = null;
+    let accountId = request.headers.get('x-account-id') || null;
     const contentType = request.headers.get('content-type') ?? '';
 
     if (contentType.includes('multipart/form-data')) {
@@ -14,6 +15,10 @@ export async function POST(request, context = {}) {
         throw new ImportHttpError(400, 'file is required');
       }
       file = uploaded;
+      const formAccountId = formData.get('account_id') ?? formData.get('accountId');
+      if (typeof formAccountId === 'string' && formAccountId.trim()) {
+        accountId = formAccountId.trim();
+      }
     } else {
       const buffer = new Uint8Array(await request.arrayBuffer());
       if (buffer.length === 0) {
@@ -35,6 +40,7 @@ export async function POST(request, context = {}) {
         filename: file.name,
         contentType: file.type,
         pdfBuffer: new Uint8Array(await file.arrayBuffer()),
+        accountId,
       },
     });
 

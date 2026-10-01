@@ -21,11 +21,19 @@ const API_ORIGIN = new URL(API_BASE_URL).origin;
 
 export class ApiError extends Error {
   status: number;
+  code: string | null;
+  details: Record<string, unknown> | null;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, payload?: Record<string, unknown> | null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    const nested = payload?.details && typeof payload.details === "object"
+      ? (payload.details as Record<string, unknown>)
+      : null;
+    const nestedCode = typeof nested?.errorCode === "string" ? nested.errorCode : null;
+    this.code = nestedCode ?? (typeof payload?.errorCode === "string" ? payload.errorCode : null);
+    this.details = nested ?? payload ?? null;
   }
 }
 
@@ -77,7 +85,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
     const message = typeof errorField === "string"
       ? errorField
       : (errorField as { message: string } | undefined)?.message ?? "Request failed";
-    throw new ApiError(response.status, message);
+    throw new ApiError(response.status, message, data as Record<string, unknown>);
   }
 
   return data as T;
