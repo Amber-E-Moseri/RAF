@@ -1,9 +1,11 @@
 import { json, getDb, getHouseholdId } from '../../_shared/http.js';
 import { generateRemiResponse, generateKnowledgeBaseResponse } from '../../../../../lib/remi/remiAssistant.js';
+import { getRemiEntitlementForRequest } from '../../../../../lib/entitlement/remiEntitlement.js';
 
 export async function POST(request, context) {
   const db = getDb(context);
   const householdId = getHouseholdId(request, context);
+  const workspaceId = context?.workspaceId ?? householdId;
   const userId = context?.userId ?? 'local-user';
   const apiKey = context?.anthropicApiKey ?? null;
 
@@ -19,16 +21,17 @@ export async function POST(request, context) {
     return json({ error: 'message is required' }, 400);
   }
 
-  const user = await db.transaction((tx) => tx.getUserById({ userId }));
-  const remiTier = user?.remiTier ?? 'free';
-  const isPaid = remiTier === 'paid';
+  // Derive entitlement from workspace (request-time, never stale)
+  const entitlement = await getRemiEntitlementForRequest(db, userId, workspaceId);
+  const isPaid = entitlement.authorized;
 
+  // FREE: knowledge-base response (no Anthropic call, no history)
   if (!isPaid || !apiKey) {
     const { reply, tokensUsed } = await generateKnowledgeBaseResponse(message.trim());
     return json({ reply, tier: 'free', tokensUsed });
   }
 
-  // Paid: load conversation history if a conversationId was supplied
+  // PAID: full Remi with conversation history
   let history = [];
   let activeConversationId = conversationId ?? null;
 

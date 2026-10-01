@@ -1,24 +1,27 @@
 import { json, getDb, getHouseholdId } from '../../_shared/http.js';
 import { buildFinancialContext } from '../../../../../lib/remi/financialContext.js';
 import { REMI_SYSTEM_PROMPT, buildFinancialContextBlock } from '../../../../../lib/remi/prompts.js';
+import { getRemiEntitlementForRequest } from '../../../../../lib/entitlement/remiEntitlement.js';
 import Anthropic from '@anthropic-ai/sdk';
 
 export async function GET(request, context) {
   const db = getDb(context);
   const householdId = getHouseholdId(request, context);
+  const workspaceId = context?.workspaceId ?? householdId;
   const userId = context?.userId ?? 'local-user';
   const apiKey = context?.anthropicApiKey ?? null;
 
   const url = new URL(request.url);
   const month = url.searchParams.get('month'); // YYYY-MM
 
-  const user = await db.transaction((tx) => tx.getUserById({ userId }));
-  const remiTier = user?.remiTier ?? 'free';
-  const isPaid = remiTier === 'paid';
+  // Derive entitlement from workspace (request-time, never stale)
+  const entitlement = await getRemiEntitlementForRequest(db, userId, workspaceId);
+  const isPaid = entitlement.authorized;
 
   const ctx = await buildFinancialContext({ db, householdId, months: 1 });
   const contextBlock = buildFinancialContextBlock(ctx);
 
+  // FREE: metrics and basic snapshot only (no AI)
   if (!isPaid || !apiKey) {
     return json({
       tier: 'free',
@@ -34,6 +37,7 @@ export async function GET(request, context) {
     });
   }
 
+  // PAID: AI-generated personalized summary
   const client = new Anthropic({ apiKey });
   const response = await client.messages.create({
     model: 'claude-sonnet-5',
