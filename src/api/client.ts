@@ -16,6 +16,19 @@ function resolveApiBaseUrl(rawValue: string | undefined, origin: string) {
   }
 }
 
+// A production build served from a real host must be told where the backend lives.
+// Falling back to the relative "/api/v1" would silently call the static frontend host
+// (e.g. Vercel) instead of the API, so fail loudly instead.
+const isLocalHost = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(
+  typeof window !== "undefined" ? window.location.hostname : "localhost",
+);
+if (viteEnv?.PROD && !viteEnv.VITE_API_BASE_URL?.trim() && !isLocalHost) {
+  throw new Error(
+    "VITE_API_BASE_URL is not set for this production build. Set it to the backend API URL " +
+      "(for example https://<your-render-service>.onrender.com/api/v1) and redeploy.",
+  );
+}
+
 const API_BASE_URL = resolveApiBaseUrl(viteEnv?.VITE_API_BASE_URL, runtimeOrigin);
 const API_ORIGIN = new URL(API_BASE_URL).origin;
 

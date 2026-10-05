@@ -14,6 +14,11 @@ services:
         value: "20"
       - key: NODE_ENV
         value: production
+      # Render's load balancer is exactly one proxy hop in front of the app. Express
+      # trusts that many X-Forwarded-For hops so req.ip (rate-limit key) is the real
+      # client. Never set to "true" — that would let clients choose their own key.
+      - key: RAF_TRUST_PROXY
+        value: "1"
       - key: PERSISTENCE_DRIVER
         value: postgres
       - key: RAF_AUTH_REQUIRED

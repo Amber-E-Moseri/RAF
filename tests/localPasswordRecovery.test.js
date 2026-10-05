@@ -631,8 +631,8 @@ await test('index.js wires rate limiters for forgot-password and reset-password'
   const src = readFileSync(fileURLToPath(indexPath), 'utf8');
   assert.ok(src.includes("'/api/v1/auth/forgot-password'"), 'forgot-password rate limit should be registered');
   assert.ok(src.includes("'/api/v1/auth/reset-password'"), 'reset-password rate limit should be registered');
-  assert.ok(src.includes('authForgotPasswordRateLimiter'), 'forgot limiter name should appear');
-  assert.ok(src.includes('authResetPasswordRateLimiter'), 'reset limiter name should appear');
+  assert.ok(src.includes('authLimiters.forgotPassword'), 'forgot limiter chain should appear');
+  assert.ok(src.includes('authLimiters.resetPassword'), 'reset limiter chain should appear');
 });
 
 // ---------------------------------------------------------------------------
