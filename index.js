@@ -13,7 +13,7 @@ import { createAuthRateLimiters, parseTrustProxy } from './lib/server/rateLimit.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const { port, dbPath, persistenceDriver, postgresConnectionString, postgresSsl, authRequired, sentryDsn, allowedOrigins, resendApiKey, emailFrom, rafAppUrl } = loadServerEnv({ cwd: __dirname });
+const { port, dbPath, persistenceDriver, postgresConnectionString, postgresSsl, authRequired, sentryDsn, allowedOrigins, anthropicApiKey, resendApiKey, emailFrom, rafAppUrl } = loadServerEnv({ cwd: __dirname });
 
 initSentry(sentryDsn);
 
@@ -162,6 +162,7 @@ const aliases = [
   },
 ];
 
+console.log(`[RAF] remi ai: ${anthropicApiKey ? 'enabled (server key configured)' : 'disabled (no ANTHROPIC_API_KEY) — paid workspaces fall back to knowledge-base replies'}`);
 console.log(`[RAF] email: ${resendApiKey ? 'resend enabled' : 'disabled (no RESEND_API_KEY)'}`);
 
 const apiRouter = await createApiRouter({
@@ -170,6 +171,7 @@ const apiRouter = await createApiRouter({
   defaultHouseholdId: authRequired ? null : (db.defaultHouseholdId ?? null),
   aliases,
   emailConfig: { resendApiKey, emailFrom, rafAppUrl },
+  anthropicApiKey,
 });
 
 app.use('/api/v1', apiRouter);
