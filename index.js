@@ -8,7 +8,7 @@ import { initSentry, Sentry } from './lib/server/sentry.js';
 import { createApiRouter } from './lib/server/routerLoader.js';
 import { createServerDb } from './lib/server/db.js';
 import { checkReadiness } from './lib/server/readinessHandler.js';
-import { createFixedWindowRateLimiter } from './lib/server/rateLimit.js';
+import { createAuthRateLimiters, parseTrustProxy } from './lib/server/rateLimit.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,6 +25,11 @@ const db = createServerDb({ persistenceDriver, dbPath, postgresConnectionString,
 
 console.log(`[RAF] persistence: ${persistenceDriver}`);
 const app = express();
+
+// Render terminates TLS at one load balancer that appends the real client IP to
+// X-Forwarded-For. Trust exactly that many hops (never `true`) so req.ip is the real
+// client and client-supplied forwarding headers cannot choose the rate-limit key.
+app.set('trust proxy', parseTrustProxy(process.env.RAF_TRUST_PROXY, process.env.NODE_ENV));
 
 app.use((req, res, next) => {
   const startedAt = process.hrtime.bigint();
@@ -72,36 +77,16 @@ app.use((req, res, next) => {
 });
 
 const authRateLimitMax = Number.parseInt(process.env.RAF_AUTH_RATE_LIMIT_MAX ?? '20', 10);
-const authLoginRateLimiter = createFixedWindowRateLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: authRateLimitMax,
-  keyPrefix: 'auth-login',
-});
+const authAccountRateLimitMax = Number.parseInt(process.env.RAF_AUTH_ACCOUNT_RATE_LIMIT_MAX ?? '10', 10);
+const authLimiters = createAuthRateLimiters({ ipMax: authRateLimitMax, accountMax: authAccountRateLimitMax });
 
-const authSignupRateLimiter = createFixedWindowRateLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: authRateLimitMax,
-  keyPrefix: 'auth-signup',
-});
-
-const authForgotPasswordRateLimiter = createFixedWindowRateLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: authRateLimitMax,
-  keyPrefix: 'auth-forgot-password',
-});
-
-const authResetPasswordRateLimiter = createFixedWindowRateLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: authRateLimitMax,
-  keyPrefix: 'auth-reset-password',
-});
-
-app.use('/api/v1/auth/login', authLoginRateLimiter);
-app.use('/api/v1/auth/signup', authSignupRateLimiter);
-app.use('/api/v1/auth/forgot-password', authForgotPasswordRateLimiter);
-app.use('/api/v1/auth/reset-password', authResetPasswordRateLimiter);
-
+// Body must be parsed before the per-account limiters can read the email.
 app.use(express.json());
+
+app.use('/api/v1/auth/login', ...authLimiters.login);
+app.use('/api/v1/auth/signup', ...authLimiters.signup);
+app.use('/api/v1/auth/forgot-password', ...authLimiters.forgotPassword);
+app.use('/api/v1/auth/reset-password', ...authLimiters.resetPassword);
 app.use(express.raw({
   type: (req) => {
     const contentType = String(req.headers['content-type'] ?? '').toLowerCase();
