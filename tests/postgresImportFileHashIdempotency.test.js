@@ -170,3 +170,233 @@ maybeTest('TC-AUD-005: NULL file_hash allows multiple rows per workspace (WHERE 
     await pool.end();
   }
 });
+
+// =========================================================================
+// TC-AUD-005-APP — Idempotency through raf_app runtime role
+// =========================================================================
+//
+// Verify the file-hash idempotency guard operates correctly through the
+// actual raf_app runtime connection with RLS enforcement active.
+
+const appConnectionString = process.env.POSTGRES_CONNECTION_STRING_APP;
+const shouldRunAppTests = Boolean(appConnectionString)
+  && Boolean(connectionString)
+  && process.env.RAF_RUN_POSTGRES_RLS_TESTS === 'true'
+  && process.env.RAF_CONFIRM_NON_PRODUCTION_DB === 'true';
+
+const maybeAppTest = shouldRunAppTests ? test : test.skip;
+
+/**
+ * Run a query inside a transaction with raf_app's workspace context set.
+ */
+async function asRafAppInWorkspace(client, workspaceId, callback) {
+  await client.query('BEGIN');
+  await client.query("SELECT set_config('raf.workspace_id', $1, true)", [workspaceId]);
+  try {
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  }
+}
+
+maybeAppTest('TC-AUD-005-APP: raf_app role is correctly configured (not superuser, not BYPASSRLS)', async () => {
+  const appPool = new Pool({ connectionString: appConnectionString, ssl: sslOption });
+  const appClient = await appPool.connect();
+
+  try {
+    // Prove raf_app is the current user
+    const userResult = await appClient.query('SELECT current_user');
+    assert.equal(
+      userResult.rows[0].current_user,
+      'raf_app',
+      'Expected current_user to be raf_app',
+    );
+
+    // Verify raf_app is not a superuser
+    const superResult = await appClient.query(
+      `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'raf_app'`,
+    );
+    assert.ok(superResult.rows[0], 'raf_app role not found');
+    assert.equal(
+      superResult.rows[0].rolsuper,
+      false,
+      'raf_app must not be a superuser',
+    );
+    assert.equal(
+      superResult.rows[0].rolbypassrls,
+      false,
+      'raf_app must not have BYPASSRLS',
+    );
+  } finally {
+    appClient.release();
+    await appPool.end();
+  }
+});
+
+maybeAppTest('TC-AUD-005-APP: file_hash idempotency enforced through raf_app (same workspace)', async () => {
+  const adminPool = new Pool({ connectionString, ssl: sslOption });
+  const appPool = new Pool({ connectionString: appConnectionString, ssl: sslOption });
+
+  const wsId = uuid();
+  const ownerId = uuid();
+  const fileHash = sha256hex();
+
+  try {
+    // Setup: create workspace and owner as admin (BYPASSRLS)
+    const adminClient = await adminPool.connect();
+    await adminClient.query('BEGIN');
+    await adminClient.query(
+      `INSERT INTO raf.app_users (id, email, password_hash)
+       VALUES ($1, $2, 'test-hash') ON CONFLICT DO NOTHING`,
+      [ownerId, `app-test-${wsId}@test.test`],
+    );
+    await adminClient.query(
+      `INSERT INTO raf.workspaces (id, name, owner_user_id)
+       VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+      [wsId, `AppTest-${wsId}`, ownerId],
+    );
+    await adminClient.query('COMMIT');
+    adminClient.release();
+
+    // Test through raf_app: first insert must succeed
+    const appClient = await appPool.connect();
+    let firstInsertId;
+    try {
+      await appClient.query('BEGIN');
+      await appClient.query("SELECT set_config('raf.workspace_id', $1, true)", [wsId]);
+
+      const insertResult = await appClient.query(
+        `INSERT INTO raf.import_batches
+         (id, workspace_id, file_hash, source, raw_json, created_at, updated_at)
+         VALUES ($1, $2, $3, 'test', '{}', now(), now())
+         RETURNING id`,
+        [firstInsertId = uuid(), wsId, fileHash],
+      );
+      assert.ok(insertResult.rows[0], 'First insert must succeed');
+      await appClient.query('COMMIT');
+    } catch (err) {
+      await appClient.query('ROLLBACK');
+      throw err;
+    }
+
+    // Test through raf_app: duplicate insert must fail with 23505
+    let duplicateError = null;
+    try {
+      await appClient.query('BEGIN');
+      await appClient.query("SELECT set_config('raf.workspace_id', $1, true)", [wsId]);
+      await appClient.query('SAVEPOINT before_dup');
+
+      try {
+        await appClient.query(
+          `INSERT INTO raf.import_batches
+           (id, workspace_id, file_hash, source, raw_json, created_at, updated_at)
+           VALUES ($1, $2, $3, 'test', '{}', now(), now())`,
+          [uuid(), wsId, fileHash],
+        );
+      } catch (err) {
+        duplicateError = err;
+        await appClient.query('ROLLBACK TO SAVEPOINT before_dup');
+      }
+      await appClient.query('RELEASE SAVEPOINT before_dup');
+      await appClient.query('COMMIT');
+    } catch (err) {
+      await appClient.query('ROLLBACK');
+      if (err === duplicateError) throw err;
+      throw new Error(`Unexpected error: ${err.message}`);
+    }
+
+    assert.ok(duplicateError, 'Duplicate insert must raise an error');
+    assert.equal(duplicateError.code, '23505', `Expected UNIQUE violation (23505), got ${duplicateError.code}`);
+    assert.ok(
+      duplicateError.constraint?.includes('idx_import_batches_workspace_file_hash'),
+      `Expected constraint idx_import_batches_workspace_file_hash, got ${duplicateError.constraint}`,
+    );
+
+    appClient.release();
+  } finally {
+    // Cleanup
+    const adminClient = await adminPool.connect();
+    await adminClient.query(
+      `DELETE FROM raf.workspaces WHERE id = $1`,
+      [wsId],
+    );
+    adminClient.release();
+    await adminPool.end();
+    await appPool.end();
+  }
+});
+
+maybeAppTest('TC-AUD-005-APP: file_hash uniqueness is scoped to workspace (cross-workspace isolation)', async () => {
+  const adminPool = new Pool({ connectionString, ssl: sslOption });
+  const appPool = new Pool({ connectionString: appConnectionString, ssl: sslOption });
+
+  const wsA = uuid(); const ownerA = uuid();
+  const wsB = uuid(); const ownerB = uuid();
+  const sharedHash = sha256hex();
+
+  try {
+    // Setup: create two workspaces
+    const adminClient = await adminPool.connect();
+    await adminClient.query('BEGIN');
+
+    for (const [ws, owner, email] of [
+      [wsA, ownerA, `app-wsA-${wsA}@test.test`],
+      [wsB, ownerB, `app-wsB-${wsB}@test.test`],
+    ]) {
+      await adminClient.query(
+        `INSERT INTO raf.app_users (id, email, password_hash)
+         VALUES ($1, $2, 'test-hash') ON CONFLICT DO NOTHING`,
+        [owner, email],
+      );
+      await adminClient.query(
+        `INSERT INTO raf.workspaces (id, name, owner_user_id)
+         VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+        [ws, `AppWS-${ws}`, owner],
+      );
+    }
+    await adminClient.query('COMMIT');
+    adminClient.release();
+
+    // Insert into workspace A through raf_app
+    const appClientA = await appPool.connect();
+    await appClientA.query('BEGIN');
+    await appClientA.query("SELECT set_config('raf.workspace_id', $1, true)", [wsA]);
+    await appClientA.query(
+      `INSERT INTO raf.import_batches
+       (id, workspace_id, file_hash, source, raw_json, created_at, updated_at)
+       VALUES ($1, $2, $3, 'test', '{}', now(), now())`,
+      [uuid(), wsA, sharedHash],
+    );
+    await appClientA.query('COMMIT');
+    appClientA.release();
+
+    // Insert same hash into workspace B through raf_app — must succeed
+    const appClientB = await appPool.connect();
+    await appClientB.query('BEGIN');
+    await appClientB.query("SELECT set_config('raf.workspace_id', $1, true)", [wsB]);
+    const insertB = await appClientB.query(
+      `INSERT INTO raf.import_batches
+       (id, workspace_id, file_hash, source, raw_json, created_at, updated_at)
+       VALUES ($1, $2, $3, 'test', '{}', now(), now())
+       RETURNING id`,
+      [uuid(), wsB, sharedHash],
+    );
+    await appClientB.query('COMMIT');
+    appClientB.release();
+
+    assert.ok(insertB.rows[0], 'Insert into workspace B with same hash must succeed');
+  } finally {
+    // Cleanup
+    const adminClient = await adminPool.connect();
+    await adminClient.query(
+      `DELETE FROM raf.workspaces WHERE id IN ($1, $2)`,
+      [wsA, wsB],
+    );
+    adminClient.release();
+    await adminPool.end();
+    await appPool.end();
+  }
+});
