@@ -21,7 +21,7 @@ describe('Remi workspace-scoped entitlement', () => {
     return {
       transaction: async (callback) => {
         const mockTx = {
-          getWorkspaceMembership: async () => isMember ? { userId: 'user1', workspaceId: 'ws1' } : null,
+          getWorkspaceMember: async () => isMember ? { userId: 'user1', workspaceId: 'ws1', status: 'active' } : null,
           getWorkspace: async () => ({ remiTier: workspaceRemiTier }),
         };
         return callback(mockTx);
@@ -108,9 +108,9 @@ describe('Remi cross-workspace protection', () => {
     const db = {
       transaction: async (callback) => {
         const mockTx = {
-          getWorkspaceMembership: async ({ workspaceId }) => {
+          getWorkspaceMember: async ({ workspaceId }) => {
             // Only workspace A has membership
-            return workspaceId === 'wsA' ? { userId: 'user1', workspaceId: 'wsA' } : null;
+            return workspaceId === 'wsA' ? { userId: 'user1', workspaceId: 'wsA', status: 'active' } : null;
           },
           getWorkspace: async () => ({ remiTier: 'paid' }),
         };
@@ -178,7 +178,7 @@ function buildMockDb(tier, isMember = true) {
   return {
     transaction: async (callback) => {
       const mockTx = {
-        getWorkspaceMembership: async () => isMember ? { userId: 'user1' } : null,
+        getWorkspaceMember: async () => isMember ? { userId: 'user1', status: 'active' } : null,
         getWorkspace: async () => ({ remiTier: tier }),
       };
       return callback(mockTx);

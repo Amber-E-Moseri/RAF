@@ -31,8 +31,8 @@ function makeDb({ remiTier = 'free', conversations = [], messages = [] } = {}) {
 
   const tx = {
     // Workspace-scoped entitlement — authoritative source per Prompt 2
-    async getWorkspaceMembership({ userId, workspaceId }) {
-      if (userId && workspaceId) return { userId, workspaceId, role: 'member' };
+    async getWorkspaceMember({ userId, workspaceId }) {
+      if (userId && workspaceId) return { userId, workspaceId, role: 'member', status: 'active' };
       return null;
     },
     async getWorkspace({ workspaceId }) {
