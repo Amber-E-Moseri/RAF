@@ -27,7 +27,17 @@ const { createToken } = await import('../lib/auth/jwt.js');
 const { loadRemiConfig } = await import('../lib/server/env.js');
 const { createKeyedWindowLimiter } = await import('../lib/server/rateLimit.js');
 const { POST: chatRoutePost } = await import('../app/api/v1/remi/chat/route.js');
-const { REMI_UNAVAILABLE_MESSAGE, REMI_SAVE_FAILED_MESSAGE, REMI_BUSY_MESSAGE, REMI_DAILY_LIMIT_MESSAGE } = await import('../lib/remi/remiGuards.js');
+const {
+  REMI_UNAVAILABLE_MESSAGE,
+  REMI_TIMEOUT_MESSAGE,
+  REMI_SAVE_FAILED_MESSAGE,
+  REMI_BUSY_MESSAGE,
+  REMI_DAILY_LIMIT_MESSAGE,
+  REMI_BUDGET_MESSAGE,
+  REMI_INCOMPLETE_MESSAGE,
+  REMI_LIMITS,
+  limitRemiHistory,
+} = await import('../lib/remi/remiGuards.js');
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SERVER_KEY = 'sk-ant-SERVER-SENTINEL-do-not-leak-0123456789';
@@ -37,6 +47,8 @@ const REMI_ENV_KEYS = [
   'REMI_USER_RATE_LIMIT_PER_MINUTE',
   'REMI_WORKSPACE_RATE_LIMIT_PER_MINUTE',
   'REMI_DAILY_MESSAGE_LIMIT',
+  'REMI_DAILY_CALL_BUDGET',
+  'REMI_DAILY_TOKEN_BUDGET',
   'REMI_ANTHROPIC_TIMEOUT_MS',
   'REMI_ANTHROPIC_MAX_RETRIES',
 ];
@@ -74,8 +86,17 @@ before(async () => {
       switch (upstreamMode) {
         case 'ok': return sendJson(res, 200, okBody());
         case 'status500': return sendJson(res, 500, errorBody('api_error'));
+        case 'status401': return sendJson(res, 401, errorBody('authentication_error'));
         case 'status429': return sendJson(res, 429, errorBody('rate_limit_error'));
         case 'status400': return sendJson(res, 400, errorBody('invalid_request_error'));
+        // The model keeps asking for tools forever: the tool-round cap must stop it.
+        case 'tool_loop': return sendJson(res, 200, {
+          ...okBody(),
+          content: [{ type: 'tool_use', id: 'tu_loop', name: 'noop_tool_for_test', input: {} }],
+          stop_reason: 'tool_use',
+        });
+        // A successful response with no text: must never be saved as an assistant message.
+        case 'empty': return sendJson(res, 200, { ...okBody(), content: [], stop_reason: 'end_turn' });
         case 'hang': return undefined; // never answers: the SDK timeout must fire
         case 'destroy': return req.socket.destroy(); // network-level failure
         default: return sendJson(res, 500, errorBody('api_error'));
@@ -105,6 +126,8 @@ function setRemiEnv(overrides = {}) {
     REMI_USER_RATE_LIMIT_PER_MINUTE: 50,
     REMI_WORKSPACE_RATE_LIMIT_PER_MINUTE: 500,
     REMI_DAILY_MESSAGE_LIMIT: 1000,
+    REMI_DAILY_CALL_BUDGET: 1000,
+    REMI_DAILY_TOKEN_BUDGET: 10000000,
     REMI_ANTHROPIC_TIMEOUT_MS: 1000,
     REMI_ANTHROPIC_MAX_RETRIES: 0,
     ...overrides,
@@ -317,22 +340,27 @@ test('daily cap: counts only user messages from the last 24 hours', async () => 
 
 // ── Anthropic failure mapping ─────────────────────────────────────────────────
 
+// Mapping (remiGuards.remiModelFailureResponse): timeout -> 504, upstream 5xx -> 502,
+// upstream 429 -> RAF 429 with Retry-After, upstream 401/other 4xx/network -> 503.
+const GENERIC_UPSTREAM = { error: REMI_UNAVAILABLE_MESSAGE, errorCode: 'REMI_UPSTREAM_ERROR' };
+const GENERIC_TIMEOUT = { error: REMI_TIMEOUT_MESSAGE, errorCode: 'REMI_TIMEOUT' };
 const FAILURE_MODES = [
-  { mode: 'status500', expected: 503 },
-  { mode: 'status429', expected: 429 },
-  { mode: 'status400', expected: 503 },
-  { mode: 'hang', expected: 503 },
-  { mode: 'destroy', expected: 503 },
+  { mode: 'status500', expected: 502, body: GENERIC_UPSTREAM, kind: 'upstream_5xx' },
+  { mode: 'status401', expected: 503, body: GENERIC_UNAVAILABLE, kind: 'upstream_auth' },
+  { mode: 'status429', expected: 429, body: GENERIC_UNAVAILABLE, kind: 'rate_limited' },
+  { mode: 'status400', expected: 503, body: GENERIC_UNAVAILABLE, kind: 'upstream_4xx' },
+  { mode: 'hang', expected: 504, body: GENERIC_TIMEOUT, kind: 'timeout' },
+  { mode: 'destroy', expected: 503, body: GENERIC_UNAVAILABLE, kind: 'network' },
 ];
 
-for (const { mode, expected } of FAILURE_MODES) {
+for (const { mode, expected, body, kind } of FAILURE_MODES) {
   test(`anthropic ${mode}: chat returns a generic ${expected} body, leaks nothing, and creates no conversation`, async () => {
     upstreamMode = mode;
     const app = await startApp();
     try {
       const { result, logs } = await captureLogs(() => chat(app));
       assert.equal(result.status, expected, result.text);
-      assert.deepEqual(parse(result.text), GENERIC_UNAVAILABLE);
+      assert.deepEqual(parse(result.text), body);
       if (expected === 429) assert.equal(result.headers.get('retry-after'), '30');
       assert.ok(!result.text.includes(UPSTREAM_SECRET), 'upstream text not in body');
       assert.ok(!result.text.includes(SERVER_KEY), 'key not in body');
@@ -341,6 +369,7 @@ for (const { mode, expected } of FAILURE_MODES) {
       const event = logs.split('\n').map((l) => { try { return JSON.parse(l); } catch { return null; } }).find((e) => e?.event === 'remi_model_failure');
       assert.ok(event, 'structured failure event logged');
       assert.equal(event.route, 'chat');
+      assert.equal(event.kind, kind);
       assert.equal(app.store.conversations.length, 0, 'no conversation row created');
       assert.equal(app.store.messages.length, 0, 'no message row created');
     } finally { await app.stop(); }
@@ -352,8 +381,8 @@ test('anthropic 500: summary returns the same generic body and no upstream text'
   const app = await startApp();
   try {
     const res = await summary(app);
-    assert.equal(res.status, 503);
-    assert.deepEqual(parse(res.text), GENERIC_UNAVAILABLE);
+    assert.equal(res.status, 502);
+    assert.deepEqual(parse(res.text), GENERIC_UPSTREAM);
     assert.ok(!res.text.includes(UPSTREAM_SECRET));
   } finally { await app.stop(); }
 });
@@ -379,7 +408,7 @@ test('anthropic failure on an existing conversation writes nothing to it', async
 
     upstreamMode = 'status500';
     const failed = await chat(app, { body: { message: 'second question', conversationId } });
-    assert.equal(failed.status, 503);
+    assert.equal(failed.status, 502);
     assert.equal(app.store.messages.length, 2, 'no partial user message saved');
     assert.equal(app.store.conversations.length, 1);
   } finally { await app.stop(); }
@@ -391,7 +420,8 @@ const INVALID_CHAT_BODIES = [
   ['missing message', {}],
   ['whitespace-only message', { message: '   ' }],
   ['non-string message', { message: 123 }],
-  ['oversize message (4001 chars)', { message: 'a'.repeat(4001) }],
+  // Limit lowered from 4000 to REMI_LIMITS.maxMessageChars (2000) by the budget work.
+  ['oversize message (2001 chars)', { message: 'a'.repeat(REMI_LIMITS.maxMessageChars + 1) }],
   ['non-UUID conversationId', { message: 'hi', conversationId: 'conv_1' }],
 ];
 
@@ -408,10 +438,10 @@ for (const [label, body] of INVALID_CHAT_BODIES) {
   });
 }
 
-test('chat validation: a message of exactly 4000 characters is accepted', async () => {
+test('chat validation: a message of exactly 2000 characters is accepted', async () => {
   const app = await startApp();
   try {
-    const res = await chat(app, { body: { message: 'a'.repeat(4000) } });
+    const res = await chat(app, { body: { message: 'a'.repeat(REMI_LIMITS.maxMessageChars) } });
     assert.equal(res.status, 200, res.text);
   } finally { await app.stop(); }
 });
@@ -461,15 +491,20 @@ test('summary validation: a valid month is accepted and reflected', async () => 
 
 // ── Regression: free tier and non-members ─────────────────────────────────────
 
-test('free tier: chat keeps the knowledge-base reply and is never throttled or persisted', async () => {
-  setRemiEnv({ REMI_USER_RATE_LIMIT_PER_MINUTE: 1, REMI_DAILY_MESSAGE_LIMIT: 1 });
+test('free tier: chat keeps the knowledge-base reply, is never sent upstream or persisted, and is covered by the per-user throttle', async () => {
+  // Intentional change: every authenticated chat request, free tier included, now shares the
+  // per-user throttle (so the free path cannot be used to hammer the database). The reply
+  // shape is unchanged.
+  setRemiEnv({ REMI_USER_RATE_LIMIT_PER_MINUTE: 3, REMI_DAILY_MESSAGE_LIMIT: 1 });
   const app = await startApp({ tier: 'free' });
   try {
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 3; i++) {
       const res = await chat(app, { body: { message: `free ${i}` } });
       assert.equal(res.status, 200, res.text);
       assert.equal(parse(res.text).tier, 'free');
     }
+    const limited = await chat(app, { body: { message: 'free 4' } });
+    assert.equal(limited.status, 429);
     assert.equal(fakeCalls.length, 0);
     assert.equal(app.store.conversations.length, 0);
   } finally { await app.stop(); }
@@ -573,6 +608,183 @@ test('persistence failure: a failed assistant write rolls back the user message 
   } finally { await app.stop(); }
 });
 
+// ── Usage budget ──────────────────────────────────────────────────────────────
+
+test('budget exhaustion: chat and summary return 429 with no upstream call and no rows once the call budget is spent', async () => {
+  setRemiEnv({ REMI_DAILY_CALL_BUDGET: 1 });
+  const app = await startApp();
+  try {
+    const first = await chat(app);
+    assert.equal(first.status, 200, first.text);
+    assert.equal(fakeCalls.length, 1);
+
+    const capped = await chat(app, { body: { message: 'second', conversationId: parse(first.text).conversationId } });
+    assert.equal(capped.status, 429);
+    assert.deepEqual(parse(capped.text), { error: REMI_BUDGET_MESSAGE, errorCode: 'REMI_BUDGET_EXHAUSTED' });
+    const retryAfter = Number(capped.headers.get('retry-after'));
+    assert.ok(Number.isInteger(retryAfter) && retryAfter >= 1 && retryAfter <= 86400, 'Retry-After points at the next UTC day');
+
+    const cappedSummary = await summary(app);
+    assert.equal(cappedSummary.status, 429);
+    assert.equal(parse(cappedSummary.text).errorCode, 'REMI_BUDGET_EXHAUSTED');
+
+    assert.equal(fakeCalls.length, 1, 'no upstream call and no retry after the budget check failed');
+    assert.equal(app.store.messages.length, 2, 'nothing persisted for the capped request');
+  } finally { await app.stop(); }
+});
+
+test('budget: a single call whose estimate exceeds the token budget is refused before any upstream call', async () => {
+  setRemiEnv({ REMI_DAILY_TOKEN_BUDGET: 100 });
+  const app = await startApp();
+  try {
+    const res = await chat(app);
+    assert.equal(res.status, 429);
+    assert.equal(parse(res.text).errorCode, 'REMI_BUDGET_EXHAUSTED');
+    assert.equal(fakeCalls.length, 0);
+    assert.equal(app.store.conversations.length, 0);
+  } finally { await app.stop(); }
+});
+
+test('budget reconciliation: a successful call settles to the actual tokens; a failed call keeps its reservation', async () => {
+  const app = await startApp();
+  try {
+    const ok = await chat(app);
+    assert.equal(ok.status, 200, ok.text);
+    const [okRow] = app.db.state.remiUsageBudgets;
+    assert.equal(okRow.callsUsed, 1);
+    assert.equal(okRow.tokensUsed, 5, 'reserved estimate reconciled down to input 3 + output 2');
+
+    upstreamMode = 'status500';
+    const failed = await chat(app);
+    assert.equal(failed.status, 502);
+    const row = app.db.state.remiUsageBudgets[0];
+    assert.equal(row.callsUsed, 2, 'failed call stays counted');
+    assert.ok(row.tokensUsed > 5, 'failed call keeps its conservative reservation');
+  } finally { await app.stop(); }
+});
+
+test('budget: 20 parallel chat requests against a call budget of 5 make exactly 5 upstream calls', async () => {
+  setRemiEnv({ REMI_DAILY_CALL_BUDGET: 5 });
+  const app = await startApp();
+  try {
+    const results = await Promise.all(Array.from({ length: 20 }, (_, i) => chat(app, { body: { message: `parallel ${i}` } })));
+    const statuses = results.map((r) => r.status).sort();
+    assert.equal(statuses.filter((s) => s === 200).length, 5, statuses.join(','));
+    assert.equal(statuses.filter((s) => s === 429).length, 15);
+    assert.equal(fakeCalls.length, 5, 'denied reservations never reached Anthropic');
+  } finally { await app.stop(); }
+});
+
+test('budget: concurrent reservations on the in-memory adapter cannot oversubscribe (50 parallel, limit 7)', async () => {
+  const { createInMemoryDb } = await import('../lib/server/inMemoryDb.js');
+  const db = createInMemoryDb();
+  const results = await Promise.all(Array.from({ length: 50 }, () => db.transaction((tx) => tx.reserveRemiBudget({
+    householdId: 'ws-concurrency',
+    usageDay: '2030-01-01',
+    reserveCalls: 1,
+    reserveTokens: 10,
+    callLimit: 7,
+    tokenLimit: 1000000,
+  }))));
+  assert.equal(results.filter((r) => r.allowed).length, 7);
+  assert.equal(db.state.remiUsageBudgets[0].callsUsed, 7);
+});
+
+// ── Limits on the outbound payload ────────────────────────────────────────────
+
+test('limits: every upstream payload asks for at most 1024 output tokens', async () => {
+  const app = await startApp();
+  try {
+    const res = await chat(app);
+    assert.equal(res.status, 200, res.text);
+    const sent = JSON.parse(fakeCalls.at(-1).body);
+    assert.ok(sent.max_tokens <= 1024, `max_tokens was ${sent.max_tokens}`);
+    assert.equal(sent.max_tokens, REMI_LIMITS.maxOutputTokens);
+    const summaryRes = await summary(app, { query: '?month=2026-02' });
+    assert.equal(summaryRes.status, 200, summaryRes.text);
+    assert.ok(JSON.parse(fakeCalls.at(-1).body).max_tokens <= 1024);
+  } finally { await app.stop(); }
+});
+
+test('limits: only the last 20 history messages reach the model, and the first one is a user turn', async () => {
+  const app = await startApp();
+  try {
+    const first = await chat(app, { body: { message: 'seed' } });
+    const { conversationId } = parse(first.text);
+    const owner = app.owner;
+    for (let i = 0; i < 30; i++) {
+      app.store.messages.push({
+        id: `seed-${i}`,
+        householdId: app.workspaceId,
+        conversationId,
+        userId: owner.id,
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: `history ${i}`,
+        tokensUsed: 0,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    const res = await chat(app, { body: { message: 'latest question', conversationId } });
+    assert.equal(res.status, 200, res.text);
+    const sent = JSON.parse(fakeCalls.at(-1).body).messages;
+    assert.equal(sent.length, REMI_LIMITS.maxHistoryMessages + 1);
+    assert.equal(sent[0].role, 'user');
+    // Stored order: seed user, seed reply, history 0..29 (32 rows). The last 20 start at history 10.
+    assert.equal(sent[0].content, 'history 10', 'window starts at the 20 most recent stored messages');
+    assert.equal(sent.at(-1).content, 'latest question');
+  } finally { await app.stop(); }
+});
+
+test('limits: the per-request token ceiling refuses another call before the budget or the SDK is touched', async () => {
+  const { callBudgetedModel, RemiIncompleteError } = await import('../lib/remi/remiGuards.js');
+  let reserved = 0;
+  let called = 0;
+  const budget = { reserve: async () => { reserved += 1; return { reservedTokens: 0, usageDay: '2030-01-01' }; }, settle: async () => {} };
+  const client = { messages: { create: async () => { called += 1; return okBody(); } } };
+  const payload = { model: 'x', max_tokens: 1024, messages: [{ role: 'user', content: 'hi' }] };
+  await assert.rejects(
+    callBudgetedModel({ client, budget, payload, requestTokensSpent: REMI_LIMITS.maxTokensPerRequest }),
+    (error) => error instanceof RemiIncompleteError && error.reason === 'token_ceiling',
+  );
+  assert.equal(reserved, 0, 'no reservation when the ceiling is hit');
+  assert.equal(called, 0, 'no upstream call when the ceiling is hit');
+});
+
+test('limits: limitRemiHistory keeps the newest 20 messages and drops a leading assistant turn', () => {
+  const history = Array.from({ length: 25 }, (_, i) => ({ role: i % 2 === 0 ? 'user' : 'assistant', content: `m${i}` }));
+  const limited = limitRemiHistory(history);
+  // The newest 20 are m5..m24; m5 is an assistant turn, so it is dropped and the window starts at m6.
+  assert.equal(limited.length, 19);
+  assert.equal(limited[0].content, 'm6', 'the first message sent is always a user turn');
+  assert.equal(limitRemiHistory([{ role: 'assistant', content: 'x' }, { role: 'user', content: 'y' }]).length, 1);
+  assert.deepEqual(limitRemiHistory(null), []);
+});
+
+test('limits: a model that keeps requesting tools is stopped after 4 tool rounds with an explicit 422, nothing saved', async () => {
+  upstreamMode = 'tool_loop';
+  const app = await startApp();
+  try {
+    const res = await chat(app);
+    assert.equal(res.status, 422, res.text);
+    assert.deepEqual(parse(res.text), { error: REMI_INCOMPLETE_MESSAGE, errorCode: 'REMI_INCOMPLETE' });
+    assert.equal(fakeCalls.length, REMI_LIMITS.maxToolRounds + 1, 'one initial call plus one call per allowed tool round');
+    assert.equal(app.store.conversations.length, 0);
+    assert.equal(app.store.messages.length, 0);
+  } finally { await app.stop(); }
+});
+
+test('limits: an empty model reply is never saved as an assistant message', async () => {
+  upstreamMode = 'empty';
+  const app = await startApp();
+  try {
+    const res = await chat(app);
+    assert.equal(res.status, 422, res.text);
+    assert.equal(parse(res.text).errorCode, 'REMI_INCOMPLETE');
+    assert.equal(app.store.conversations.length, 0, 'no conversation created for an empty reply');
+    assert.equal(app.store.messages.length, 0);
+  } finally { await app.stop(); }
+});
+
 // ── Config and limiter units ──────────────────────────────────────────────────
 
 test('config: safe defaults when unset, and invalid values fall back instead of failing', () => {
@@ -580,6 +792,8 @@ test('config: safe defaults when unset, and invalid values fall back instead of 
     userPerMinute: 10,
     workspacePerMinute: 30,
     dailyMessageLimit: 200,
+    dailyCallBudget: 1000,
+    dailyTokenBudget: 2000000,
     anthropicTimeoutMs: 30000,
     anthropicMaxRetries: 1,
   });
@@ -588,11 +802,17 @@ test('config: safe defaults when unset, and invalid values fall back instead of 
     REMI_ANTHROPIC_TIMEOUT_MS: '999999999',
     REMI_ANTHROPIC_MAX_RETRIES: '2',
     REMI_DAILY_MESSAGE_LIMIT: '0',
+    REMI_DAILY_CALL_BUDGET: '-5',
+    REMI_DAILY_TOKEN_BUDGET: '0',
   });
   assert.equal(parsed.userPerMinute, 10);
   assert.equal(parsed.anthropicTimeoutMs, 30000);
   assert.equal(parsed.anthropicMaxRetries, 2);
   assert.equal(parsed.dailyMessageLimit, 200);
+  assert.equal(parsed.dailyCallBudget, 1000);
+  assert.equal(parsed.dailyTokenBudget, 2000000);
+  // Retries above the cap of 2 fall back to the default instead of being honoured.
+  assert.equal(loadRemiConfig({ REMI_ANTHROPIC_MAX_RETRIES: '5' }).anthropicMaxRetries, 1);
 });
 
 test('keyed limiter: denies beyond max, isolates keys, and resets after the window', () => {
