@@ -291,7 +291,7 @@ maybeTest('detail route: other member, cross-workspace, non-member, malformed an
     assert.doesNotMatch(text, /Alice secret/, c.label);
     bodies.push(text);
   }
-  assert.deepEqual(JSON.parse(bodies[0]), { error: 'Conversation not found' });
+  assert.deepEqual(JSON.parse(bodies[0]), { error: 'Conversation not found.', errorCode: 'NOT_FOUND' });
   for (const body of bodies) assert.equal(body, bodies[0]);
 });
 
@@ -312,7 +312,7 @@ maybeTest('chat route: other member POST with owner conversationId returns 404 a
     db: ctxDb(BOB, WS_A), householdId: WS_A, workspaceId: WS_A, userId: BOB, anthropicApiKey: 'test-key',
   });
   assert.equal(res.status, 404);
-  assert.deepEqual(await res.json(), { error: 'Conversation not found' });
+  assert.deepEqual(await res.json(), { error: 'Conversation not found.', errorCode: 'NOT_FOUND' });
   assert.equal(await countMessages(CONV_A), before, 'owner conversation must not gain messages');
   const convCountAfter = (await adminPool.query('SELECT count(*)::int AS n FROM raf.remi_conversations WHERE workspace_id = $1', [WS_A])).rows[0].n;
   assert.equal(convCountAfter, convCountBefore, 'no conversation may be silently created');
