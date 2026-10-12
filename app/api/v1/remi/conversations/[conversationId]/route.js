@@ -1,5 +1,6 @@
 import { json, getDb, getHouseholdId } from '../../../_shared/http.js';
 import { getRemiEntitlementForRequest } from '../../../../../../lib/entitlement/remiEntitlement.js';
+import { conversationNotFoundResponse } from '../../../../../../lib/remi/remiGuards.js';
 
 export async function GET(request, context) {
   const db = getDb(context);
@@ -11,7 +12,7 @@ export async function GET(request, context) {
   const entitlement = await getRemiEntitlementForRequest(db, userId, workspaceId);
   // Non-members get 404 (not 403) so workspace existence and conversation IDs are not enumerable.
   if (entitlement.reason === 'not_member' || entitlement.reason === 'invalid_context') {
-    return json({ error: 'Conversation not found' }, 404);
+    return conversationNotFoundResponse();
   }
   if (!entitlement.authorized) {
     return json({ error: 'Conversation history requires a paid Remi plan', tier: 'free' }, 403);
@@ -20,7 +21,7 @@ export async function GET(request, context) {
   // Ownership-scoped: returns null / [] unless userId owns the conversation in this workspace.
   const conversation = await db.transaction((tx) => tx.getRemiConversation({ conversationId, householdId, userId }));
   if (!conversation) {
-    return json({ error: 'Conversation not found' }, 404);
+    return conversationNotFoundResponse();
   }
 
   const messages = await db.transaction((tx) => tx.listRemiMessages({ conversationId, householdId, userId }));

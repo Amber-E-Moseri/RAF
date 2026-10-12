@@ -355,15 +355,16 @@ describe('forged client values cannot grant Remi', () => {
     assert.equal(body.tier, 'free');
   });
 
-  test('a forged user id in context-less requests resolves to local-user, which is not a member -> free', async () => {
+  test('a forged user id in context-less requests resolves to local-user, which is not a member -> 404 (no answer)', async () => {
     // With no trusted userId, the route falls back to 'local-user'. That identity is
-    // never a member, so the result must be free even if the db would say paid.
+    // never a member, so the request gets the non-disclosing 404: no reply, never a paid answer.
     const res = await chatPost(
       req('/remi/chat', { method: 'POST', headers: { 'x-user-id': 'u1' }, body: { message: 'hi', userId: 'u1' } }),
       { db: freeDb(), workspaceId: 'ws1', householdId: 'ws1', anthropicApiKey: 'sk-test-not-used' },
     );
-    assert.equal(res.status, 200);
+    assert.equal(res.status, 404);
     const body = await res.json();
-    assert.equal(body.tier, 'free');
+    assert.equal(body.reply, undefined);
+    assert.notEqual(body.tier, 'paid');
   });
 });

@@ -49,8 +49,8 @@ function makeStore() {
 // the conversation in the given workspace. Unknown/invalid userId -> null/[]/refuse.
 function makeDb(store) {
   const tx = {
-    async getWorkspaceMembership({ userId, workspaceId }) {
-      return MEMBERS.has(`${workspaceId}|${userId}`) ? { userId, workspaceId, role: 'member' } : null;
+    async getWorkspaceMember({ workspaceId, userId }) {
+      return MEMBERS.has(`${workspaceId}|${userId}`) ? { userId, workspaceId, role: 'member', status: 'active' } : null;
     },
     async getWorkspace({ workspaceId }) {
       return { id: workspaceId, remiTier: TIERS[workspaceId] ?? 'free' };
@@ -82,6 +82,9 @@ function makeDb(store) {
       return msg;
     },
   };
+  // Budget is covered by remiApiReliability tests; this fixture always admits the call.
+  tx.reserveRemiBudget = async () => ({ allowed: true });
+  tx.settleRemiBudget = async () => {};
   return { async transaction(cb) { return cb(tx); } };
 }
 
@@ -167,7 +170,7 @@ test('same workspace, other member: POST chat with owner conversationId returns 
     ctx(makeDb(store), { userId: BOB, workspaceId: WS_A, apiKey: 'test-key' }),
   );
   assert.equal(res.status, 404);
-  assert.deepEqual(await res.json(), { error: 'Conversation not found' });
+  assert.deepEqual(await res.json(), { error: 'Conversation not found.', errorCode: 'NOT_FOUND' });
   assert.equal(store.conversations.length, convBefore, 'no new conversation may be silently created');
   assert.equal(store.messages.length, msgBefore, 'owner conversation must not gain messages');
 });
@@ -185,12 +188,13 @@ test('owner POST chat with own conversationId returns 200 and appends to that co
   assert.equal(store.messages.length, msgBefore + 2);
 });
 
-test('404 body is identical for other member, cross-workspace, non-member, malformed and unknown IDs', async () => {
+test('404 body is identical for other member, cross-workspace, non-member and unknown IDs', async () => {
+  // Authorization failures and unknown IDs share one body so existence is not disclosed.
+  // A malformed ID is a validation 400 (covered below), not a lookup.
   const cases = [
     [BOB, WS_A, CONV_A],
     [CAROL, WS_B, CONV_A],
     [CAROL, WS_A, CONV_A],
-    [ALICE, WS_A, 'not-a-uuid'],
     [ALICE, WS_A, crypto.randomUUID()],
   ];
   const bodies = [];
@@ -250,7 +254,7 @@ test('forged conversationId on chat POST returns 404 and never creates a convers
     ctx(makeDb(store), { userId: ALICE, workspaceId: WS_A, apiKey: 'test-key' }),
   );
   assert.equal(res.status, 404);
-  assert.deepEqual(await res.json(), { error: 'Conversation not found' });
+  assert.deepEqual(await res.json(), { error: 'Conversation not found.', errorCode: 'NOT_FOUND' });
   assert.equal(store.conversations.length, convBefore, 'no conversation may be created');
   assert.equal(store.conversations.some((c) => c.id === forged), false, 'forged ID must not be created');
   assert.equal(store.messages.filter((m) => m.conversationId === forged).length, 0, 'no messages attached to forged ID');
