@@ -1,9 +1,8 @@
-import { z } from 'zod';
-
 import { json, getDb, getHouseholdId } from '../../_shared/http.js';
 import { generateRemiResponse, generateKnowledgeBaseResponse } from '../../../../../lib/remi/remiAssistant.js';
 import { getRemiEntitlementForRequest } from '../../../../../lib/entitlement/remiEntitlement.js';
 import { loadRemiConfig } from '../../../../../lib/server/env.js';
+import { chatBodySchema } from '../../../../../lib/remi/validation.js';
 import {
   REMI_LIMITS,
   parseRemiBody,
@@ -21,10 +20,6 @@ import {
 const ROUTE = 'chat';
 const OWNERSHIP_LOST = 'REMI_CONVERSATION_OWNERSHIP_LOST';
 
-const chatBodySchema = z.object({
-  message: z.string().trim().min(1).max(REMI_LIMITS.maxMessageChars),
-  conversationId: z.uuid().nullish(),
-});
 
 export async function POST(request, context) {
   const db = getDb(context);

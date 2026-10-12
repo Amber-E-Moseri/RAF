@@ -1,10 +1,10 @@
-import { z } from 'zod';
 
 import { json, getDb, getHouseholdId } from '../../_shared/http.js';
 import { buildFinancialContext } from '../../../../../lib/remi/financialContext.js';
 import { REMI_SYSTEM_PROMPT, buildFinancialContextBlock } from '../../../../../lib/remi/prompts.js';
 import { getRemiEntitlementForRequest } from '../../../../../lib/entitlement/remiEntitlement.js';
 import { loadRemiConfig } from '../../../../../lib/server/env.js';
+import { summaryQuerySchema } from '../../../../../lib/remi/validation.js';
 import {
   parseRemiQuery,
   invalidRequestResponse,
@@ -18,10 +18,6 @@ import {
 } from '../../../../../lib/remi/remiGuards.js';
 
 const ROUTE = 'summary';
-
-const summaryQuerySchema = z.object({
-  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
-});
 
 export async function GET(request, context) {
   const db = getDb(context);
