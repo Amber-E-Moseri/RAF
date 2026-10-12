@@ -1,5 +1,6 @@
 import { json, getDb, getHouseholdId } from '../../_shared/http.js';
 import { generateRemiResponse, generateKnowledgeBaseResponse } from '../../../../../lib/remi/remiAssistant.js';
+import { parseChatBody } from '../../../../../lib/remi/validation.js';
 import { getRemiEntitlementForRequest } from '../../../../../lib/entitlement/remiEntitlement.js';
 
 export async function POST(request, context) {
@@ -16,10 +17,11 @@ export async function POST(request, context) {
     return json({ error: 'Invalid JSON body' }, 400);
   }
 
-  const { message, conversationId } = body ?? {};
-  if (!message || typeof message !== 'string' || !message.trim()) {
-    return json({ error: 'message is required' }, 400);
+  const parsed = parseChatBody(body);
+  if (!parsed.ok) {
+    return json({ error: parsed.error }, 400);
   }
+  const { message, conversationId } = parsed.data;
 
   // Derive entitlement from workspace (request-time, never stale)
   const entitlement = await getRemiEntitlementForRequest(db, userId, workspaceId);

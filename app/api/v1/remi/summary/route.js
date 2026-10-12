@@ -1,6 +1,7 @@
 import { json, getDb, getHouseholdId } from '../../_shared/http.js';
 import { buildFinancialContext } from '../../../../../lib/remi/financialContext.js';
 import { REMI_SYSTEM_PROMPT, buildFinancialContextBlock } from '../../../../../lib/remi/prompts.js';
+import { parseSummaryQuery } from '../../../../../lib/remi/validation.js';
 import { getRemiEntitlementForRequest } from '../../../../../lib/entitlement/remiEntitlement.js';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -12,7 +13,11 @@ export async function GET(request, context) {
   const apiKey = context?.anthropicApiKey ?? null;
 
   const url = new URL(request.url);
-  const month = url.searchParams.get('month'); // YYYY-MM
+  const parsedQuery = parseSummaryQuery(url.searchParams);
+  if (!parsedQuery.ok) {
+    return json({ error: parsedQuery.error }, 400);
+  }
+  const month = parsedQuery.data.month ?? null; // YYYY-MM
 
   // Derive entitlement from workspace (request-time, never stale)
   const entitlement = await getRemiEntitlementForRequest(db, userId, workspaceId);
