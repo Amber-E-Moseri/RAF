@@ -88,8 +88,10 @@ export async function POST(request, context) {
         const conv = await tx.createRemiConversation({ householdId, userId, title: message.slice(0, 60) });
         convId = conv.id;
       }
-      await tx.appendRemiMessage({ conversationId: convId, householdId, userId, role: 'user', content: message, tokensUsed: 0 });
-      await tx.appendRemiMessage({
+      // appendRemiMessage returns null when the user does not own the conversation. Treat that
+      // as a failed write so the transaction rolls back and no success response is returned.
+      const userRow = await tx.appendRemiMessage({ conversationId: convId, householdId, userId, role: 'user', content: message, tokensUsed: 0 });
+      const assistantRow = await tx.appendRemiMessage({
         conversationId: convId,
         householdId,
         userId,
@@ -97,6 +99,9 @@ export async function POST(request, context) {
         content: result.reply,
         tokensUsed: result.tokensUsed,
       });
+      if (!userRow || !assistantRow) {
+        throw new Error('Remi conversation write rejected: not owned by requesting user');
+      }
       return convId;
     });
   } catch (error) {

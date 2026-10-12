@@ -250,3 +250,20 @@ test('owner GET still requires active membership: non-member gets 404 even with 
   );
   assert.equal(res.status, 404);
 });
+
+test('owner chat POST where the repository rejects the write returns a failure and no success body', async () => {
+  const store = makeStore();
+  const db = makeDb(store);
+  const realTx = db.transaction;
+  // Simulate a rejected write (repository returns null) for an otherwise owned conversation.
+  db.transaction = async (cb) => realTx(async (tx) => cb({ ...tx, appendRemiMessage: async () => null }));
+  const before = store.messages.length;
+  const res = await chatPost(
+    postReq({ message: 'owner message', conversationId: CONV_A }),
+    ctx(db, { userId: ALICE, workspaceId: WS_A, apiKey: 'test-key' }),
+  );
+  assert.notEqual(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.reply, undefined, 'no reply may be returned when the write was rejected');
+  assert.equal(store.messages.length, before, 'no message may be stored');
+});
