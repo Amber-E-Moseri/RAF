@@ -25,27 +25,35 @@ export async function POST(request, context) {
   const entitlement = await getRemiEntitlementForRequest(db, userId, workspaceId);
   const isPaid = entitlement.authorized;
 
+  // Non-members (and an unresolvable session) get the same 404 as an unowned
+  // conversation, so the response does not reveal workspace membership.
+  if (entitlement.reason === 'not_member' || entitlement.reason === 'invalid_context') {
+    return json({ error: 'Conversation not found' }, 404);
+  }
+
   // FREE: knowledge-base response (no Anthropic call, no history)
   if (!isPaid || !apiKey) {
     const { reply, tokensUsed } = await generateKnowledgeBaseResponse(message.trim());
     return json({ reply, tier: 'free', tokensUsed });
   }
 
-  // PAID: full Remi with conversation history
+  // PAID: full Remi with conversation history.
+  // Ownership: a supplied conversationId must be owned by this user in this
+  // workspace. Every other case (other member, other workspace, malformed or
+  // unknown id) returns the same 404 so existence is not disclosed. We never
+  // fall back to creating a new conversation or appending to someone else's.
+  const notFound = () => json({ error: 'Conversation not found' }, 404);
   let history = [];
-  let activeConversationId = conversationId ?? null;
+  let activeConversationId = null;
 
-  if (activeConversationId) {
-    const conv = await db.transaction((tx) => tx.getRemiConversation({ conversationId: activeConversationId, householdId }));
-    if (conv) {
-      const msgs = await db.transaction((tx) => tx.listRemiMessages({ conversationId: activeConversationId, householdId }));
-      history = msgs;
-    } else {
-      activeConversationId = null;
+  if (conversationId !== undefined && conversationId !== null) {
+    const conv = await db.transaction((tx) => tx.getRemiConversation({ conversationId, householdId, userId }));
+    if (!conv) {
+      return notFound();
     }
-  }
-
-  if (!activeConversationId) {
+    activeConversationId = conversationId;
+    history = await db.transaction((tx) => tx.listRemiMessages({ conversationId, householdId, userId }));
+  } else {
     const conv = await db.transaction((tx) =>
       tx.createRemiConversation({ householdId, userId, title: message.trim().slice(0, 60) }),
     );
@@ -60,10 +68,20 @@ export async function POST(request, context) {
     apiKey,
   });
 
-  await db.transaction(async (tx) => {
-    await tx.appendRemiMessage({ conversationId: activeConversationId, householdId, role: 'user', content: message.trim(), tokensUsed: 0 });
-    await tx.appendRemiMessage({ conversationId: activeConversationId, householdId, role: 'assistant', content: reply, tokensUsed });
-  });
+  // Both turns commit or neither does. appendRemiMessage returns null (no write)
+  // when the session user does not own the conversation; that aborts the transaction.
+  const OWNERSHIP_LOST = 'REMI_CONVERSATION_OWNERSHIP_LOST';
+  try {
+    await db.transaction(async (tx) => {
+      const userRow = await tx.appendRemiMessage({ conversationId: activeConversationId, householdId, userId, role: 'user', content: message.trim(), tokensUsed: 0 });
+      if (userRow === null) throw Object.assign(new Error(OWNERSHIP_LOST), { code: OWNERSHIP_LOST });
+      const assistantRow = await tx.appendRemiMessage({ conversationId: activeConversationId, householdId, userId, role: 'assistant', content: reply, tokensUsed });
+      if (assistantRow === null) throw Object.assign(new Error(OWNERSHIP_LOST), { code: OWNERSHIP_LOST });
+    });
+  } catch (error) {
+    if (error?.code === OWNERSHIP_LOST) return notFound();
+    throw error;
+  }
 
   return json({ reply, conversationId: activeConversationId, tier: 'paid', tokensUsed });
 }
