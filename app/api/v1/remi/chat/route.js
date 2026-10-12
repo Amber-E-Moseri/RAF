@@ -36,9 +36,11 @@ export async function POST(request, context) {
   let activeConversationId = conversationId ?? null;
 
   if (activeConversationId) {
-    const conv = await db.transaction((tx) => tx.getRemiConversation({ conversationId: activeConversationId, householdId }));
+    // Ownership is enforced by the adapter. A conversation id that is foreign, stale or malformed
+    // is treated like a missing one, so the reply starts a new conversation owned by this user.
+    const conv = await db.transaction((tx) => tx.getRemiConversation({ conversationId: activeConversationId, householdId, userId }));
     if (conv) {
-      const msgs = await db.transaction((tx) => tx.listRemiMessages({ conversationId: activeConversationId, householdId }));
+      const msgs = await db.transaction((tx) => tx.listRemiMessages({ conversationId: activeConversationId, householdId, userId }));
       history = msgs;
     } else {
       activeConversationId = null;
@@ -60,10 +62,15 @@ export async function POST(request, context) {
     apiKey,
   });
 
-  await db.transaction(async (tx) => {
-    await tx.appendRemiMessage({ conversationId: activeConversationId, householdId, role: 'user', content: message.trim(), tokensUsed: 0 });
-    await tx.appendRemiMessage({ conversationId: activeConversationId, householdId, role: 'assistant', content: reply, tokensUsed });
+  const saved = await db.transaction(async (tx) => {
+    const userRow = await tx.appendRemiMessage({ conversationId: activeConversationId, householdId, userId, role: 'user', content: message.trim(), tokensUsed: 0 });
+    if (!userRow) return false;
+    await tx.appendRemiMessage({ conversationId: activeConversationId, householdId, userId, role: 'assistant', content: reply, tokensUsed });
+    return true;
   });
+  if (!saved) {
+    return json({ error: 'Conversation not found' }, 404);
+  }
 
   return json({ reply, conversationId: activeConversationId, tier: 'paid', tokensUsed });
 }
