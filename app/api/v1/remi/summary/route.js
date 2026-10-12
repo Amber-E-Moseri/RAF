@@ -1,8 +1,26 @@
+import { z } from 'zod';
+
 import { json, getDb, getHouseholdId } from '../../_shared/http.js';
 import { buildFinancialContext } from '../../../../../lib/remi/financialContext.js';
 import { REMI_SYSTEM_PROMPT, buildFinancialContextBlock } from '../../../../../lib/remi/prompts.js';
 import { getRemiEntitlementForRequest } from '../../../../../lib/entitlement/remiEntitlement.js';
-import Anthropic from '@anthropic-ai/sdk';
+import { loadRemiConfig } from '../../../../../lib/server/env.js';
+import {
+  parseRemiQuery,
+  invalidRequestResponse,
+  checkRemiThrottle,
+  rateLimitedResponse,
+  checkRemiDailyCap,
+  dailyLimitResponse,
+  createRemiAnthropicClient,
+  remiModelFailureResponse,
+} from '../../../../../lib/remi/remiGuards.js';
+
+const ROUTE = 'summary';
+
+const summaryQuerySchema = z.object({
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
+});
 
 export async function GET(request, context) {
   const db = getDb(context);
@@ -12,11 +30,23 @@ export async function GET(request, context) {
   const apiKey = context?.anthropicApiKey ?? null;
 
   const url = new URL(request.url);
-  const month = url.searchParams.get('month'); // YYYY-MM
+  const query = parseRemiQuery(url, summaryQuerySchema, ['month']);
+  if (!query.ok) return invalidRequestResponse();
+  const month = query.data.month ?? null; // YYYY-MM
 
   // Derive entitlement from workspace (request-time, never stale)
   const entitlement = await getRemiEntitlementForRequest(db, userId, workspaceId);
   const isPaid = entitlement.authorized;
+
+  // PAID with a server key: throttle and daily cap run before any Anthropic cost is incurred.
+  const config = loadRemiConfig();
+  if (isPaid && apiKey) {
+    const throttle = checkRemiThrottle({ userId, workspaceId, config });
+    if (!throttle.allowed) return rateLimitedResponse(throttle.retryAfterSeconds);
+
+    const dailyCap = await checkRemiDailyCap({ db, householdId, config, route: ROUTE });
+    if (!dailyCap.allowed) return dailyLimitResponse();
+  }
 
   const ctx = await buildFinancialContext({ db, householdId, months: 1 });
   const contextBlock = buildFinancialContextBlock(ctx);
@@ -38,18 +68,23 @@ export async function GET(request, context) {
   }
 
   // PAID: AI-generated personalized summary
-  const client = new Anthropic({ apiKey });
-  const response = await client.messages.create({
-    model: 'claude-sonnet-5',
-    max_tokens: 800,
-    system: REMI_SYSTEM_PROMPT,
-    messages: [
-      {
-        role: 'user',
-        content: `Please generate a monthly financial summary for ${month ?? ctx.periodTo.slice(0, 7)}.\n\n${contextBlock}\n\nProvide:\n1. Overall financial health assessment (1-2 sentences)\n2. Top 2-3 wins this month\n3. Top 1-2 areas to improve\n4. One specific action item for next month\n\nKeep it encouraging and actionable.`,
-      },
-    ],
-  });
+  let response;
+  try {
+    const client = createRemiAnthropicClient({ apiKey, config });
+    response = await client.messages.create({
+      model: 'claude-sonnet-5',
+      max_tokens: 800,
+      system: REMI_SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: `Please generate a monthly financial summary for ${month ?? ctx.periodTo.slice(0, 7)}.\n\n${contextBlock}\n\nProvide:\n1. Overall financial health assessment (1-2 sentences)\n2. Top 2-3 wins this month\n3. Top 1-2 areas to improve\n4. One specific action item for next month\n\nKeep it encouraging and actionable.`,
+        },
+      ],
+    });
+  } catch (error) {
+    return remiModelFailureResponse(error, ROUTE);
+  }
 
   const summary = response.content[0]?.type === 'text' ? response.content[0].text : '';
   const tokensUsed = (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0);
