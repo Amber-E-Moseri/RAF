@@ -6,9 +6,9 @@
  * 403) so conversation IDs cannot be enumerated.
  *
  * The db double below mirrors the adapter contract (ownership is part of the
- * query). The real SQL lives in lib/server/postgresDb.js and the RLS policy in
- * db/migrations/20261012000000_remi_conversation_owner_rls.sql; those need a
- * disposable Postgres run and are not exercised here.
+ * query). The real SQL (lib/server/postgresDb.js) and the RLS policy
+ * (db/migrations/20261012000000_remi_conversation_owner_rls.sql) are exercised
+ * against a disposable Postgres in tests/remiConversationOwnershipPostgres.test.js.
  *
  * The Anthropic API is replaced by a local fake HTTP server (ANTHROPIC_BASE_URL).
  */
@@ -158,18 +158,51 @@ test('same workspace, other member: message list is never returned', async () =>
   assert.doesNotMatch(text, /Alice secret/);
 });
 
-test('same workspace, other member: POST chat with owner conversationId does not append to it', async () => {
+test('same workspace, other member: POST chat with owner conversationId returns 404 and writes nothing', async () => {
   const store = makeStore();
-  const before = store.messages.length;
+  const convBefore = store.conversations.length;
+  const msgBefore = store.messages.length;
   const res = await chatPost(
     postReq({ message: 'injected by bob', conversationId: CONV_A }),
     ctx(makeDb(store), { userId: BOB, workspaceId: WS_A, apiKey: 'test-key' }),
   );
+  assert.equal(res.status, 404);
+  assert.deepEqual(await res.json(), { error: 'Conversation not found' });
+  assert.equal(store.conversations.length, convBefore, 'no new conversation may be silently created');
+  assert.equal(store.messages.length, msgBefore, 'owner conversation must not gain messages');
+});
+
+test('owner POST chat with own conversationId returns 200 and appends to that conversation', async () => {
+  const store = makeStore();
+  const msgBefore = store.messages.length;
+  const res = await chatPost(
+    postReq({ message: 'follow-up by alice', conversationId: CONV_A }),
+    ctx(makeDb(store), { userId: ALICE, workspaceId: WS_A, apiKey: 'test-key' }),
+  );
   assert.equal(res.status, 200);
   const body = await res.json();
-  assert.notEqual(body.conversationId, CONV_A, 'must not reuse the owner conversation');
-  assert.equal(store.messages.filter((m) => m.conversationId === CONV_A).length, before, 'owner conversation must not gain messages');
-  assert.equal(store.messages.some((m) => m.content === 'injected by bob'), false, 'bob message must not be stored against owner conversation');
+  assert.equal(body.conversationId, CONV_A);
+  assert.equal(store.messages.length, msgBefore + 2);
+});
+
+test('404 body is identical for other member, cross-workspace, non-member, malformed and unknown IDs', async () => {
+  const cases = [
+    [BOB, WS_A, CONV_A],
+    [CAROL, WS_B, CONV_A],
+    [CAROL, WS_A, CONV_A],
+    [ALICE, WS_A, 'not-a-uuid'],
+    [ALICE, WS_A, crypto.randomUUID()],
+  ];
+  const bodies = [];
+  for (const [userId, workspaceId, id] of cases) {
+    const res = await chatPost(
+      postReq({ message: 'probe', conversationId: id }),
+      ctx(makeDb(makeStore()), { userId, workspaceId, apiKey: 'test-key' }),
+    );
+    assert.equal(res.status, 404);
+    bodies.push(await res.text());
+  }
+  for (const body of bodies) assert.equal(body, bodies[0]);
 });
 
 // ── Cross-workspace ───────────────────────────────────────────────────────────
@@ -208,18 +241,33 @@ test('forged random UUID returns 404 and creates no row', async () => {
   assert.equal(store.messages.length, msgCount);
 });
 
-test('forged conversationId on chat POST creates a new conversation, never attaches to the forged ID', async () => {
+test('forged conversationId on chat POST returns 404 and never creates a conversation for that ID', async () => {
   const store = makeStore();
   const forged = crypto.randomUUID();
+  const convBefore = store.conversations.length;
   const res = await chatPost(
     postReq({ message: 'hello', conversationId: forged }),
     ctx(makeDb(store), { userId: ALICE, workspaceId: WS_A, apiKey: 'test-key' }),
   );
-  assert.equal(res.status, 200);
-  const body = await res.json();
-  assert.notEqual(body.conversationId, forged);
+  assert.equal(res.status, 404);
+  assert.deepEqual(await res.json(), { error: 'Conversation not found' });
+  assert.equal(store.conversations.length, convBefore, 'no conversation may be created');
   assert.equal(store.conversations.some((c) => c.id === forged), false, 'forged ID must not be created');
   assert.equal(store.messages.filter((m) => m.conversationId === forged).length, 0, 'no messages attached to forged ID');
+});
+
+test('chat POST without conversationId still creates a new conversation for the caller', async () => {
+  const store = makeStore();
+  const convBefore = store.conversations.length;
+  const res = await chatPost(
+    postReq({ message: 'fresh chat' }),
+    ctx(makeDb(store), { userId: BOB, workspaceId: WS_A, apiKey: 'test-key' }),
+  );
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(store.conversations.length, convBefore + 1);
+  const created = store.conversations.find((c) => c.id === body.conversationId);
+  assert.equal(created?.userId, BOB);
 });
 
 test('forged non-UUID conversation ID returns 404', async () => {
