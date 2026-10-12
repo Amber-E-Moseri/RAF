@@ -757,7 +757,6 @@ test('zero production fallback — all production-active tx methods are present 
     getPdfImportQuotaStatus: async () => null,
     reservePdfImportQuota: async () => null,
     incrementPdfImportQuota: async () => null,
-    updateHouseholdPdfQuotaTier: async () => null,
     getUserWorkspaceAccess: async () => null,
     countUnreviewedImportedRows: async () => 0,
     ping: async () => null,
@@ -789,7 +788,7 @@ test('zero production fallback — all production-active tx methods are present 
     'acceptWorkspaceInvitation', 'declineWorkspaceInvitation',
     'logWorkspaceActivity', 'listWorkspaceActivity',
     // household
-    'getHousehold', 'createHousehold', 'updateHousehold', 'updateHouseholdPdfQuotaTier',
+    'getHousehold', 'createHousehold', 'updateHousehold',
     // users
     'getUserById', 'getUserByEmail', 'createUser', 'createUserHousehold',
     'initializeWorkspaceDefaults',
