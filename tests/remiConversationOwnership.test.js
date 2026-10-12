@@ -158,16 +158,14 @@ test('same workspace, other member: message list is never returned', async () =>
   assert.doesNotMatch(text, /Alice secret/);
 });
 
-test('same workspace, other member: POST chat with owner conversationId does not append to it', async () => {
+test('same workspace, other member: POST chat with owner conversationId returns 404 and does not append to it', async () => {
   const store = makeStore();
   const before = store.messages.length;
   const res = await chatPost(
     postReq({ message: 'injected by bob', conversationId: CONV_A }),
     ctx(makeDb(store), { userId: BOB, workspaceId: WS_A, apiKey: 'test-key' }),
   );
-  assert.equal(res.status, 200);
-  const body = await res.json();
-  assert.notEqual(body.conversationId, CONV_A, 'must not reuse the owner conversation');
+  assert.equal(res.status, 404);
   assert.equal(store.messages.filter((m) => m.conversationId === CONV_A).length, before, 'owner conversation must not gain messages');
   assert.equal(store.messages.some((m) => m.content === 'injected by bob'), false, 'bob message must not be stored against owner conversation');
 });
@@ -208,16 +206,14 @@ test('forged random UUID returns 404 and creates no row', async () => {
   assert.equal(store.messages.length, msgCount);
 });
 
-test('forged conversationId on chat POST creates a new conversation, never attaches to the forged ID', async () => {
+test('forged conversationId on chat POST returns 404 and never creates or attaches to the forged ID', async () => {
   const store = makeStore();
   const forged = crypto.randomUUID();
   const res = await chatPost(
     postReq({ message: 'hello', conversationId: forged }),
     ctx(makeDb(store), { userId: ALICE, workspaceId: WS_A, apiKey: 'test-key' }),
   );
-  assert.equal(res.status, 200);
-  const body = await res.json();
-  assert.notEqual(body.conversationId, forged);
+  assert.equal(res.status, 404);
   assert.equal(store.conversations.some((c) => c.id === forged), false, 'forged ID must not be created');
   assert.equal(store.messages.filter((m) => m.conversationId === forged).length, 0, 'no messages attached to forged ID');
 });
