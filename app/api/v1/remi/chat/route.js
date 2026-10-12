@@ -1,6 +1,9 @@
-import { json, getDb, getHouseholdId } from '../../_shared/http.js';
+import { json, getDb, getHouseholdId, buildErrorBody } from '../../_shared/http.js';
 import { generateRemiResponse, generateKnowledgeBaseResponse } from '../../../../../lib/remi/remiAssistant.js';
 import { getRemiEntitlementForRequest } from '../../../../../lib/entitlement/remiEntitlement.js';
+import { RemiUpstreamError, logUpstreamFailure } from '../../../../../lib/remi/anthropicClient.js';
+import { remiChatBodySchema, firstIssueMessage } from '../../../../../lib/remi/requestSchemas.js';
+import { remiUsageLimits, rateLimitedBody } from '../../../../../lib/remi/usageLimiter.js';
 
 export async function POST(request, context) {
   const db = getDb(context);
@@ -9,61 +12,81 @@ export async function POST(request, context) {
   const userId = context?.userId ?? 'local-user';
   const apiKey = context?.anthropicApiKey ?? null;
 
-  let body;
+  let raw;
   try {
-    body = await request.json();
+    raw = await request.json();
   } catch {
-    return json({ error: 'Invalid JSON body' }, 400);
+    return json(buildErrorBody({ status: 400, message: 'Invalid JSON body' }), 400);
   }
 
-  const { message, conversationId } = body ?? {};
-  if (!message || typeof message !== 'string' || !message.trim()) {
-    return json({ error: 'message is required' }, 400);
+  const parsed = remiChatBodySchema.safeParse(raw ?? {});
+  if (!parsed.success) {
+    return json(buildErrorBody({ status: 400, message: firstIssueMessage(parsed.error) }), 400);
   }
+  const message = parsed.data.message;
+  const conversationId = parsed.data.conversationId ?? null;
 
   // Derive entitlement from workspace (request-time, never stale)
   const entitlement = await getRemiEntitlementForRequest(db, userId, workspaceId);
   const isPaid = entitlement.authorized;
 
+  // Usage protection applies to every chat request from this user in this workspace.
+  const usage = remiUsageLimits.chat.consume(`${workspaceId}:${userId}`);
+  if (!usage.allowed) {
+    return json(rateLimitedBody(usage.retryAfterSeconds), 429);
+  }
+
   // FREE: knowledge-base response (no Anthropic call, no history)
   if (!isPaid || !apiKey) {
-    const { reply, tokensUsed } = await generateKnowledgeBaseResponse(message.trim());
+    const { reply, tokensUsed } = await generateKnowledgeBaseResponse(message);
     return json({ reply, tier: 'free', tokensUsed });
   }
 
-  // PAID: full Remi with conversation history
+  // PAID: load history only if the conversation belongs to this user in this workspace.
+  // Foreign, stale or malformed ids are treated as missing: nothing is disclosed.
   let history = [];
-  let activeConversationId = conversationId ?? null;
-
-  if (activeConversationId) {
-    const conv = await db.transaction((tx) => tx.getRemiConversation({ conversationId: activeConversationId, householdId }));
+  let ownedConversation = false;
+  if (conversationId) {
+    const conv = await db.transaction((tx) => tx.getRemiConversation({ conversationId, householdId, userId }));
     if (conv) {
-      const msgs = await db.transaction((tx) => tx.listRemiMessages({ conversationId: activeConversationId, householdId }));
-      history = msgs;
-    } else {
-      activeConversationId = null;
+      ownedConversation = true;
+      history = await db.transaction((tx) => tx.listRemiMessages({ conversationId, householdId, userId }));
     }
   }
 
-  if (!activeConversationId) {
-    const conv = await db.transaction((tx) =>
-      tx.createRemiConversation({ householdId, userId, title: message.trim().slice(0, 60) }),
-    );
-    activeConversationId = conv.id;
+  // Generate first. A failed upstream call leaves nothing behind (no empty conversation).
+  let generated;
+  try {
+    generated = await generateRemiResponse({
+      db,
+      householdId,
+      userMessage: message,
+      conversationHistory: history,
+      apiKey,
+    });
+  } catch (err) {
+    if (err instanceof RemiUpstreamError) {
+      logUpstreamFailure(err, { route: 'remi.chat' });
+      return json(buildErrorBody({ status: err.status, message: err.message }), err.status);
+    }
+    throw err;
+  }
+  const { reply, tokensUsed, truncated } = generated;
+
+  const result = await db.transaction(async (tx) => {
+    let activeConversationId = ownedConversation ? conversationId : null;
+    if (!activeConversationId) {
+      const conv = await tx.createRemiConversation({ householdId, userId, title: message.slice(0, 60) });
+      activeConversationId = conv.id;
+    }
+    const userRow = await tx.appendRemiMessage({ conversationId: activeConversationId, householdId, userId, role: 'user', content: message, tokensUsed: 0 });
+    if (!userRow) return null;
+    await tx.appendRemiMessage({ conversationId: activeConversationId, householdId, userId, role: 'assistant', content: reply, tokensUsed });
+    return activeConversationId;
+  });
+  if (!result) {
+    return json(buildErrorBody({ status: 404, message: 'Conversation not found' }), 404);
   }
 
-  const { reply, tokensUsed } = await generateRemiResponse({
-    db,
-    householdId,
-    userMessage: message.trim(),
-    conversationHistory: history,
-    apiKey,
-  });
-
-  await db.transaction(async (tx) => {
-    await tx.appendRemiMessage({ conversationId: activeConversationId, householdId, role: 'user', content: message.trim(), tokensUsed: 0 });
-    await tx.appendRemiMessage({ conversationId: activeConversationId, householdId, role: 'assistant', content: reply, tokensUsed });
-  });
-
-  return json({ reply, conversationId: activeConversationId, tier: 'paid', tokensUsed });
+  return json({ reply, conversationId: result, tier: 'paid', tokensUsed, truncated });
 }
