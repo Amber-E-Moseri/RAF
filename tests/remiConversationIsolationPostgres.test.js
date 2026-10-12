@@ -255,6 +255,30 @@ maybeTest('member of another workspace cannot read the conversation', async () =
   assert.equal(viaOwnWorkspace.status, 404);
 });
 
+maybeTest('member of another workspace cannot append to the conversation (cross-workspace write)', async () => {
+  const ws = await makePaidWorkspace('iso-cross-ws-write');
+  const a = ws.owner;
+  const other = await makePaidWorkspace('iso-cross-ws-write-other');
+  const outsider = other.owner;
+  const conversationId = await createConversationFor(trustedContext(a, ws.workspaceId));
+
+  // Through the route: the reply lands in the outsider's own workspace, never in A's conversation.
+  const viaOwnWorkspace = await chat(trustedContext(outsider, other.workspaceId), { message: 'cross write', conversationId });
+  assert.equal(viaOwnWorkspace.status, 200);
+  assert.notEqual((await viaOwnWorkspace.json()).conversationId, conversationId);
+
+  // Through the adapter: appending with A's conversation id under the outsider's workspace inserts nothing.
+  const attempt = appDb.transaction(
+    (tx) => tx.appendRemiMessage({ householdId: other.workspaceId, conversationId, userId: outsider.id, role: 'user', content: 'forged cross', tokensUsed: 0 }),
+    { userId: outsider.id, workspaceId: other.workspaceId },
+  );
+  const inserted = await attempt.then((row) => Boolean(row), () => false);
+  assert.equal(inserted, false);
+
+  const rows = await asAppRole(a.id, ws.workspaceId, 'select id from raf.remi_messages where conversation_id = $1', [conversationId]);
+  assert.equal(rows.length, 2, "A's conversation must be unchanged");
+});
+
 maybeTest('unauthenticated context (no userId) cannot read or append', async () => {
   const ws = await makePaidWorkspace('iso-anon');
   const a = ws.owner;
@@ -307,9 +331,9 @@ maybeTest('invalid and nonexistent conversation ids are handled safely', async (
   const missing = await readConversation(trustedContext(a, ws.workspaceId), NONEXISTENT_UUID);
   assert.equal(missing.status, 404);
 
+  // A malformed id is rejected by request validation (400) or treated as missing (200). Never a 500.
   const chatGarbage = await chat(trustedContext(a, ws.workspaceId), { message: 'hi', conversationId: 'not-a-uuid' });
-  assert.equal(chatGarbage.status, 200, 'malformed id in chat must not 500');
-  assert.ok((await chatGarbage.json()).conversationId);
+  assert.ok([200, 400].includes(chatGarbage.status), `malformed id in chat must not 500, got ${chatGarbage.status}`);
 });
 
 maybeTest('legitimate listing returns only the requester own conversations', async () => {

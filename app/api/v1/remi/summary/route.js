@@ -1,8 +1,17 @@
-import { json, getDb, getHouseholdId } from '../../_shared/http.js';
+import { json, getDb, getHouseholdId, buildErrorBody } from '../../_shared/http.js';
 import { buildFinancialContext } from '../../../../../lib/remi/financialContext.js';
 import { REMI_SYSTEM_PROMPT, buildFinancialContextBlock } from '../../../../../lib/remi/prompts.js';
 import { getRemiEntitlementForRequest } from '../../../../../lib/entitlement/remiEntitlement.js';
-import Anthropic from '@anthropic-ai/sdk';
+import {
+  REMI_UPSTREAM_TIMEOUT_MS,
+  RemiUpstreamError,
+  createMessageSafely,
+  createRemiClient,
+  extractText,
+  logUpstreamFailure,
+} from '../../../../../lib/remi/anthropicClient.js';
+import { remiSummaryQuerySchema, firstIssueMessage } from '../../../../../lib/remi/requestSchemas.js';
+import { remiUsageLimits, rateLimitedBody } from '../../../../../lib/remi/usageLimiter.js';
 
 export async function GET(request, context) {
   const db = getDb(context);
@@ -12,11 +21,20 @@ export async function GET(request, context) {
   const apiKey = context?.anthropicApiKey ?? null;
 
   const url = new URL(request.url);
-  const month = url.searchParams.get('month'); // YYYY-MM
+  const parsed = remiSummaryQuerySchema.safeParse({ month: url.searchParams.get('month') });
+  if (!parsed.success) {
+    return json(buildErrorBody({ status: 400, message: firstIssueMessage(parsed.error) }), 400);
+  }
+  const month = parsed.data.month ?? null; // YYYY-MM, validated
 
   // Derive entitlement from workspace (request-time, never stale)
   const entitlement = await getRemiEntitlementForRequest(db, userId, workspaceId);
   const isPaid = entitlement.authorized;
+
+  const usage = remiUsageLimits.summary.consume(`${workspaceId}:${userId}`);
+  if (!usage.allowed) {
+    return json(rateLimitedBody(usage.retryAfterSeconds), 429);
+  }
 
   const ctx = await buildFinancialContext({ db, householdId, months: 1 });
   const contextBlock = buildFinancialContextBlock(ctx);
@@ -38,20 +56,28 @@ export async function GET(request, context) {
   }
 
   // PAID: AI-generated personalized summary
-  const client = new Anthropic({ apiKey });
-  const response = await client.messages.create({
-    model: 'claude-sonnet-5',
-    max_tokens: 800,
-    system: REMI_SYSTEM_PROMPT,
-    messages: [
-      {
-        role: 'user',
-        content: `Please generate a monthly financial summary for ${month ?? ctx.periodTo.slice(0, 7)}.\n\n${contextBlock}\n\nProvide:\n1. Overall financial health assessment (1-2 sentences)\n2. Top 2-3 wins this month\n3. Top 1-2 areas to improve\n4. One specific action item for next month\n\nKeep it encouraging and actionable.`,
-      },
-    ],
-  });
+  let response;
+  try {
+    const client = createRemiClient(apiKey, { timeoutMs: REMI_UPSTREAM_TIMEOUT_MS });
+    response = await createMessageSafely(client, {
+      max_tokens: 800,
+      system: REMI_SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: `Please generate a monthly financial summary for ${month ?? ctx.periodTo.slice(0, 7)}.\n\n${contextBlock}\n\nProvide:\n1. Overall financial health assessment (1-2 sentences)\n2. Top 2-3 wins this month\n3. Top 1-2 areas to improve\n4. One specific action item for next month\n\nKeep it encouraging and actionable.`,
+        },
+      ],
+    });
+  } catch (err) {
+    if (err instanceof RemiUpstreamError) {
+      logUpstreamFailure(err, { route: 'remi.summary' });
+      return json(buildErrorBody({ status: err.status, message: err.message }), err.status);
+    }
+    throw err;
+  }
 
-  const summary = response.content[0]?.type === 'text' ? response.content[0].text : '';
+  const summary = extractText(response);
   const tokensUsed = (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0);
 
   return json({
