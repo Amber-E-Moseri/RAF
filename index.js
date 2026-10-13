@@ -9,6 +9,7 @@ import { createApiRouter } from './lib/server/routerLoader.js';
 import { createServerDb } from './lib/server/db.js';
 import { checkReadiness } from './lib/server/readinessHandler.js';
 import { createAuthRateLimiters, parseTrustProxy } from './lib/server/rateLimit.js';
+import { apiErrorHandler } from './lib/server/errorHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -184,19 +185,7 @@ app.use((req, res) => {
 
 Sentry.setupExpressErrorHandler(app);
 
-app.use((error, _req, res, _next) => {
-  const status = typeof error?.status === 'number' ? error.status : 500;
-  console.error(JSON.stringify({
-    level: 'error',
-    event: 'api_error',
-    status,
-    message: error?.message ?? 'Internal Server Error',
-  }));
-  res.status(status).json({
-    error: error?.message ?? 'Internal Server Error',
-  });
-});
-
+app.use(apiErrorHandler);
 const server = app.listen(port, () => {
   console.log(`RAF API running on http://localhost:${port}`);
 });

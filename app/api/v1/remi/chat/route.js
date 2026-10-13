@@ -57,7 +57,7 @@ export async function POST(request, context) {
   }
 
   // PAID: daily message cap, then history, then the budgeted model call.
-  const dailyCap = await checkRemiDailyCap({ db, householdId, config, route: ROUTE });
+  const dailyCap = await checkRemiDailyCap({ db, householdId, userId, config, route: ROUTE });
   if (!dailyCap.allowed) return dailyLimitResponse();
 
   let history = [];
