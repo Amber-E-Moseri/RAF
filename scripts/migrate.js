@@ -8,6 +8,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { assertDatabaseTargetAllowed } from '../lib/server/databaseTarget.js';
+
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultMigrationsDir = path.join(scriptDir, '../db/migrations');
 const envPath = path.join(scriptDir, '../.env');
@@ -348,19 +350,39 @@ export async function applyMigrations({
 }
 
 export async function run() {
-  loadDotEnv();
-
+  // Migrations never read .env. A developer's local .env must not silently choose a database.
   const connStr = process.env.POSTGRES_CONNECTION_STRING;
   if (!connStr) {
-    console.error('POSTGRES_CONNECTION_STRING not set');
+    console.error('POSTGRES_CONNECTION_STRING not set (migrations do not read .env)');
+    process.exitCode = 1;
+    return;
+  }
+
+  // Target validation runs before any connection. Remote targets need explicit process-env
+  // authorization (see lib/server/databaseTarget.js). Errors name host and database only.
+  let target;
+  try {
+    target = assertDatabaseTargetAllowed({
+      connectionString: connStr,
+      label: 'POSTGRES_CONNECTION_STRING',
+      source: 'process',
+    });
+  } catch (err) {
+    console.error(`Error: ${err.message}`);
     process.exitCode = 1;
     return;
   }
 
   const checkMode = process.argv.includes('--check');
   // Accept --bootstrap CLI flag OR RAF_ALLOW_BOOTSTRAP env var (e.g. CI setup).
-  // The inner redeclaration that previously shadowed this line has been removed.
   const allowBootstrap = process.argv.includes('--bootstrap') || process.env.RAF_ALLOW_BOOTSTRAP === 'true';
+  if (allowBootstrap && !target.loopback) {
+    console.error('Error: bootstrap is refused for remote database targets.');
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log(`Migration target: host=${target.host} database=${target.database}`);
 
   const { default: pg } = await import('pg');
   const client = new pg.Client({ connectionString: connStr });

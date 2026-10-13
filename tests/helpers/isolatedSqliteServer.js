@@ -233,7 +233,9 @@ export async function startIsolatedSqliteServer({
   extraEnv = {},
   host = '127.0.0.1',
   startupPath = '/health',
-  startupAttempts = 100,
+  // Cold start of the RAF server takes ~8 s on Windows when idle and longer under parallel load
+  // (measured). 100 x 200 ms (~20 s) was too short; 600 x 200 ms (~120 s) gives headroom.
+  startupAttempts = 600,
   startupIntervalMs = 200,
 } = {}) {
   if (!repoRoot) {
