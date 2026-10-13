@@ -1,5 +1,7 @@
 # PDF Import Quota & Subscriptions
 
+> **Superseded for billing status.** Billing is not active. `PATCH /api/v1/household/subscription` now returns `501` and no member can set the paid tier. The "Update Subscription", "Upgrade User to Paid", and "Test Paid Tier" sections below describe the removed flow. See `docs/BILLING_STATUS.md`.
+
 ## Overview
 
 The RAF app now includes a quota system for AI-powered PDF parsing:
