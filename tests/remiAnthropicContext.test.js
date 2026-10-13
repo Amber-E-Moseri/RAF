@@ -77,7 +77,8 @@ async function startApp({ anthropicApiKey, tier }) {
     async createRemiConversation() { return { id: crypto.randomUUID() }; },
     async getRemiConversation() { return null; },
     async listRemiMessages() { return []; },
-    async appendRemiMessage() {},
+    // Contract: returns the stored row, or null when the caller does not own the conversation.
+    async appendRemiMessage() { return { id: crypto.randomUUID() }; },
     async listRemiConversations() { return []; },
   };
   const realTransaction = db.transaction.bind(db);
