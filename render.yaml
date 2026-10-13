@@ -28,6 +28,15 @@ services:
         sync: false
       - key: POSTGRES_CONNECTION_STRING_APP
         sync: false
+      # Explicit deploy authorization for the remote production database. Migrations and the
+      # server refuse any remote target unless this is "true" AND the expected host and database
+      # name (set in the Render dashboard, not in this file) match the connection strings.
+      - key: RAF_DATABASE_REMOTE_AUTHORIZED
+        value: "true"
+      - key: RAF_DATABASE_EXPECTED_HOST
+        sync: false
+      - key: RAF_DATABASE_EXPECTED_NAME
+        sync: false
       - key: JWT_SECRET
         sync: false
       - key: ANTHROPIC_API_KEY
