@@ -22,7 +22,7 @@ import { getRemiEntitlementForRequest } from '../lib/entitlement/remiEntitlement
 test('14: missing workspace (getWorkspace returns null) → free, no error', async () => {
   const db = {
     transaction: async (cb) => cb({
-      getWorkspaceMembership: async () => ({ userId: 'u1', workspaceId: 'ws-missing' }),
+      getWorkspaceMember: async () => ({ userId: 'u1', workspaceId: 'ws-missing', status: 'active' }),
       getWorkspace: async () => null,
     }),
   };
@@ -37,19 +37,19 @@ test('14: missing workspace (getWorkspace returns null) → free, no error', asy
 test('15: malformed tier "enterprise" → treated as free (no capability granted)', async () => {
   const db = {
     transaction: async (cb) => cb({
-      getWorkspaceMembership: async () => ({ userId: 'u1', workspaceId: 'ws1' }),
+      getWorkspaceMember: async () => ({ userId: 'u1', workspaceId: 'ws1', status: 'active' }),
       getWorkspace: async () => ({ remiTier: 'enterprise' }), // hypothetical unknown future value
     }),
   };
   const result = await getRemiEntitlementForRequest(db, 'u1', 'ws1');
   assert.equal(result.authorized, false, 'unknown tier must not grant capability');
-  assert.equal(result.remiTier, 'enterprise', 'tier returned verbatim for logging');
+  assert.equal(result.remiTier, 'free', 'unknown tier is normalised to free');
 });
 
 test('15b: empty tier string → no capability granted', async () => {
   const db = {
     transaction: async (cb) => cb({
-      getWorkspaceMembership: async () => ({ userId: 'u1', workspaceId: 'ws1' }),
+      getWorkspaceMember: async () => ({ userId: 'u1', workspaceId: 'ws1', status: 'active' }),
       getWorkspace: async () => ({ remiTier: '' }),
     }),
   };
@@ -60,7 +60,7 @@ test('15b: empty tier string → no capability granted', async () => {
 test('15c: null tier → defaults to free, no capability granted', async () => {
   const db = {
     transaction: async (cb) => cb({
-      getWorkspaceMembership: async () => ({ userId: 'u1', workspaceId: 'ws1' }),
+      getWorkspaceMember: async () => ({ userId: 'u1', workspaceId: 'ws1', status: 'active' }),
       getWorkspace: async () => ({ remiTier: null }),
     }),
   };
