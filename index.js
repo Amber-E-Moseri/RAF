@@ -186,14 +186,18 @@ Sentry.setupExpressErrorHandler(app);
 
 app.use((error, _req, res, _next) => {
   const status = typeof error?.status === 'number' ? error.status : 500;
+  // Server faults never expose internal messages (upstream text, SQL, stack details) to clients.
+  // Only deliberate client-facing errors (status < 500) carry their message through.
+  const isServerFault = status >= 500;
+  const clientMessage = isServerFault ? 'Internal Server Error' : (error?.message ?? 'Request failed');
   console.error(JSON.stringify({
     level: 'error',
     event: 'api_error',
     status,
-    message: error?.message ?? 'Internal Server Error',
+    message: isServerFault ? 'Internal Server Error' : clientMessage,
   }));
   res.status(status).json({
-    error: error?.message ?? 'Internal Server Error',
+    error: clientMessage,
   });
 });
 
