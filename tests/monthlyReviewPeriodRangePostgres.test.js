@@ -63,56 +63,55 @@ let workspaceId;
 before(async () => {
   if (!shouldRun) return;
   owner = new pg.Pool({ connectionString: adminUrl, max: 2 });
-  const client = await owner.connect();
-  try {
-    // Seed through the owner connection. Replica mode skips the allocation-total trigger and
-    // FK checks, which only matter for the write path, not for the read totals under test.
-    await client.query('set session_replication_role = replica');
-    const userId = (await client.query(
-      'insert into raf.app_users (email) values ($1) returning id',
-      [`review-range-${crypto.randomUUID()}@example.test`],
-    )).rows[0].id;
-    workspaceId = (await client.query(
-      "insert into raf.workspaces (name, owner_user_id) values ('Review range', $1) returning id",
-      [userId],
-    )).rows[0].id;
-    const householdId = crypto.randomUUID();
-    await client.query(
-      `insert into raf.households (id, workspace_id, owner_user_id, name, active_month, raw_json)
-       values ($1, $2, $3, 'Review range', '2026-09-01', $4)`,
-      [householdId, workspaceId, userId, { id: householdId, workspaceId, householdId: workspaceId, name: 'Review range', activeMonth: '2026-09-01' }],
-    );
+  // Seed through the real adapter write path (no session_replication_role, which needs superuser
+  // and CI's owner role is not one). Mirrors seedWorkspaceWithBuffer in postgresAtomicBufferClose.
+  const ownerDb = createPostgresDb({ connectionString: adminUrl, ssl: false });
+  const ownerUserId = crypto.randomUUID();
+  await ownerDb.transaction(async (tx) => {
+    await tx.createUser({ id: ownerUserId, email: `review-range-${crypto.randomUUID()}@test.test`, passwordHash: 'test-hash' });
+    const workspace = await tx.createWorkspace({ ownerUserId, name: 'Review range' });
+    workspaceId = workspace.id;
+    await tx.createWorkspaceMember({ workspaceId, userId: ownerUserId, role: 'owner', status: 'active' });
+  });
+  const householdId = workspaceId;
+  const bufferCategoryId = await ownerDb.transaction(async (tx) => {
+    const cats = await tx.listAllocationCategories({ householdId, asOf: '2026-09-01' });
+    return cats.find((c) => c.isBuffer === true && c.isActive !== false)?.id ?? null;
+  });
+  if (!bufferCategoryId) throw new Error(`No buffer category for workspace ${householdId}`);
 
-    const income = async (date, amount) => {
-      const id = crypto.randomUUID();
-      await client.query(
-        `insert into raf.income_entries (id, workspace_id, source_name, amount, received_date, created_at, updated_at, raw_json)
-         values ($1, $2, 'Pay', $3, $4, now(), now(), $5)`,
-        [id, workspaceId, amount, date, { id, householdId: workspaceId, workspaceId, sourceName: 'Pay', amount, receivedDate: date }],
-      );
-    };
-    await income('2026-09-01', '100.00');
-    await income('2026-09-15', '200.00');
-    await income('2026-09-30', '300.00');
-    await income('2026-10-01', '400.00'); // outside September: must be excluded
+  const income = (receivedDate, amount) => ownerDb.transaction(async (tx) => {
+    const entry = await tx.insertIncomeEntry({ householdId, receivedDate, amount, sourceName: 'Pay' });
+    await tx.insertIncomeAllocations([{
+      householdId,
+      incomeEntryId: entry.id,
+      allocationCategoryId: bufferCategoryId,
+      allocatedAmount: amount,
+      allocationPercent: '1.0000',
+    }]);
+  });
+  await income('2026-09-01', '100.00');
+  await income('2026-09-15', '200.00');
+  await income('2026-09-30', '300.00');
+  await income('2026-10-01', '400.00'); // outside September: must be excluded
 
-    const debit = async (date, amount) => {
-      const id = crypto.randomUUID();
-      await client.query(
-        `insert into raf.transactions (id, workspace_id, transaction_date, description, merchant, amount, direction, category_id, created_at, updated_at, raw_json)
-         values ($1, $2, $3, 'Purchase', 'Shop', $4, 'debit', $5, now(), now(), $6)`,
-        [id, workspaceId, date, amount, crypto.randomUUID(),
-          { id, householdId: workspaceId, workspaceId, transactionDate: date, description: 'Purchase', merchant: 'Shop', amount, direction: 'debit', categoryId: null }],
-      );
-    };
-    for (let i = 0; i < SEP_TXN_COUNT; i += 1) {
-      const day = String((i % 28) + 1).padStart(2, '0');
-      await debit(`2026-09-${day}`, SEP_DEBIT_EACH);
-    }
-    await debit('2026-10-01', '999.00'); // outside September: must be excluded
-  } finally {
-    client.release();
+  const debit = (transactionDate, amount) => ownerDb.transaction((tx) => tx.insertTransaction({
+    householdId,
+    transactionDate,
+    description: 'Purchase',
+    merchant: 'Shop',
+    amount,
+    direction: 'debit',
+    categoryId: null,
+    source: 'manual',
+  }));
+  for (let i = 0; i < SEP_TXN_COUNT; i += 1) {
+    const day = String((i % 28) + 1).padStart(2, '0');
+    await debit(`2026-09-${day}`, SEP_DEBIT_EACH);
   }
+  await debit('2026-10-01', '999.00'); // outside September: must be excluded
+
+  await ownerDb.close?.();
   db = createPostgresDb({ connectionString: adminUrl, ssl: false });
 });
 
