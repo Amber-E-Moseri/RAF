@@ -23,7 +23,9 @@ function createDouble({ transactions = [], debts = [], goals = [], nextCursor = 
     async getHousehold() {
       return { id: householdId, name: householdName, activeMonth, timezone: 'UTC', periodStartDay: 1, savingsFloor: '0.00', savingsFloorEnabled: false };
     },
-    async listTransactions({ from = '0001-01-01', to = '9999-12-31' } = {}) {
+    async listTransactions({ from = '0001-01-01', to = '9999-12-31', cursor = null } = {}) {
+      // First page carries the double's nextCursor; a follow-up page with a cursor is empty.
+      if (cursor) return { items: [], nextCursor: null };
       const items = transactions.filter((t) => t.transactionDate >= from && t.transactionDate <= to);
       return { items, nextCursor };
     },

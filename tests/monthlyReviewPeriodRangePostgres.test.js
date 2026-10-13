@@ -143,3 +143,15 @@ maybeTest('financial health active-month income covers the whole month (cumulati
   const report = await getFinancialHealthReport({ db, householdId: workspaceId, month: '2026-09-01' });
   assert.equal(report.activeMonthIncome, '600.00');
 });
+
+maybeTest('dashboard September spending covers all 60 transactions, not only the first page of 50', async () => {
+  const { getDashboardReport } = await import('../lib/reports/getDashboardReport.js');
+  const report = await getDashboardReport({ db, householdId: workspaceId, year: 2026, month: 9 });
+  assert.equal(report.periods[0].spendingTotal, (SEP_TXN_COUNT * Number(SEP_DEBIT_EACH)).toFixed(2));
+});
+
+maybeTest('data export includes every transaction, not only the first page of 50', async () => {
+  const { buildDataExport } = await import('../lib/exports/buildDataExport.js');
+  const data = await buildDataExport({ db, householdId: workspaceId });
+  assert.equal(data.transactions.length, SEP_TXN_COUNT + 1, 'all September debits plus the October debit');
+});
