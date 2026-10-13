@@ -70,9 +70,9 @@ test('explicit SQLite test env wins when .env requests Postgres', () => withIsol
       path.join(cwd, '.env'),
       [
         'PERSISTENCE_DRIVER=postgres',
-        'POSTGRES_CONNECTION_STRING=postgres://example.invalid/neon',
-        'POSTGRES_CONNECTION_STRING_APP=postgres://example.invalid/neon_app',
-        'DATABASE_URL=postgres://example.invalid/admin',
+        'POSTGRES_CONNECTION_STRING=postgres://127.0.0.1/neon',
+        'POSTGRES_CONNECTION_STRING_APP=postgres://127.0.0.1/neon_app',
+        'DATABASE_URL=postgres://127.0.0.1/admin',
         '',
       ].join('\n'),
       'utf8',
@@ -106,7 +106,7 @@ test('isolated SQLite server helper fails before startup when Postgres is reques
       testName: 'raf-bad-isolated-env',
       extraEnv: {
         PERSISTENCE_DRIVER: 'postgres',
-        POSTGRES_CONNECTION_STRING: 'postgres://example.invalid/neon',
+        POSTGRES_CONNECTION_STRING: 'postgres://127.0.0.1/neon',
       },
     }),
     /isolated helper requires PERSISTENCE_DRIVER=sqlite/,
@@ -120,7 +120,7 @@ test('ENV-1: postgres + auth required + app URL absent → throws (no owner fall
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'raf-env-'));
   try {
     process.env.PERSISTENCE_DRIVER = 'postgres';
-    process.env.POSTGRES_CONNECTION_STRING = 'postgres://owner:secret@example.invalid/neondb';
+    process.env.POSTGRES_CONNECTION_STRING = 'postgres://owner:secret@127.0.0.1/neondb';
     process.env.RAF_AUTH_REQUIRED = 'true';
     // POSTGRES_CONNECTION_STRING_APP intentionally absent
 
@@ -138,14 +138,14 @@ test('ENV-2: postgres + auth NOT required + app URL absent → owner fallback pe
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'raf-env-'));
   try {
     process.env.PERSISTENCE_DRIVER = 'postgres';
-    process.env.POSTGRES_CONNECTION_STRING = 'postgres://owner:secret@example.invalid/neondb';
+    process.env.POSTGRES_CONNECTION_STRING = 'postgres://owner:secret@127.0.0.1/neondb';
     process.env.RAF_AUTH_REQUIRED = 'false';
     // POSTGRES_CONNECTION_STRING_APP intentionally absent
 
     const result = loadServerEnv({ cwd });
     // Falls back to the owner URL — acceptable for local dev
     assert.equal(result.persistenceDriver, 'postgres');
-    assert.equal(result.postgresConnectionString, 'postgres://owner:secret@example.invalid/neondb');
+    assert.equal(result.postgresConnectionString, 'postgres://owner:secret@127.0.0.1/neondb');
     assert.equal(result.authRequired, false);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
@@ -157,13 +157,13 @@ test('ENV-3: postgres + auth required + both URLs present → app URL selected',
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'raf-env-'));
   try {
     process.env.PERSISTENCE_DRIVER = 'postgres';
-    process.env.POSTGRES_CONNECTION_STRING = 'postgres://owner:secret@example.invalid/neondb';
-    process.env.POSTGRES_CONNECTION_STRING_APP = 'postgres://raf_app:appsecret@example.invalid/neondb';
+    process.env.POSTGRES_CONNECTION_STRING = 'postgres://owner:secret@127.0.0.1/neondb';
+    process.env.POSTGRES_CONNECTION_STRING_APP = 'postgres://raf_app:appsecret@127.0.0.1/neondb';
     process.env.RAF_AUTH_REQUIRED = 'true';
 
     const result = loadServerEnv({ cwd });
     assert.equal(result.persistenceDriver, 'postgres');
-    assert.equal(result.postgresConnectionString, 'postgres://raf_app:appsecret@example.invalid/neondb');
+    assert.equal(result.postgresConnectionString, 'postgres://raf_app:appsecret@127.0.0.1/neondb');
     assert.equal(result.authRequired, true);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
@@ -175,7 +175,7 @@ test('ENV-4: postgres + auth required + app URL whitespace-only → throws', () 
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'raf-env-'));
   try {
     process.env.PERSISTENCE_DRIVER = 'postgres';
-    process.env.POSTGRES_CONNECTION_STRING = 'postgres://owner:secret@example.invalid/neondb';
+    process.env.POSTGRES_CONNECTION_STRING = 'postgres://owner:secret@127.0.0.1/neondb';
     process.env.POSTGRES_CONNECTION_STRING_APP = '   ';
     process.env.RAF_AUTH_REQUIRED = 'true';
 
