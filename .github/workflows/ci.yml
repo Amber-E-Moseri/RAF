@@ -140,6 +140,11 @@ jobs:
           RAF_RUN_POSTGRES_RLS_TESTS: 'true'
           RAF_CONFIRM_NON_PRODUCTION_DB: 'true'
           RAF_POSTGRES_SSL: 'false'
+          # Gated suites that otherwise skip silently in CI (the budget and identity suites need explicit URLs).
+          RAF_RUN_POSTGRES_BUDGET_TESTS: 'true'
+          RAF_TEST_POSTGRES_URL: ${{ env.OWNER_DATABASE_URL }}
+          RAF_IDENTITY_TEST_ADMIN_URL: ${{ env.OWNER_DATABASE_URL }}
+          RAF_IDENTITY_TEST_APP_URL: ${{ env.APP_DATABASE_URL }}
 
   rls:
     name: RLS enforcement tests (raf_app)

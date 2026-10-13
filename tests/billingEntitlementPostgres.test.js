@@ -42,7 +42,7 @@ function isDisposableLocalUrl(value) {
     const url = new URL(value);
     const local = ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
     const dbName = decodeURIComponent(url.pathname.replace(/^\//, ''));
-    return local && /test/i.test(dbName);
+    return local && /(test|_ci)$/i.test(dbName);
   } catch {
     return false;
   }
